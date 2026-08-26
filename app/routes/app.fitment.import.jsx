@@ -3,15 +3,28 @@ const json = (data, init) => Response.json(data, init);
 import { useLoaderData, Form, useActionData, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return json({});
+  const { session } = await authenticate.admin(request);
+  const { plan } = await getShopPlan(session.shop);
+  const limits = planLimits(plan);
+  return json({ planAllowsImport: limits.csvImportExport, planLabel: limits.label });
 };
 
 export const action = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
+
+  const { plan } = await getShopPlan(shop);
+  const limits = planLimits(plan);
+  if (!limits.csvImportExport) {
+    return json({
+      error: `CSV Bulk Import is available on the Growth Professional plan and above. Upgrade your plan to import records.`,
+      results: null,
+    });
+  }
+
   const formData = await request.formData();
   const csvText = formData.get("csv")?.toString() || "";
 
@@ -40,6 +53,10 @@ export const action = async ({ request }) => {
 
   const results = { created: 0, skipped: 0, errors: [] };
   const handleCache = new Map();
+  let recordCount = Number.isFinite(limits.fitmentLimit)
+    ? await prisma.fitmentRecord.count({ where: { shop } })
+    : 0;
+  let limitReached = false;
 
   async function resolveHandle(handle) {
     if (handleCache.has(handle)) return handleCache.get(handle);
@@ -66,12 +83,30 @@ export const action = async ({ request }) => {
       continue;
     }
 
+    if (limitReached) {
+      results.errors.push(`Row ${i + 1}: skipped — ${limits.fitmentLimit.toLocaleString()} fitment record limit for the ${limits.label} plan reached`);
+      results.skipped++;
+      continue;
+    }
+
     try {
+      const existingRecord = Number.isFinite(limits.fitmentLimit)
+        ? await prisma.fitmentRecord.findUnique({ where: { shop_year_make_model: { shop, year, make, model } } })
+        : null;
+
+      if (!existingRecord && Number.isFinite(limits.fitmentLimit) && recordCount >= limits.fitmentLimit) {
+        limitReached = true;
+        results.errors.push(`Row ${i + 1}: skipped — ${limits.fitmentLimit.toLocaleString()} fitment record limit for the ${limits.label} plan reached`);
+        results.skipped++;
+        continue;
+      }
+
       const fitment = await prisma.fitmentRecord.upsert({
         where: { shop_year_make_model: { shop, year, make, model } },
         create: { shop, year, make, model },
         update: {},
       });
+      if (!existingRecord) recordCount++;
 
       if (handle) {
         const product = await resolveHandle(handle);
@@ -111,6 +146,7 @@ export const action = async ({ request }) => {
 };
 
 export default function FitmentImport() {
+  const { planAllowsImport, planLabel } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const importing = navigation.state !== "idle";
@@ -140,8 +176,8 @@ export default function FitmentImport() {
         <div style={{ background: "#d4edda", color: "#155724", padding: "16px", borderRadius: "6px", marginBottom: "20px" }}>
           <strong>Import Complete</strong>
           <ul style={{ margin: "8px 0 0", paddingLeft: "20px" }}>
-            <li>✅ Created / Updated: {actionData.results.created}</li>
-            <li>⚠️ Skipped: {actionData.results.skipped}</li>
+            <li>Created / Updated: {actionData.results.created}</li>
+            <li>Skipped: {actionData.results.skipped}</li>
           </ul>
           {actionData.results.errors.length > 0 && (
             <details style={{ marginTop: "8px" }}>
@@ -162,7 +198,15 @@ export default function FitmentImport() {
         </pre>
       </details>
 
-      <Form method="post">
+      {!planAllowsImport && (
+        <div style={{ background: "#fff4e5", border: "1px solid #f5c99c", color: "#7a4a00", padding: "16px", borderRadius: "6px", marginBottom: "20px" }}>
+          <strong>CSV Bulk Import is a Growth Professional feature.</strong>
+          <p style={{ margin: "6px 0 8px" }}>Your current plan ({planLabel}) doesn&apos;t include CSV import. Upgrade to add records in bulk.</p>
+          <a href="/app/plans" style={{ color: "#2c6ecb", fontWeight: "600" }}>View Plans →</a>
+        </div>
+      )}
+
+      <Form method="post" aria-disabled={!planAllowsImport}>
         <div style={{ marginBottom: "16px" }}>
           <label style={{ display: "block", fontWeight: "500", marginBottom: "8px" }}>
             Paste CSV data
@@ -171,6 +215,7 @@ export default function FitmentImport() {
             name="csv"
             rows={12}
             placeholder={sampleCSV}
+            disabled={!planAllowsImport}
             style={{
               width: "100%",
               padding: "10px 12px",
@@ -187,7 +232,7 @@ export default function FitmentImport() {
         <div style={{ display: "flex", gap: "12px" }}>
           <button
             type="submit"
-            disabled={importing}
+            disabled={importing || !planAllowsImport}
             style={{
               background: "#2c6ecb",
               color: "#fff",

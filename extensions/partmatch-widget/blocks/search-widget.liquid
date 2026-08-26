@@ -19,7 +19,7 @@
   assign pm_border_radius = block.settings.border_radius | default: 4
   assign pm_results_mode = block.settings.results_mode
   assign pm_show_inline = block.settings.show_inline
-  assign pm_results_url = block.settings.results_page_url
+  assign pm_results_url = block.settings.results_page_url | default: '/collections/all'
 -%}
 
 <div

@@ -63,7 +63,7 @@ export default function WidgetSettings() {
 
       {actionData?.saved && (
         <div style={{ background: "#d4edda", color: "#155724", padding: "12px 16px", borderRadius: "6px", marginBottom: "20px" }}>
-          ✅ Widget settings saved!
+          Widget settings saved!
         </div>
       )}
 
@@ -157,7 +157,7 @@ export default function WidgetSettings() {
           </div>
 
           <div style={{ marginTop: "16px", background: "#f0f7ff", border: "1px solid #b3d4f5", borderRadius: "6px", padding: "16px" }}>
-            <h4 style={{ margin: "0 0 8px", fontSize: "14px" }}>🧩 Enable the Widget</h4>
+            <h4 style={{ margin: "0 0 8px", fontSize: "14px" }}>Enable the Widget</h4>
             <p style={{ fontSize: "13px", color: "#333", margin: 0 }}>
               Go to your Shopify theme editor → Add Block → <strong>PartMatch Search Widget</strong>.
               The widget uses an App Block powered by the Theme App Extension.

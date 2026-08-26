@@ -152,6 +152,18 @@ model AppSettings {
   enableGarage        Boolean @default(true)
   showFitmentChecker  Boolean @default(true)
   themeExtensionConfirmed Boolean @default(false)
+  annualDiscountPercent Int   @default(20)
 
   @@index([shop])
+}
+
+// ─── Shop Plan ────────────────────────────────────────────────────────────────
+// Cached copy of the shop's active Shopify billing subscription, kept in sync
+// by the Plans page loader (live billing.check) and the app_subscriptions/update webhook.
+model ShopPlan {
+  shop           String   @id
+  plan           String   @default("free") // "free" | "growth" | "enterprise"
+  billingCycle   String   @default("monthly") // "monthly" | "annual"
+  subscriptionId String?
+  updatedAt      DateTime @updatedAt
 }

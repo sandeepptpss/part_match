@@ -114,7 +114,6 @@ export default function Onboarding() {
     <div style={{ padding: "40px 20px", maxWidth: "700px", margin: "0 auto" }}>
       {/* Hero */}
       <div style={{ textAlign: "center", marginBottom: "40px" }}>
-        <div style={{ fontSize: "48px", marginBottom: "12px" }}>🔧</div>
         <h1 style={{ fontSize: "28px", fontWeight: "800", margin: "0 0 8px" }}>Welcome to PartMatch</h1>
         <p style={{ color: "#6d7175", fontSize: "16px", margin: 0 }}>
           Year → Make → Model fitment search for your Shopify store.

@@ -1,6 +1,7 @@
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 const MAX_VEHICLES = 5;
 
@@ -20,6 +21,13 @@ export async function loader({ request }) {
   const customerId = getCustomerId(url);
 
   if (!customerId) {
+    return json({ loggedIn: false, vehicles: [] });
+  }
+
+  const { plan } = await getShopPlan(session.shop);
+  if (!planLimits(plan).garageSync) {
+    // Server-side garage sync requires Growth+. Same shape as "guest" so the
+    // widget falls back to localStorage automatically.
     return json({ loggedIn: false, vehicles: [] });
   }
 
@@ -44,6 +52,11 @@ export async function action({ request }) {
   }
 
   const shop = session.shop;
+
+  const { plan } = await getShopPlan(shop);
+  if (!planLimits(plan).garageSync) {
+    return json({ error: "My Garage sync requires the Growth Professional plan or above." }, { status: 403 });
+  }
 
   let body;
   try {

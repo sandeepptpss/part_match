@@ -3,14 +3,15 @@ import { useState, useEffect } from "react";
 import { useLoaderData, Form, useNavigation, useActionData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 const DEFAULT_SETTINGS = {
   requireYear: true,
   requireAllFields: true,
   logNoResults: true,
   includeUniversal: true,
-  redirectOnSearch: false,
-  resultsUrl: "/pages/find-your-part",
+  redirectOnSearch: true,
+  resultsUrl: "/collections/all",
   persistSelection: true,
   enableGarage: true,
   showFitmentChecker: true,
@@ -37,13 +38,19 @@ export const loader = async ({ request }) => {
     console.error("[settings loader error]", err);
   }
 
-  return json({ settings: settings || DEFAULT_SETTINGS });
+  const { plan } = await getShopPlan(shop);
+  const limits = planLimits(plan);
+
+  return json({ settings: settings || DEFAULT_SETTINGS, planAllowsFitmentChecker: limits.fitmentChecker, planLabel: limits.label });
 };
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
+
+  const { plan } = await getShopPlan(shop);
+  const limits = planLimits(plan);
 
   const data = {
     requireYear: formData.get("require_year") === "true",
@@ -54,7 +61,9 @@ export const action = async ({ request }) => {
     resultsUrl: formData.get("results_url")?.toString() || "/pages/find-your-part",
     persistSelection: formData.get("persist_selection") === "true",
     enableGarage: formData.get("enable_garage") === "true",
-    showFitmentChecker: formData.get("show_fitment_checker") === "true",
+    // Force off regardless of submitted value when the plan doesn't include it —
+    // defense in depth alongside the disabled checkbox in the UI.
+    showFitmentChecker: formData.get("show_fitment_checker") === "true" && limits.fitmentChecker,
   };
 
   let savedSettings = null;
@@ -84,7 +93,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Settings() {
-  const { settings } = useLoaderData();
+  const { settings, planAllowsFitmentChecker, planLabel } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
 
@@ -132,14 +141,14 @@ export default function Settings() {
 
       {actionData?.saved && (
         <div style={{ background: "#d4edda", color: "#155724", padding: "12px 16px", borderRadius: "6px", marginBottom: "20px" }}>
-          ✅ Settings saved successfully!
+          Settings saved successfully!
         </div>
       )}
 
       <Form method="post">
         {/* Search Behavior */}
         <div style={sectionCard}>
-          <h3 style={secHead}>🔍 Search Behavior</h3>
+          <h3 style={secHead}>Search Behavior</h3>
           <label style={checkRow}>
             <input type="hidden" name="require_year" value={formState.requireYear ? "true" : "false"} />
             <input
@@ -180,7 +189,7 @@ export default function Settings() {
 
         {/* Product Display */}
         <div style={sectionCard}>
-          <h3 style={secHead}>📦 Product Display</h3>
+          <h3 style={secHead}>Product Display</h3>
           <label style={checkRow}>
             <input type="hidden" name="include_universal" value={formState.includeUniversal ? "true" : "false"} />
             <input
@@ -221,7 +230,7 @@ export default function Settings() {
 
         {/* Customer Selection */}
         <div style={sectionCard}>
-          <h3 style={secHead}>🚗 Customer Selection</h3>
+          <h3 style={secHead}>Customer Selection</h3>
           <label style={checkRow}>
             <input type="hidden" name="persist_selection" value={formState.persistSelection ? "true" : "false"} />
             <input
@@ -246,23 +255,29 @@ export default function Settings() {
               <div style={checkDesc}>Allow customers to save up to 5 vehicles</div>
             </div>
           </label>
-          <label style={checkRow}>
-            <input type="hidden" name="show_fitment_checker" value={formState.showFitmentChecker ? "true" : "false"} />
+          <label style={{ ...checkRow, opacity: planAllowsFitmentChecker ? 1 : 0.6 }}>
+            <input type="hidden" name="show_fitment_checker" value={formState.showFitmentChecker && planAllowsFitmentChecker ? "true" : "false"} />
             <input
               type="checkbox"
-              checked={formState.showFitmentChecker}
+              checked={formState.showFitmentChecker && planAllowsFitmentChecker}
+              disabled={!planAllowsFitmentChecker}
               onChange={(e) => handleChange("showFitmentChecker", e.target.checked)}
             />
             <div>
               <div style={checkLabel}>Show product page fitment checker</div>
               <div style={checkDesc}>Display compatibility indicator on product pages</div>
+              {!planAllowsFitmentChecker && (
+                <div style={{ fontSize: "12px", color: "#7a4a00", marginTop: "4px" }}>
+                  Requires Growth Professional plan or above — your current plan is {planLabel}. <a href="/app/plans" style={{ color: "#2c6ecb" }}>Upgrade →</a>
+                </div>
+              )}
             </div>
           </label>
         </div>
 
         {/* App URL Config */}
         <div style={sectionCard}>
-          <h3 style={secHead}>⚙️ Integration</h3>
+          <h3 style={secHead}>Integration</h3>
           <div style={{ background: "#f0f7ff", border: "1px solid #b3d4f5", borderRadius: "6px", padding: "16px" }}>
             <p style={{ margin: "0 0 8px", fontSize: "14px", fontWeight: "500" }}>Theme App Extension Setup</p>
             <p style={{ margin: 0, fontSize: "13px", color: "#333" }}>

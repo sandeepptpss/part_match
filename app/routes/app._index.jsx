@@ -164,7 +164,7 @@ export default function Dashboard() {
       {/* Getting Started */}
       {stats.fitmentCount === 0 && (
         <div style={{ marginTop: "24px", background: "#f0f7ff", border: "1px solid #b3d4f5", borderRadius: "8px", padding: "20px" }}>
-          <h3 style={{ margin: "0 0 12px" }}>🚀 Getting Started</h3>
+          <h3 style={{ margin: "0 0 12px" }}>Getting Started</h3>
           <ol style={{ paddingLeft: "20px", lineHeight: "2" }}>
             <li><a href="/app/fitment/add">Add fitment records</a> (Year / Make / Model)</li>
             <li><a href="/app/fitment/import">Import a CSV</a> to bulk-load your fitment data</li>

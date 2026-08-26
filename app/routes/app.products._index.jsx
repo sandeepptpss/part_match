@@ -1,6 +1,4 @@
-import { redirect } from "react-router";
-const json = (data, init) => Response.json(data, init);
-import { useLoaderData } from "react-router";
+import { Link, redirect, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -15,9 +13,9 @@ export const loader = async ({ request }) => {
 
   let fitmentProductCount = 0;
   try {
-    fitmentProductCount = await prisma.fitmentProduct.count({
+    fitmentProductCount = await prisma.fitmentProduct?.count({
       where: { fitment: { shop } },
-    });
+    }) || 0;
   } catch (err) {
     console.error("[fitmentProduct loader error]", err);
   }
@@ -34,8 +32,8 @@ export default function ProductsIndex() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: "4px", marginBottom: "24px", background: "#f4f6f8", borderRadius: "8px", padding: "4px", width: "fit-content" }}>
-        <a href="/app/products" style={tabStyle(true)}>Fitment Products</a>
-        <a href="/app/products/universal" style={tabStyle(false)}>Universal Products</a>
+        <Link to="/app/products" style={tabStyle(true)}>Fitment Products</Link>
+        <Link to="/app/products/universal" style={tabStyle(false)}>Universal Products</Link>
       </div>
 
       <div style={{ background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px", padding: "24px" }}>

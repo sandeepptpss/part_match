@@ -1,6 +1,7 @@
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 // GET /apps/partmatch/api/fitment-check?handle=&year=&make=&model=
 export async function loader({ request }) {
@@ -21,8 +22,17 @@ export async function loader({ request }) {
     return json({ error: "Missing parameters", fits: false }, { status: 400 });
   }
 
-  const appSettings = await prisma.appSettings?.findUnique({ where: { shop } });
-  const includeUniversal = appSettings?.includeUniversal ?? true;
+  const [appSettings, shopPlan] = await Promise.all([
+    prisma.appSettings?.findUnique({ where: { shop } }),
+    getShopPlan(shop),
+  ]);
+  const limits = planLimits(shopPlan.plan);
+
+  if (!limits.fitmentChecker) {
+    return json({ fits: false, reason: "plan_restricted" });
+  }
+
+  const includeUniversal = (appSettings?.includeUniversal ?? true) && limits.universalProducts;
 
   // Check if product is universal
   if (includeUniversal) {

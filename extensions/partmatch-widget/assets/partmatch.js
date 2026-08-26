@@ -262,7 +262,7 @@
     const urlModel = urlParams.get('model');
 
     const saved = savedVehicle();
-    const activeVehicle = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel } : saved;
+    const activeVehicle = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel } : null;
 
     if (activeVehicle && activeVehicle.year) {
       const restoreVehicle = async () => {
@@ -331,9 +331,9 @@
       saveVehicle({ year, make, model });
       await addToGarage({ year, make, model });
 
-      // Determine redirect URL & mode
-      const rawResultsUrl = widget.dataset.resultsUrl || config.settings?.resultsUrl || '/pages/find-your-part';
-      const targetUrl = rawResultsUrl.split('?')[0].replace(/\/$/, '') || '/pages/find-your-part';
+      // Determine redirect URL & mode (App settings take precedence over theme block default)
+      const rawResultsUrl = config.settings?.resultsUrl || widget.dataset.resultsUrl || '/collections/all';
+      const targetUrl = rawResultsUrl.split('?')[0].replace(/\/$/, '') || '/collections/all';
       const currentPath = window.location.pathname.replace(/\/$/, '');
       const isResultsPage = currentPath === targetUrl;
 
@@ -623,6 +623,67 @@
     }
   }
 
+  // ─── Native Collection Page Filter ───────────────────────────────────────────
+  async function filterNativeCollectionPage(year, make, model) {
+    const searchResult = await doSearch(year, make, model);
+    if (!searchResult || !searchResult.products) return;
+
+    const matchingHandles = new Set(searchResult.products.map(p => (p.shopifyHandle || p.handle || '').toLowerCase()));
+    const matchingTitles = new Set(searchResult.products.map(p => (p.productTitle || p.title || '').toLowerCase()));
+    const matchingIds = new Set(searchResult.products.map(p => String(p.shopifyProductId || '')));
+
+    const productLinks = document.querySelectorAll('a[href*="/products/"]');
+    if (!productLinks.length) return;
+
+    const processedContainers = new Set();
+    let visibleCount = 0;
+
+    productLinks.forEach(link => {
+      const container = link.closest('li.grid__item') || link.closest('.grid__item') || link.closest('.card-wrapper') || link.closest('.product-card') || link.closest('li');
+      if (!container || processedContainers.has(container)) return;
+      processedContainers.add(container);
+
+      if (container.closest('.pm-standalone-results') || container.closest('.pm-widget')) return;
+
+      const href = link.getAttribute('href') || '';
+      let handle = '';
+      if (href.includes('/products/')) {
+        const parts = href.split('/products/')[1];
+        if (parts) handle = parts.split('?')[0].split('#')[0].replace(/\/$/, '').toLowerCase();
+      }
+
+      const titleEl = container.querySelector('.card__heading, .full-unstyled-link, .product-card__title, h3, h2, a');
+      const title = titleEl ? titleEl.textContent.trim().toLowerCase() : '';
+      const prodId = container.dataset.productId || link.dataset.productId || '';
+
+      const isMatch = (handle && matchingHandles.has(handle)) || 
+                      (title && matchingTitles.has(title)) || 
+                      (prodId && matchingIds.has(prodId));
+
+      if (isMatch) {
+        container.style.display = '';
+        visibleCount++;
+
+        if (!container.querySelector('.pm-collection-fitment-badge')) {
+          const badge = document.createElement('div');
+          badge.className = 'pm-collection-fitment-badge';
+          badge.style.cssText = 'display: inline-block; margin: 6px 0; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 12px; background: #e6f4ea; color: #137333;';
+          badge.textContent = `✓ Fits ${year} ${make} ${model}`;
+          if (titleEl && titleEl.parentNode) {
+            titleEl.parentNode.insertBefore(badge, titleEl.nextSibling);
+          }
+        }
+      } else {
+        container.style.display = 'none';
+      }
+    });
+
+    const countLabel = document.getElementById('ProductCount') || document.querySelector('.product-count') || document.getElementById('ProductCountDesktop');
+    if (countLabel) {
+      countLabel.textContent = `${visibleCount} products matching ${year} ${make} ${model}`;
+    }
+  }
+
   // ─── Init ────────────────────────────────────────────────────────────────────
   function init() {
     const widgets = document.querySelectorAll('[data-partmatch-widget]');
@@ -634,8 +695,10 @@
     const urlModel = urlParams.get('model');
 
     if (urlYear && urlMake && urlModel) {
-      // If no explicit widget on page, automatically render results in standalone container
-      if (widgets.length === 0) {
+      const isCollectionPage = window.location.pathname.includes('/collections') || window.location.pathname.includes('/search');
+      if (isCollectionPage) {
+        filterNativeCollectionPage(urlYear, urlMake, urlModel);
+      } else if (widgets.length === 0) {
         initStandaloneSearchResults(urlYear, urlMake, urlModel);
       }
     }

@@ -1,10 +1,20 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 // GET /app/fitment/export  → download CSV
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
+
+  const { plan } = await getShopPlan(shop);
+  const limits = planLimits(plan);
+  if (!limits.csvImportExport) {
+    return new Response(
+      `CSV Export requires the Growth Professional plan or above. Your current plan is ${limits.label}. Upgrade at /app/plans.`,
+      { status: 403, headers: { "Content-Type": "text/plain" } },
+    );
+  }
 
   const records = await prisma.fitmentRecord?.findMany({
     where: { shop },

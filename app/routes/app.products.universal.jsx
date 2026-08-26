@@ -1,18 +1,21 @@
-const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Form, useNavigation } from "react-router";
+import { Link, useLoaderData, Form, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
+  const { plan } = await getShopPlan(shop);
+  const limits = planLimits(plan);
+
   let universalProducts = [];
   try {
-    universalProducts = await prisma.universalProduct.findMany({
+    universalProducts = (await prisma.universalProduct?.findMany({
       where: { shop },
       orderBy: { productTitle: "asc" },
-    });
+    })) || [];
   } catch (err) {
     console.error("[universalProducts loader error]", err);
   }
@@ -35,7 +38,12 @@ export const loader = async ({ request }) => {
   const assignedIds = new Set(universalProducts.map((p) => p.shopifyProductId));
   const available = shopifyProducts.filter((p) => !assignedIds.has(p.id));
 
-  return json({ universalProducts, available });
+  return json({
+    universalProducts,
+    available,
+    planAllowsUniversal: limits.universalProducts,
+    planLabel: limits.label,
+  });
 };
 
 export const action = async ({ request }) => {
@@ -46,10 +54,14 @@ export const action = async ({ request }) => {
 
   try {
     if (intent === "add") {
+      const { plan } = await getShopPlan(shop);
+      if (!planLimits(plan).universalProducts) {
+        return json({ ok: false, error: "Universal Products requires the Growth Professional plan or above." }, { status: 403 });
+      }
       const shopifyProductId = formData.get("shopifyProductId")?.toString();
       const shopifyHandle = formData.get("shopifyHandle")?.toString() || "";
       const productTitle = formData.get("productTitle")?.toString() || "";
-      await prisma.universalProduct.upsert({
+      await prisma.universalProduct?.upsert({
         where: { shop_shopifyProductId: { shop, shopifyProductId } },
         create: { shop, shopifyProductId, shopifyHandle, productTitle },
         update: { shopifyHandle, productTitle },
@@ -58,7 +70,7 @@ export const action = async ({ request }) => {
 
     if (intent === "remove") {
       const id = parseInt(formData.get("id"), 10);
-      await prisma.universalProduct.deleteMany({ where: { id, shop } });
+      await prisma.universalProduct?.deleteMany({ where: { id, shop } });
     }
   } catch (err) {
     console.error("[universalProducts action error]", err);
@@ -68,7 +80,7 @@ export const action = async ({ request }) => {
 };
 
 export default function UniversalProducts() {
-  const { universalProducts, available } = useLoaderData();
+  const { universalProducts, available, planAllowsUniversal, planLabel } = useLoaderData();
   const navigation = useNavigation();
   const saving = navigation.state !== "idle";
 
@@ -78,8 +90,8 @@ export default function UniversalProducts() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: "4px", marginBottom: "24px", background: "#f4f6f8", borderRadius: "8px", padding: "4px", width: "fit-content" }}>
-        <a href="/app/products" style={tabStyle(false)}>Fitment Products</a>
-        <a href="/app/products/universal" style={tabStyle(true)}>Universal Products</a>
+        <Link to="/app/products" style={tabStyle(false)}>Fitment Products</Link>
+        <Link to="/app/products/universal" style={tabStyle(true)}>Universal Products</Link>
       </div>
 
       <div style={{ marginBottom: "20px" }}>
@@ -114,7 +126,13 @@ export default function UniversalProducts() {
         {/* Add Products */}
         <div style={card}>
           <h3 style={cardHead}>Add Universal Product</h3>
-          {available.length === 0 ? (
+          {!planAllowsUniversal ? (
+            <div style={{ background: "#fff4e5", border: "1px solid #f5c99c", color: "#7a4a00", padding: "14px", borderRadius: "6px" }}>
+              <strong>Universal Products is a Growth Professional feature.</strong>
+              <p style={{ margin: "6px 0 8px", fontSize: "13px" }}>Your current plan ({planLabel}) doesn&apos;t include adding new universal products.</p>
+              <a href="/app/plans" style={{ color: "#2c6ecb", fontWeight: "600", fontSize: "13px" }}>View Plans →</a>
+            </div>
+          ) : available.length === 0 ? (
             <p style={{ color: "#6d7175", fontSize: "14px" }}>All products already marked as universal.</p>
           ) : (
             <div style={{ maxHeight: "420px", overflowY: "auto" }}>

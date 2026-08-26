@@ -28,7 +28,7 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Dashboard</s-link>
-        {fitmentCount === 0 && <s-link href="/app/onboarding">🚀 Get Started</s-link>}
+        {fitmentCount === 0 && <s-link href="/app/onboarding">Get Started</s-link>}
         <s-link href="/app/fitment">Fitment Data</s-link>
         <s-link href="/app/fitment/add">Add Record</s-link>
         <s-link href="/app/fitment/import">Import CSV</s-link>
@@ -36,7 +36,9 @@ export default function App() {
         <s-link href="/app/products/universal">Universal Products</s-link>
         <s-link href="/app/widget">Search Widget</s-link>
         <s-link href="/app/analytics">Analytics</s-link>
+        <s-link href="/app/plans">Plans & Pricing</s-link>
         <s-link href="/app/settings">Settings</s-link>
+        <s-link href="/app/admin">App Admin</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>

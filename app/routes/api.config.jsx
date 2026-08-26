@@ -1,6 +1,7 @@
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 // GET /apps/partmatch/api/config
 // Returns the merchant's saved widget appearance + app behavior settings
@@ -20,8 +21,15 @@ export async function loader({ request }) {
   let appSettings = await prisma.appSettings?.findFirst({ where: { shop } });
   if (!appSettings) appSettings = await prisma.appSettings?.findFirst();
 
+  const { plan } = await getShopPlan(shop);
+  const limits = planLimits(plan);
+
+  const settings = appSettings
+    ? { ...appSettings, showFitmentChecker: appSettings.showFitmentChecker && limits.fitmentChecker }
+    : null;
+
   return json({
     widget: widget ?? null,
-    settings: appSettings ?? null,
+    settings,
   });
 }

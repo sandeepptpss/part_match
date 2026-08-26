@@ -2,6 +2,7 @@ const json = (data, init) => Response.json(data, init);
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -9,6 +10,10 @@ export const loader = async ({ request }) => {
 
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const { plan } = await getShopPlan(shop);
+  const limits = planLimits(plan);
+  const detailed = limits.analyticsDetail === "detailed";
 
   const [
     totalSearches,
@@ -21,27 +26,33 @@ export const loader = async ({ request }) => {
     prisma.searchLog?.count({ where: { shop } }),
     prisma.searchLog?.count({ where: { shop, hasResults: true } }),
     prisma.searchLog?.count({ where: { shop, hasResults: false } }),
-    prisma.searchLog?.groupBy({
-      by: ["year", "make", "model"],
-      where: { shop },
-      _count: { id: true },
-      orderBy: { _count: { id: "desc" } },
-      take: 10,
-    }),
-    prisma.searchLog?.groupBy({
-      by: ["year", "make", "model"],
-      where: { shop, hasResults: false },
-      _count: { id: true },
-      orderBy: { _count: { id: "desc" } },
-      take: 10,
-    }),
-    prisma.$queryRaw`
-      SELECT DATE(createdAt) as date, COUNT(*) as count
-      FROM SearchLog
-      WHERE shop = ${shop} AND createdAt >= ${thirtyDaysAgo}
-      GROUP BY DATE(createdAt)
-      ORDER BY date ASC
-    `,
+    detailed
+      ? prisma.searchLog?.groupBy({
+          by: ["year", "make", "model"],
+          where: { shop },
+          _count: { id: true },
+          orderBy: { _count: { id: "desc" } },
+          take: 10,
+        })
+      : [],
+    detailed
+      ? prisma.searchLog?.groupBy({
+          by: ["year", "make", "model"],
+          where: { shop, hasResults: false },
+          _count: { id: true },
+          orderBy: { _count: { id: "desc" } },
+          take: 10,
+        })
+      : [],
+    detailed
+      ? prisma.$queryRaw`
+        SELECT DATE(createdAt) as date, COUNT(*) as count
+        FROM SearchLog
+        WHERE shop = ${shop} AND createdAt >= ${thirtyDaysAgo}
+        GROUP BY DATE(createdAt)
+        ORDER BY date ASC
+      `
+      : [],
   ]);
 
   const successRate = totalSearches > 0 ? Math.round((successfulSearches / totalSearches) * 100) : 0;
@@ -54,11 +65,13 @@ export const loader = async ({ request }) => {
       date: r.date?.toISOString?.()?.slice(0, 10) ?? String(r.date),
       count: Number(r.count),
     })),
+    detailed,
+    planLabel: limits.label,
   });
 };
 
 export default function Analytics() {
-  const { stats, topVehicles, noResultVehicles, dailySearches } = useLoaderData();
+  const { stats, topVehicles, noResultVehicles, dailySearches, detailed, planLabel } = useLoaderData();
 
   const cards = [
     { label: "Total Searches", value: stats.totalSearches, color: "#2c6ecb" },
@@ -83,8 +96,18 @@ export default function Analytics() {
         ))}
       </div>
 
+      {!detailed && (
+        <div style={{ ...cardStyle, marginBottom: "24px", background: "#fff4e5", border: "1px solid #f5c99c" }}>
+          <strong style={{ color: "#7a4a00" }}>Detailed analytics is a Growth Professional feature.</strong>
+          <p style={{ margin: "6px 0 8px", fontSize: "13px", color: "#7a4a00" }}>
+            Your current plan ({planLabel}) shows the summary stats above only. Upgrade for the daily search chart, top searched vehicles, and no-result opportunity gap report.
+          </p>
+          <a href="/app/plans" style={{ color: "#2c6ecb", fontWeight: "600", fontSize: "13px" }}>View Plans →</a>
+        </div>
+      )}
+
       {/* Daily Chart (simple bar) */}
-      {dailySearches.length > 0 && (
+      {detailed && dailySearches.length > 0 && (
         <div style={{ ...cardStyle, marginBottom: "24px" }}>
           <h3 style={sectionHead}>Daily Searches (Last 30 Days)</h3>
           <div style={{ display: "flex", alignItems: "flex-end", gap: "4px", height: "100px", overflowX: "auto" }}>
@@ -109,6 +132,7 @@ export default function Analytics() {
         </div>
       )}
 
+      {detailed && (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
         {/* Top Vehicles */}
         <div style={cardStyle}>
@@ -142,7 +166,7 @@ export default function Analytics() {
             These vehicles are being searched but have no mapped products.
           </p>
           {noResultVehicles.length === 0 ? (
-            <p style={{ color: "#6d7175" }}>No no-result searches! 🎉</p>
+            <p style={{ color: "#6d7175" }}>No no-result searches found.</p>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead><tr style={{ borderBottom: "1px solid #e1e3e5" }}>
@@ -170,6 +194,7 @@ export default function Analytics() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

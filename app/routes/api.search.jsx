@@ -1,6 +1,7 @@
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 // POST /apps/partmatch/api/search  body: { year, make, model, sessionId? }
 export async function action({ request }) {
@@ -33,8 +34,12 @@ export async function action({ request }) {
   }
 
   try {
-    const appSettings = await prisma.appSettings?.findUnique({ where: { shop } });
-    const includeUniversal = appSettings?.includeUniversal ?? true;
+    const [appSettings, shopPlan] = await Promise.all([
+      prisma.appSettings?.findUnique({ where: { shop } }),
+      getShopPlan(shop),
+    ]);
+    const limits = planLimits(shopPlan.plan);
+    const includeUniversal = (appSettings?.includeUniversal ?? true) && limits.universalProducts;
     const logNoResults = appSettings?.logNoResults ?? true;
 
     // Find the fitment record

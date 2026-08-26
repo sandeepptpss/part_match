@@ -3,6 +3,7 @@ const json = (data, init) => Response.json(data, init);
 import { useLoaderData, Form, useNavigation, useActionData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -25,6 +26,29 @@ export const action = async ({ request }) => {
 
   if (Object.keys(errors).length > 0) {
     return json({ errors, values: { year, make, model } }, { status: 422 });
+  }
+
+  const existing = await prisma.fitmentRecord.findUnique({
+    where: { shop_year_make_model: { shop, year, make, model } },
+  });
+
+  if (!existing) {
+    const { plan } = await getShopPlan(shop);
+    const limits = planLimits(plan);
+    if (Number.isFinite(limits.fitmentLimit)) {
+      const currentCount = await prisma.fitmentRecord.count({ where: { shop } });
+      if (currentCount >= limits.fitmentLimit) {
+        return json(
+          {
+            errors: {
+              general: `You've reached the ${limits.fitmentLimit.toLocaleString()} fitment record limit for the ${limits.label} plan. Upgrade your plan to add more records.`,
+            },
+            values: { year, make, model },
+          },
+          { status: 422 },
+        );
+      }
+    }
   }
 
   try {
