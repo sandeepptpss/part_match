@@ -33,6 +33,11 @@ required = true
 name = "Description"
 type = "multi_line_text_field"
 
+[app_proxy]
+url = "https://example.com"
+subpath = "partmatch"
+prefix = "apps"
+
 [webhooks]
 api_version = "2026-10"
 

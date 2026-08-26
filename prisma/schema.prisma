@@ -5,14 +5,12 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
+// ─── Shopify Session ──────────────────────────────────────────────────────────
 model Session {
   id            String    @id
   shop          String
@@ -31,4 +29,129 @@ model Session {
   emailVerified Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+}
+
+// ─── Fitment Records ─────────────────────────────────────────────────────────
+// A FitmentRecord represents one unique Year+Make+Model combination per shop.
+model FitmentRecord {
+  id        Int      @id @default(autoincrement())
+  shop      String
+  year      String
+  make      String
+  model     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products FitmentProduct[]
+
+  @@unique([shop, year, make, model])
+  @@index([shop])
+  @@index([shop, year])
+  @@index([shop, year, make])
+}
+
+// ─── Fitment ↔ Product Junction ──────────────────────────────────────────────
+// Links a FitmentRecord to one or more Shopify product GIDs.
+model FitmentProduct {
+  id               Int    @id @default(autoincrement())
+  fitmentId        Int
+  shopifyProductId String // Shopify GID e.g. "gid://shopify/Product/123"
+  shopifyHandle    String @default("")
+  productTitle     String @default("")
+
+  fitment FitmentRecord @relation(fields: [fitmentId], references: [id], onDelete: Cascade)
+
+  @@unique([fitmentId, shopifyProductId])
+  @@index([fitmentId])
+  @@index([shopifyProductId])
+}
+
+// ─── Universal Products ───────────────────────────────────────────────────────
+// Products compatible with ALL vehicles for a shop.
+model UniversalProduct {
+  id               Int    @id @default(autoincrement())
+  shop             String
+  shopifyProductId String
+  shopifyHandle    String @default("")
+  productTitle     String @default("")
+
+  @@unique([shop, shopifyProductId])
+  @@index([shop])
+}
+
+// ─── Search Logs ─────────────────────────────────────────────────────────────
+// Every storefront search is logged for analytics.
+model SearchLog {
+  id           Int      @id @default(autoincrement())
+  shop         String
+  year         String
+  make         String
+  model        String
+  resultCount  Int      @default(0)
+  hasResults   Boolean  @default(false)
+  sessionId    String?  // browser session / customer identifier
+  createdAt    DateTime @default(now())
+
+  @@index([shop])
+  @@index([shop, hasResults])
+  @@index([shop, createdAt])
+  @@index([shop, year, make, model])
+}
+
+// ─── Widget Settings ─────────────────────────────────────────────────────────
+// Per-shop widget customization preferences.
+model WidgetSettings {
+  id              Int    @id @default(autoincrement())
+  shop            String @unique
+  heading         String @default("Find Your Part")
+  subheading      String @default("Search by Application")
+  yearLabel       String @default("Year")
+  makeLabel       String @default("Make")
+  modelLabel      String @default("Model")
+  searchButtonText String @default("Search")
+  clearButtonText  String @default("Clear")
+  primaryColor    String @default("#008060")
+  textColor       String @default("#ffffff")
+  backgroundColor String @default("#f4f6f8")
+  borderRadius    Int    @default(4)
+  layout          String @default("horizontal") // horizontal | stacked
+  showHeading     Boolean @default(true)
+  showSubheading  Boolean @default(true)
+
+  @@index([shop])
+}
+
+// ─── Saved Vehicles (My Garage) ───────────────────────────────────────────────
+// Vehicles a logged-in customer has saved, synced across devices.
+// Guest (not-logged-in) customers keep using localStorage only.
+model SavedVehicle {
+  id         Int      @id @default(autoincrement())
+  shop       String   @db.VarChar(100)
+  customerId String   @db.VarChar(100)
+  year       String   @db.VarChar(50)
+  make       String   @db.VarChar(100)
+  model      String   @db.VarChar(100)
+  createdAt  DateTime @default(now())
+
+  @@unique([shop, customerId, year, make, model])
+  @@index([shop, customerId])
+}
+
+// ─── App Settings ────────────────────────────────────────────────────────────
+// Per-shop search behavior / product display / customer selection toggles.
+model AppSettings {
+  id                  Int     @id @default(autoincrement())
+  shop                String  @unique
+  requireYear         Boolean @default(true)
+  requireAllFields    Boolean @default(true)
+  logNoResults        Boolean @default(true)
+  includeUniversal    Boolean @default(true)
+  redirectOnSearch    Boolean @default(false)
+  resultsUrl          String  @default("/pages/find-your-part")
+  persistSelection    Boolean @default(true)
+  enableGarage        Boolean @default(true)
+  showFitmentChecker  Boolean @default(true)
+  themeExtensionConfirmed Boolean @default(false)
+
+  @@index([shop])
 }

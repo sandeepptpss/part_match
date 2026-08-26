@@ -1,0 +1,44 @@
+{% comment %}
+  PartMatch – Active Vehicle Bar (App Embed / App Block)
+  Shows the selected vehicle persistently across all pages.
+{% endcomment %}
+
+{{ 'partmatch.css' | asset_url | stylesheet_tag }}
+
+<div
+  class="pm-bar"
+  data-partmatch-bar
+  style="display:none; background: {{ block.settings.bg_color | default: '#1a1a1a' }};"
+  {{ block.shopify_attributes }}
+>
+  <span class="pm-bar__icon">🚗</span>
+  <span class="pm-bar__label">
+    Your vehicle: <strong class="pm-bar__vehicle" data-partmatch-bar-label></strong>
+  </span>
+  <button class="pm-bar__change" data-partmatch-bar-change>
+    {{ block.settings.change_text | default: 'Change Vehicle' }}
+  </button>
+</div>
+
+<script src="{{ 'partmatch.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "PartMatch Vehicle Bar",
+  "target": "body",
+  "settings": [
+    {
+      "type": "color",
+      "id": "bg_color",
+      "label": "Background color",
+      "default": "#1a1a1a"
+    },
+    {
+      "type": "text",
+      "id": "change_text",
+      "label": "Change vehicle button text",
+      "default": "Change Vehicle"
+    }
+  ]
+}
+{% endschema %}

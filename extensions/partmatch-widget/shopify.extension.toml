@@ -1,0 +1,7 @@
+api_version = "2024-04"
+
+[[extensions]]
+type = "theme_app_extension"
+name = "PartMatch Widget"
+handle = "partmatch-widget"
+uid = "9047ad8a-b834-aa17-1bb1-cd97124fc9cf5418bd9b"

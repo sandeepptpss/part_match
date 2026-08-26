@@ -1,0 +1,27 @@
+{% comment %}
+  PartMatch – Product Page Fitment Checker App Block
+  Place on product pages to show compatibility with selected vehicle.
+{% endcomment %}
+
+{{ 'partmatch.css' | asset_url | stylesheet_tag }}
+
+<div
+  data-partmatch-checker
+  data-product-handle="{{ product.handle }}"
+  {{ block.shopify_attributes }}
+>
+  <div class="pm-checker pm-checker--loading">
+    <span class="pm-checker__spinner"></span>
+    <span>Checking vehicle compatibility…</span>
+  </div>
+</div>
+
+<script src="{{ 'partmatch.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "PartMatch Fitment Check",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}
