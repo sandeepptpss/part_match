@@ -3,6 +3,8 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
 
+const json = (data, init) => Response.json(data, init);
+
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;

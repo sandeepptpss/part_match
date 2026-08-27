@@ -2,6 +2,8 @@ import { Link, redirect, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
+const json = (data, init) => Response.json(data, init);
+
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;

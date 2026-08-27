@@ -261,18 +261,50 @@
     const urlMake  = urlParams.get('make');
     const urlModel = urlParams.get('model');
 
-    const saved = savedVehicle();
-    const activeVehicle = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel } : null;
+    const saved = settingsAllow('persistSelection') ? savedVehicle() : null;
+    const activeVehicle = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel } : saved;
 
     if (activeVehicle && activeVehicle.year) {
       const restoreVehicle = async () => {
         yearSel.value = activeVehicle.year;
         yearSel.dispatchEvent(new Event('change'));
-        await new Promise(r => setTimeout(r, 250));
+        
+        // Wait for makes to load with a timeout
+        await new Promise(r => {
+          let attempts = 0;
+          const checkMakes = () => {
+            if (!makeSel.disabled && makeSel.options.length > 1) {
+              r();
+            } else if (attempts > 60) {
+              r();
+            } else {
+              attempts++;
+              setTimeout(checkMakes, 50);
+            }
+          };
+          checkMakes();
+        });
+
         if (activeVehicle.make) {
           makeSel.value = activeVehicle.make;
           makeSel.dispatchEvent(new Event('change'));
-          await new Promise(r => setTimeout(r, 250));
+          
+          // Wait for models to load with a timeout
+          await new Promise(r => {
+            let attempts = 0;
+            const checkModels = () => {
+              if (!modelSel.disabled && modelSel.options.length > 1) {
+                r();
+              } else if (attempts > 60) {
+                r();
+              } else {
+                attempts++;
+                setTimeout(checkModels, 50);
+              }
+            };
+            checkModels();
+          });
+
           if (activeVehicle.model) {
             modelSel.value = activeVehicle.model;
             modelSel.dispatchEvent(new Event('change'));
@@ -585,6 +617,12 @@
 
     if (!target) return;
 
+    if (!year || !make || !model) {
+      const container = document.getElementById('pm-auto-results-container');
+      if (container) container.remove();
+      return;
+    }
+
     // Check if auto-results container already exists
     let container = document.getElementById('pm-auto-results-container');
     if (!container) {
@@ -596,14 +634,14 @@
       container.innerHTML = `
         <div style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e1e3e5; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
           <div>
-            <h2 style="font-size: 22px; font-weight: 700; color: #1a1a1a; margin: 0 0 4px;">
+            <h2 id="pm-standalone-title" style="font-size: 22px; font-weight: 700; color: #1a1a1a; margin: 0 0 4px;">
               Search Results for <span style="color: #008060;">${year} ${make} ${model}</span>
             </h2>
             <p style="color: #6d7175; margin: 0; font-size: 14px;">Showing all compatible products and universal items for your vehicle.</p>
           </div>
-          <a href="/" style="font-size: 13px; font-weight: 600; color: #008060; text-decoration: none; border: 1px solid #008060; padding: 6px 14px; border-radius: 6px; transition: background 0.2s;">
+          <button id="pm-standalone-search-another" style="font-size: 13px; font-weight: 600; color: #008060; background: none; border: 1px solid #008060; padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: background 0.2s;">
             🔍 Search Another Vehicle
-          </a>
+          </button>
         </div>
         <div data-partmatch-auto-results>
           <div style="padding: 40px; text-align: center; color: #666;">
@@ -614,23 +652,47 @@
       `;
 
       target.appendChild(container);
+
+      const searchAnotherBtn = container.querySelector('#pm-standalone-search-another');
+      if (searchAnotherBtn) {
+        searchAnotherBtn.addEventListener('click', () => {
+          clearVehicle();
+          const widget = document.querySelector('[data-partmatch-widget]');
+          if (widget) widget.querySelector('[data-partmatch-clear]')?.click();
+        });
+      }
+    } else {
+      const titleEl = container.querySelector('#pm-standalone-title');
+      if (titleEl) titleEl.innerHTML = `Search Results for <span style="color: #008060;">${year} ${make} ${model}</span>`;
     }
 
     const resultsEl = container.querySelector('[data-partmatch-auto-results]');
-    const result = await doSearch(year, make, model);
     if (resultsEl) {
+      resultsEl.innerHTML = `
+        <div style="padding: 40px; text-align: center; color: #666;">
+          <span class="pm-spinner" style="display: inline-block; width: 28px; height: 28px;"></span>
+          <p style="margin-top: 12px; font-size: 14px;">Loading compatible products…</p>
+        </div>
+      `;
+      const result = await doSearch(year, make, model);
       await renderResults(resultsEl, result);
     }
   }
 
   // ─── Native Collection Page Filter ───────────────────────────────────────────
   async function filterNativeCollectionPage(year, make, model) {
-    const searchResult = await doSearch(year, make, model);
-    if (!searchResult || !searchResult.products) return;
+    let matchingHandles = null;
+    let matchingTitles = null;
+    let matchingIds = null;
+    const isReset = !year || !make || !model;
 
-    const matchingHandles = new Set(searchResult.products.map(p => (p.shopifyHandle || p.handle || '').toLowerCase()));
-    const matchingTitles = new Set(searchResult.products.map(p => (p.productTitle || p.title || '').toLowerCase()));
-    const matchingIds = new Set(searchResult.products.map(p => String(p.shopifyProductId || '')));
+    if (!isReset) {
+      const searchResult = await doSearch(year, make, model);
+      if (!searchResult || !searchResult.products) return;
+      matchingHandles = new Set(searchResult.products.map(p => (p.shopifyHandle || p.handle || '').toLowerCase()));
+      matchingTitles = new Set(searchResult.products.map(p => (p.productTitle || p.title || '').toLowerCase()));
+      matchingIds = new Set(searchResult.products.map(p => String(p.shopifyProductId || '')));
+    }
 
     const productLinks = document.querySelectorAll('a[href*="/products/"]');
     if (!productLinks.length) return;
@@ -645,42 +707,72 @@
 
       if (container.closest('.pm-standalone-results') || container.closest('.pm-widget')) return;
 
-      const href = link.getAttribute('href') || '';
-      let handle = '';
-      if (href.includes('/products/')) {
-        const parts = href.split('/products/')[1];
-        if (parts) handle = parts.split('?')[0].split('#')[0].replace(/\/$/, '').toLowerCase();
-      }
-
-      const titleEl = container.querySelector('.card__heading, .full-unstyled-link, .product-card__title, h3, h2, a');
-      const title = titleEl ? titleEl.textContent.trim().toLowerCase() : '';
-      const prodId = container.dataset.productId || link.dataset.productId || '';
-
-      const isMatch = (handle && matchingHandles.has(handle)) || 
-                      (title && matchingTitles.has(title)) || 
-                      (prodId && matchingIds.has(prodId));
-
-      if (isMatch) {
+      if (isReset) {
         container.style.display = '';
-        visibleCount++;
-
-        if (!container.querySelector('.pm-collection-fitment-badge')) {
-          const badge = document.createElement('div');
-          badge.className = 'pm-collection-fitment-badge';
-          badge.style.cssText = 'display: inline-block; margin: 6px 0; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 12px; background: #e6f4ea; color: #137333;';
-          badge.textContent = `✓ Fits ${year} ${make} ${model}`;
-          if (titleEl && titleEl.parentNode) {
-            titleEl.parentNode.insertBefore(badge, titleEl.nextSibling);
-          }
-        }
+        const badge = container.querySelector('.pm-collection-fitment-badge');
+        if (badge) badge.remove();
       } else {
-        container.style.display = 'none';
+        const href = link.getAttribute('href') || '';
+        let handle = '';
+        if (href.includes('/products/')) {
+          const parts = href.split('/products/')[1];
+          if (parts) handle = parts.split('?')[0].split('#')[0].replace(/\/$/, '').toLowerCase();
+        }
+
+        const titleEl = container.querySelector('.card__heading, .full-unstyled-link, .product-card__title, h3, h2, a');
+        const title = titleEl ? titleEl.textContent.trim().toLowerCase() : '';
+        const prodId = container.dataset.productId || link.dataset.productId || '';
+
+        const isMatch = (handle && matchingHandles.has(handle)) || 
+                        (title && matchingTitles.has(title)) || 
+                        (prodId && matchingIds.has(prodId));
+
+        if (isMatch) {
+          container.style.display = '';
+          visibleCount++;
+
+          if (!container.querySelector('.pm-collection-fitment-badge')) {
+            const badge = document.createElement('div');
+            badge.className = 'pm-collection-fitment-badge';
+            badge.style.cssText = 'display: inline-block; margin: 6px 0; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 12px; background: #e6f4ea; color: #137333;';
+            badge.textContent = `✓ Fits ${year} ${make} ${model}`;
+            if (titleEl && titleEl.parentNode) {
+              titleEl.parentNode.insertBefore(badge, titleEl.nextSibling);
+            }
+          }
+        } else {
+          container.style.display = 'none';
+        }
       }
     });
 
     const countLabel = document.getElementById('ProductCount') || document.querySelector('.product-count') || document.getElementById('ProductCountDesktop');
     if (countLabel) {
-      countLabel.textContent = `${visibleCount} products matching ${year} ${make} ${model}`;
+      if (isReset) {
+        countLabel.textContent = '';
+      } else {
+        countLabel.textContent = `${visibleCount} products matching ${year} ${make} ${model}`;
+      }
+    }
+  }
+
+  // Helper to re-evaluate and apply collection page filter
+  function handleCollectionPageFilter() {
+    const isCollectionPage = window.location.pathname.includes('/collections') || window.location.pathname.includes('/search');
+    if (!isCollectionPage) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlYear  = urlParams.get('year');
+    const urlMake  = urlParams.get('make');
+    const urlModel = urlParams.get('model');
+
+    const saved = settingsAllow('persistSelection') ? savedVehicle() : null;
+    const v = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel } : saved;
+
+    if (v && v.year && v.make && v.model) {
+      filterNativeCollectionPage(v.year, v.make, v.model);
+    } else {
+      filterNativeCollectionPage(null, null, null);
     }
   }
 
@@ -689,19 +781,36 @@
     const widgets = document.querySelectorAll('[data-partmatch-widget]');
     widgets.forEach(initSearchWidget);
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlYear  = urlParams.get('year');
-    const urlMake  = urlParams.get('make');
-    const urlModel = urlParams.get('model');
+    loadConfig().then(() => {
+      handleCollectionPageFilter();
 
-    if (urlYear && urlMake && urlModel) {
+      // Listen to changes to re-filter
+      document.addEventListener('partmatch:vehicleChanged', () => {
+        handleCollectionPageFilter();
+      });
+
+      // If widgets.length === 0 and there is a vehicle, show standalone results
       const isCollectionPage = window.location.pathname.includes('/collections') || window.location.pathname.includes('/search');
-      if (isCollectionPage) {
-        filterNativeCollectionPage(urlYear, urlMake, urlModel);
-      } else if (widgets.length === 0) {
-        initStandaloneSearchResults(urlYear, urlMake, urlModel);
+      if (!isCollectionPage && widgets.length === 0) {
+        const handleStandalone = () => {
+          const urlParams = new URLSearchParams(window.location.search);
+          const urlYear  = urlParams.get('year');
+          const urlMake  = urlParams.get('make');
+          const urlModel = urlParams.get('model');
+          const saved = settingsAllow('persistSelection') ? savedVehicle() : null;
+          const v = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel } : saved;
+
+          if (v && v.year && v.make && v.model) {
+            initStandaloneSearchResults(v.year, v.make, v.model);
+          } else {
+            initStandaloneSearchResults(null, null, null);
+          }
+        };
+
+        handleStandalone();
+        document.addEventListener('partmatch:vehicleChanged', handleStandalone);
       }
-    }
+    });
 
     initVehicleBar();
     initFitmentChecker();

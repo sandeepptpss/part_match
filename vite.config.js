@@ -48,7 +48,18 @@ export default defineConfig({
       allow: ["app", "node_modules"],
     },
   },
-  plugins: [reactRouter(), tsconfigPaths()],
+  plugins: [
+    reactRouter({
+      future: {
+        v8_middleware: true,
+        v8_splitRouteModules: true,
+        v8_viteEnvironmentApi: true,
+        v8_passThroughRequests: true,
+        v8_trailingSlashAwareDataRequests: true,
+      },
+    }),
+    tsconfigPaths(),
+  ],
   build: {
     assetsInlineLimit: 0,
   },

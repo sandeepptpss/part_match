@@ -23,12 +23,9 @@ export const loader = async ({ request }) => {
 
   let settings = null;
   try {
-    settings = await prisma.appSettings.findFirst({
+    settings = await prisma.appSettings.findUnique({
       where: { shop },
     });
-    if (!settings) {
-      settings = await prisma.appSettings.findFirst();
-    }
     if (!settings) {
       settings = await prisma.appSettings.create({
         data: { shop, ...DEFAULT_SETTINGS },
@@ -68,23 +65,11 @@ export const action = async ({ request }) => {
 
   let savedSettings = null;
   try {
-    let existing = await prisma.appSettings.findFirst({
+    savedSettings = await prisma.appSettings.upsert({
       where: { shop },
+      update: data,
+      create: { shop, ...data },
     });
-    if (!existing) {
-      existing = await prisma.appSettings.findFirst();
-    }
-
-    if (existing) {
-      savedSettings = await prisma.appSettings.update({
-        where: { id: existing.id },
-        data: { shop, ...data },
-      });
-    } else {
-      savedSettings = await prisma.appSettings.create({
-        data: { shop, ...data },
-      });
-    }
   } catch (err) {
     console.error("[settings action error]", err);
   }
