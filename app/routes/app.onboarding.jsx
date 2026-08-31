@@ -1,5 +1,5 @@
 const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Form, useNavigation } from "react-router";
+import { useLoaderData, Form, useNavigation, Link } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -167,26 +167,44 @@ export default function Onboarding() {
             </div>
             <div style={{ fontSize: "14px", color: "#6d7175", marginBottom: "12px" }}>{s.desc}</div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <a
-                href={s.href}
-                target={s.external ? "_blank" : undefined}
-                rel={s.external ? "noopener" : undefined}
-                style={{
-                  display: "inline-block",
-                  background: s.done ? "#f1f2f3" : "#008060",
-                  color: s.done ? "#6d7175" : "#fff",
-                  padding: "7px 16px",
-                  borderRadius: "6px",
-                  textDecoration: "none",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                }}
-              >
-                {s.action} {s.external ? "↗" : "→"}
-              </a>
-              {s.action2 && (
+              {s.external ? (
                 <a
-                  href={s.href2}
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "inline-block",
+                    background: s.done ? "#f1f2f3" : "#008060",
+                    color: s.done ? "#6d7175" : "#fff",
+                    padding: "7px 16px",
+                    borderRadius: "6px",
+                    textDecoration: "none",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                  }}
+                >
+                  {s.action} ↗
+                </a>
+              ) : (
+                <Link
+                  to={s.href}
+                  style={{
+                    display: "inline-block",
+                    background: s.done ? "#f1f2f3" : "#008060",
+                    color: s.done ? "#6d7175" : "#fff",
+                    padding: "7px 16px",
+                    borderRadius: "6px",
+                    textDecoration: "none",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                  }}
+                >
+                  {s.action} →
+                </Link>
+              )}
+              {s.action2 && (
+                <Link
+                  to={s.href2}
                   style={{
                     display: "inline-block",
                     background: "#f1f2f3",
@@ -198,7 +216,7 @@ export default function Onboarding() {
                   }}
                 >
                   {s.action2}
-                </a>
+                </Link>
               )}
               {s.confirmable && (
                 <Form method="post">
@@ -226,8 +244,8 @@ export default function Onboarding() {
       ))}
 
       <div style={{ textAlign: "center", marginTop: "28px" }}>
-        <a
-          href="/app"
+        <Link
+          to="/app"
           style={{
             display: "inline-block",
             background: "#fff",
@@ -240,7 +258,7 @@ export default function Onboarding() {
           }}
         >
           Skip to Dashboard
-        </a>
+        </Link>
       </div>
     </div>
   );

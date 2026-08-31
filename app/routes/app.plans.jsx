@@ -312,47 +312,50 @@ export default function PlansPage() {
   ];
 
   return (
-    <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "24px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+    <div style={{ maxWidth: "1240px", margin: "0 auto", padding: "28px 24px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>
       {/* Toast Notification */}
       {actionData?.message && (
         <div
           style={{
-            background: actionData?.success !== false ? "#e6f4ea" : "#fdeded",
-            border: `1px solid ${actionData?.success !== false ? "#b7e1cd" : "#f5c2c7"}`,
-            color: actionData?.success !== false ? "#137333" : "#842029",
-            padding: "14px 20px",
-            borderRadius: "8px",
+            background: actionData?.success !== false ? "#ecfdf5" : "#fef2f2",
+            border: `1px solid ${actionData?.success !== false ? "#a7f3d0" : "#fecaca"}`,
+            color: actionData?.success !== false ? "#047857" : "#991b1b",
+            padding: "16px 20px",
+            borderRadius: "12px",
             marginBottom: "24px",
-            fontWeight: "600",
+            fontWeight: "700",
+            fontSize: "14px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
           }}
         >
           {actionData?.success !== false ? "✓" : "⚠️"} {actionData.message}
         </div>
       )}
 
-
-
       {/* Header Banner Card */}
-      <div style={{ background: "#ffffff", border: "1px solid #e1e3e5", borderRadius: "12px", padding: "28px", marginBottom: "28px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "20px" }}>
+      <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", borderRadius: "16px", padding: "32px", marginBottom: "32px", color: "#ffffff", boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.25)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px", marginBottom: "24px" }}>
           <div>
-            <h1 style={{ margin: "0 0 6px", fontSize: "26px", fontWeight: "700", color: "#1a1a1a" }}>
-              PartMatch Billing & Pricing Plans
-            </h1>
-            <p style={{ margin: 0, color: "#6d7175", fontSize: "15px" }}>
-              Scale your automotive fitment search seamlessly with flexible plans.
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+              <span style={{ fontSize: "26px" }}>💎</span>
+              <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "800", letterSpacing: "-0.5px" }}>
+                Flexible Billing & Growth Plans
+              </h1>
+            </div>
+            <p style={{ margin: 0, color: "#94a3b8", fontSize: "15px" }}>
+              Choose the right tier to scale vehicle fitment lookups and catalog capacity.
             </p>
           </div>
-          <div style={{ background: "#f0f7ff", border: "1px solid #b3d4f5", color: "#005bd3", padding: "8px 16px", borderRadius: "20px", fontSize: "14px", fontWeight: "600" }}>
-            Current Usage: {fitmentCount} / {recordsLimit === null ? "Unlimited" : recordsLimit.toLocaleString()} Records
+          <div style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.2)", color: "#ffffff", padding: "10px 20px", borderRadius: "20px", fontSize: "14px", fontWeight: "700", backdropFilter: "blur(4px)" }}>
+            Current Usage: <strong style={{ color: "#34d399" }}>{fitmentCount.toLocaleString()}</strong> / {recordsLimit === null ? "Unlimited" : recordsLimit.toLocaleString()} Records
           </div>
         </div>
 
-        <hr style={{ border: 0, borderTop: "1px solid #e1e3e5", margin: "20px 0" }} />
+        <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.15)", margin: "24px 0" }} />
 
         {/* Monthly vs Annual Billing Toggle */}
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "14px" }}>
-          <span style={{ fontSize: "14px", fontWeight: billingCycle === "monthly" ? "700" : "400", color: "#1a1a1a" }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "16px" }}>
+          <span style={{ fontSize: "15px", fontWeight: billingCycle === "monthly" ? "700" : "500", color: billingCycle === "monthly" ? "#ffffff" : "#94a3b8" }}>
             Monthly Billing
           </span>
 
@@ -360,37 +363,37 @@ export default function PlansPage() {
             type="button"
             onClick={() => setBillingCycle(billingCycle === "monthly" ? "annual" : "monthly")}
             style={{
-              background: billingCycle === "annual" ? "#008060" : "#dfe3e8",
+              background: billingCycle === "annual" ? "#008060" : "#475569",
               border: "none",
               borderRadius: "20px",
               padding: "4px 8px",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
-              width: "50px",
+              width: "54px",
               transition: "background 0.3s",
             }}
           >
             <div
               style={{
-                width: "18px",
-                height: "18px",
+                width: "20px",
+                height: "20px",
                 borderRadius: "50%",
                 background: "#ffffff",
-                transform: billingCycle === "annual" ? "translateX(22px)" : "translateX(0)",
+                transform: billingCycle === "annual" ? "translateX(24px)" : "translateX(0)",
                 transition: "transform 0.3s",
               }}
             />
           </button>
 
-          <span style={{ fontSize: "14px", fontWeight: billingCycle === "annual" ? "700" : "400", color: "#1a1a1a" }}>
-            Annual Billing <span style={{ background: "#e6f4ea", color: "#137333", padding: "3px 8px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", marginLeft: "4px" }}>Save {currentDiscount}%</span>
+          <span style={{ fontSize: "15px", fontWeight: billingCycle === "annual" ? "700" : "500", color: billingCycle === "annual" ? "#ffffff" : "#94a3b8" }}>
+            Annual Billing <span style={{ background: "rgba(52, 211, 153, 0.2)", color: "#34d399", border: "1px solid rgba(52, 211, 153, 0.4)", padding: "3px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "700", marginLeft: "6px" }}>Save {currentDiscount}%</span>
           </span>
         </div>
       </div>
 
       {/* Pricing Cards Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "24px", marginBottom: "36px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px", marginBottom: "40px" }}>
         {plans.map((plan) => {
           const isCurrent = activePlan === plan.id;
           const displayPrice = billingCycle === "annual" ? plan.priceAnnual : plan.priceMonthly;
@@ -399,11 +402,11 @@ export default function PlansPage() {
             <div
               key={plan.id}
               style={{
-                background: plan.highlight ? "#f9fafb" : "#ffffff",
-                border: plan.highlight ? "2px solid #008060" : "1px solid #e1e3e5",
-                borderRadius: "14px",
-                padding: "28px",
-                boxShadow: plan.highlight ? "0 4px 20px rgba(0,128,96,0.15)" : "0 2px 8px rgba(0,0,0,0.04)",
+                background: plan.highlight ? "#ffffff" : "#ffffff",
+                border: plan.highlight ? "2px solid #008060" : "1px solid #e2e8f0",
+                borderRadius: "16px",
+                padding: "32px",
+                boxShadow: plan.highlight ? "0 12px 30px -5px rgba(0, 128, 96, 0.18)" : "0 4px 16px rgba(0,0,0,0.03)",
                 position: "relative",
                 display: "flex",
                 flexDirection: "column",
@@ -411,37 +414,36 @@ export default function PlansPage() {
               }}
             >
               {plan.badge && (
-                <div style={{ position: "absolute", top: "-12px", right: "20px", background: "#008060", color: "#ffffff", padding: "4px 12px", borderRadius: "12px", fontSize: "11px", fontWeight: "700", letterSpacing: "0.5px" }}>
+                <div style={{ position: "absolute", top: "-14px", right: "24px", background: "#008060", color: "#ffffff", padding: "5px 14px", borderRadius: "12px", fontSize: "11px", fontWeight: "800", letterSpacing: "0.5px", boxShadow: "0 2px 6px rgba(0, 128, 96, 0.3)" }}>
                   {plan.badge}
                 </div>
               )}
               {isCurrent && !plan.badge && (
-                <div style={{ position: "absolute", top: "-12px", right: "20px", background: "#6d7175", color: "#ffffff", padding: "4px 12px", borderRadius: "12px", fontSize: "11px", fontWeight: "700" }}>
+                <div style={{ position: "absolute", top: "-14px", right: "24px", background: "#475569", color: "#ffffff", padding: "5px 14px", borderRadius: "12px", fontSize: "11px", fontWeight: "800" }}>
                   ACTIVE PLAN
                 </div>
               )}
 
               <div>
-                <h3 style={{ margin: "0 0 8px", fontSize: "20px", fontWeight: "700", color: "#1a1a1a" }}>
+                <h3 style={{ margin: "0 0 8px", fontSize: "22px", fontWeight: "800", color: "#0f172a" }}>
                   {plan.name}
                 </h3>
-                <p style={{ margin: "0 0 20px", color: "#6d7175", fontSize: "13px", lineHeight: "1.4" }}>
+                <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "14px", lineHeight: "1.5" }}>
                   {plan.description}
                 </p>
 
                 {/* Price Display */}
                 <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "16px" }}>
-                  <span style={{ fontSize: "36px", fontWeight: "800", color: "#1a1a1a" }}>{displayPrice}</span>
-                  <span style={{ fontSize: "14px", color: "#6d7175" }}>{plan.period}</span>
+                  <span style={{ fontSize: "40px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>{displayPrice}</span>
+                  <span style={{ fontSize: "14px", color: "#64748b", fontWeight: "600" }}>{plan.period}</span>
                 </div>
 
-                <div style={{ display: "inline-block", background: "#f4f6f8", color: "#454f5b", padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", marginBottom: "20px" }}>
+                <div style={{ display: "inline-block", background: "#f1f5f9", color: "#334155", padding: "5px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", marginBottom: "24px" }}>
                   {plan.recordsLimit}
                 </div>
 
-                {/* Submit Action Form — a real Form (not a fetcher) so Shopify's
-                    billing-confirmation redirect performs a full navigation */}
-                <Form method="post" style={{ marginBottom: "24px" }}>
+                {/* Action Form */}
+                <Form method="post" style={{ marginBottom: "28px" }}>
                   <input type="hidden" name="intent" value="selectPlan" />
                   <input type="hidden" name="plan" value={plan.id} />
                   <input type="hidden" name="billingCycle" value={billingCycle} />
@@ -450,14 +452,15 @@ export default function PlansPage() {
                     disabled={isCurrent || isSubmitting}
                     style={{
                       width: "100%",
-                      padding: "12px 16px",
-                      borderRadius: "8px",
-                      border: plan.highlight ? "none" : "1px solid #babfc3",
-                      background: isCurrent ? "#e4e5e7" : plan.highlight ? "#008060" : "#ffffff",
-                      color: isCurrent ? "#8c9196" : plan.highlight ? "#ffffff" : "#202223",
-                      fontSize: "14px",
+                      padding: "12px 18px",
+                      borderRadius: "10px",
+                      border: plan.highlight ? "none" : "1px solid #cbd5e1",
+                      background: isCurrent ? "#f1f5f9" : plan.highlight ? "#008060" : "#ffffff",
+                      color: isCurrent ? "#94a3b8" : plan.highlight ? "#ffffff" : "#1e293b",
+                      fontSize: "15px",
                       fontWeight: "700",
                       cursor: isCurrent ? "default" : "pointer",
+                      boxShadow: plan.highlight && !isCurrent ? "0 4px 12px rgba(0, 128, 96, 0.25)" : "none",
                       transition: "all 0.2s",
                     }}
                   >
@@ -465,22 +468,22 @@ export default function PlansPage() {
                   </button>
                 </Form>
 
-                <hr style={{ border: 0, borderTop: "1px solid #e1e3e5", margin: "20px 0" }} />
+                <div style={{ height: "1px", background: "#e2e8f0", margin: "24px 0" }} />
 
                 {/* Features list */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <span style={{ fontSize: "12px", fontWeight: "700", color: "#6d7175", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Included Features:
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: "800", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Included Capabilities:
                   </span>
                   {plan.features.map((feat, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#202223" }}>
-                      <span style={{ color: "#008060", fontWeight: "800" }}>✓</span>
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#1e293b" }}>
+                      <span style={{ color: "#008060", fontWeight: "800", fontSize: "16px" }}>✓</span>
                       <span>{feat}</span>
                     </div>
                   ))}
                   {plan.disabledFeatures.map((feat, i) => (
-                    <div key={`d-${i}`} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#8c9196" }}>
-                      <span style={{ color: "#8c9196" }}>✕</span>
+                    <div key={`d-${i}`} style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#94a3b8" }}>
+                      <span style={{ color: "#cbd5e1", fontSize: "16px" }}>✕</span>
                       <span style={{ textDecoration: "line-through" }}>{feat}</span>
                     </div>
                   ))}
@@ -492,71 +495,62 @@ export default function PlansPage() {
       </div>
 
       {/* Feature Comparison Matrix */}
-      <div style={{ background: "#ffffff", border: "1px solid #e1e3e5", borderRadius: "12px", padding: "28px", marginBottom: "36px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-        <h2 style={{ margin: "0 0 16px", fontSize: "20px", fontWeight: "700", color: "#1a1a1a" }}>
-          Feature Comparison Matrix
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", marginBottom: "40px", boxShadow: "0 4px 16px rgba(0,0,0,0.03)" }}>
+        <h2 style={{ margin: "0 0 20px", fontSize: "22px", fontWeight: "800", color: "#0f172a" }}>
+          Comprehensive Feature Comparison Matrix
         </h2>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
             <thead>
-              <tr style={{ borderBottom: "2px solid #e1e3e5" }}>
-                <th style={{ padding: "12px", width: "40%", color: "#6d7175" }}>Feature</th>
-                <th style={{ padding: "12px", textAlign: "center", color: "#6d7175" }}>Starter Free</th>
-                <th style={{ padding: "12px", textAlign: "center", background: "#f4f6f8", color: "#008060", fontWeight: "700" }}>Growth Pro</th>
-                <th style={{ padding: "12px", textAlign: "center", color: "#6d7175" }}>Enterprise</th>
+              <tr style={{ borderBottom: "2px solid #e2e8f0", background: "#f8fafc" }}>
+                <th style={{ padding: "14px 16px", width: "40%", color: "#64748b", fontWeight: "700" }}>Feature</th>
+                <th style={{ padding: "14px 16px", textAlign: "center", color: "#64748b", fontWeight: "700" }}>Starter Free</th>
+                <th style={{ padding: "14px 16px", textAlign: "center", background: "#ecfdf5", color: "#047857", fontWeight: "800" }}>Growth Pro</th>
+                <th style={{ padding: "14px 16px", textAlign: "center", color: "#64748b", fontWeight: "700" }}>Enterprise</th>
               </tr>
             </thead>
             <tbody>
-              <tr style={{ borderBottom: "1px solid #eeeeee" }}>
-                <td style={{ padding: "12px", fontWeight: "600" }}>Fitment Records Capacity</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>100</td>
-                <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb", fontWeight: "700" }}>5,000</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>Unlimited</td>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Fitment Records Capacity</td>
+                <td style={{ padding: "14px 16px", textAlign: "center" }}>100</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "800", color: "#047857" }}>5,000</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Unlimited</td>
               </tr>
-              <tr style={{ borderBottom: "1px solid #eeeeee" }}>
-                <td style={{ padding: "12px", fontWeight: "600" }}>Universal Products</td>
-                <td style={{ padding: "12px", textAlign: "center", color: "#8c9196" }}>✕</td>
-                <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb" }}>✓ Unlimited</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>✓ Unlimited</td>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Universal Products</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Unlimited</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Unlimited</td>
               </tr>
-              <tr style={{ borderBottom: "1px solid #eeeeee" }}>
-                <td style={{ padding: "12px", fontWeight: "600" }}>Product Page Fitment Checker</td>
-                <td style={{ padding: "12px", textAlign: "center", color: "#8c9196" }}>✕</td>
-                <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb" }}>✓ Included</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>✓ Included</td>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Product Page Fitment Checker</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Included</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Included</td>
               </tr>
-              <tr style={{ borderBottom: "1px solid #eeeeee" }}>
-                <td style={{ padding: "12px", fontWeight: "600" }}>My Garage Saved Vehicles</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>Local Storage</td>
-                <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb" }}>Local + Persistence</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>Cross-Device Sync</td>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>My Garage Saved Vehicles</td>
+                <td style={{ padding: "14px 16px", textAlign: "center" }}>Local Storage</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700" }}>Local + Persistence</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Cross-Device Sync</td>
               </tr>
-              <tr style={{ borderBottom: "1px solid #eeeeee" }}>
-                <td style={{ padding: "12px", fontWeight: "600" }}>CSV Bulk Import / Export</td>
-                <td style={{ padding: "12px", textAlign: "center", color: "#8c9196" }}>✕</td>
-                <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb" }}>✓ Unlimited</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>✓ Automated Sync</td>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>CSV Bulk Import / Export</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Unlimited</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Automated Sync</td>
               </tr>
-              <tr style={{ borderBottom: "1px solid #eeeeee" }}>
-                <td style={{ padding: "12px", fontWeight: "600" }}>Search Analytics & Logs</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>Basic</td>
-                <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb" }}>Detailed + No-Result Logs</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>Realtime Export</td>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Search Analytics & Logs</td>
+                <td style={{ padding: "14px 16px", textAlign: "center" }}>Basic Summary</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>Detailed + Gap Logs</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Realtime Export</td>
               </tr>
-              <tr style={{ borderBottom: "1px solid #eeeeee" }}>
-                <td style={{ padding: "12px", fontWeight: "600" }}>Support SLA</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>Standard Email</td>
-                <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb" }}>Priority Support</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>VIP 1-on-1 Manager</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #eeeeee" }}>
-                <td style={{ padding: "12px", fontWeight: "600" }}>
-                  AI-Powered Fitment Suggestions{" "}
-                  <span style={{ background: "#e6f4ea", color: "#137333", padding: "2px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: "700", marginLeft: "4px" }}>NEW</span>
-                </td>
-                <td style={{ padding: "12px", textAlign: "center", color: "#8c9196" }}>✕</td>
-                <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb", color: "#8c9196" }}>✕</td>
-                <td style={{ padding: "12px", textAlign: "center" }}>✓ Beta</td>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Support SLA</td>
+                <td style={{ padding: "14px 16px", textAlign: "center" }}>Standard Email</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700" }}>Priority Support</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>VIP 1-on-1 Manager</td>
               </tr>
             </tbody>
           </table>
@@ -564,27 +558,27 @@ export default function PlansPage() {
       </div>
 
       {/* FAQ Section */}
-      <div style={{ background: "#ffffff", border: "1px solid #e1e3e5", borderRadius: "12px", padding: "28px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-        <h2 style={{ margin: "0 0 16px", fontSize: "20px", fontWeight: "700", color: "#1a1a1a" }}>
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 4px 16px rgba(0,0,0,0.03)" }}>
+        <h2 style={{ margin: "0 0 20px", fontSize: "22px", fontWeight: "800", color: "#0f172a" }}>
           Frequently Asked Questions
         </h2>
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {faqs.map((faq) => {
             const isOpen = openFaq[faq.id];
             return (
-              <div key={faq.id} style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden" }}>
+              <div key={faq.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", overflow: "hidden" }}>
                 <button
                   type="button"
                   onClick={() => toggleFaq(faq.id)}
                   style={{
                     width: "100%",
-                    padding: "16px 20px",
+                    padding: "18px 24px",
                     background: "#ffffff",
                     border: "none",
                     textAlign: "left",
                     fontSize: "15px",
-                    fontWeight: "600",
-                    color: "#1a1a1a",
+                    fontWeight: "700",
+                    color: "#0f172a",
                     cursor: "pointer",
                     display: "flex",
                     justifyContent: "space-between",
@@ -592,10 +586,10 @@ export default function PlansPage() {
                   }}
                 >
                   <span>{faq.question}</span>
-                  <span style={{ color: "#6d7175", fontSize: "12px" }}>{isOpen ? "▲" : "▼"}</span>
+                  <span style={{ color: "#64748b", fontSize: "14px" }}>{isOpen ? "▲" : "▼"}</span>
                 </button>
                 {isOpen && (
-                  <div style={{ padding: "0 20px 16px", color: "#6d7175", fontSize: "14px", lineHeight: "1.5", borderTop: "1px solid #f4f6f8" }}>
+                  <div style={{ padding: "0 24px 20px", color: "#64748b", fontSize: "14px", lineHeight: "1.6", borderTop: "1px solid #f1f5f9" }}>
                     {faq.answer}
                   </div>
                 )}

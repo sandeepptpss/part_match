@@ -132,7 +132,7 @@ export default function UniversalProducts() {
             <div style={{ background: "#fff4e5", border: "1px solid #f5c99c", color: "#7a4a00", padding: "14px", borderRadius: "6px" }}>
               <strong>Universal Products is a Growth Professional feature.</strong>
               <p style={{ margin: "6px 0 8px", fontSize: "13px" }}>Your current plan ({planLabel}) doesn&apos;t include adding new universal products.</p>
-              <a href="/app/plans" style={{ color: "#2c6ecb", fontWeight: "600", fontSize: "13px" }}>View Plans →</a>
+              <Link to="/app/plans" style={{ color: "#2c6ecb", fontWeight: "600", fontSize: "13px" }}>View Plans →</Link>
             </div>
           ) : available.length === 0 ? (
             <p style={{ color: "#6d7175", fontSize: "14px" }}>All products already marked as universal.</p>

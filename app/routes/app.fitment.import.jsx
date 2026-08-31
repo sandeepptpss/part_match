@@ -1,6 +1,5 @@
-import { redirect } from "react-router";
+import { redirect, useLoaderData, Form, useActionData, useNavigation, Link } from "react-router";
 const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Form, useActionData, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
@@ -158,110 +157,133 @@ export default function FitmentImport() {
 2024,Polaris,Sportsman 850,air-filter-polaris`;
 
   return (
-    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
-      <a href="/app/fitment" style={{ color: "#2c6ecb", fontSize: "14px" }}>← Back to Fitment Records</a>
+    <div style={{ padding: "32px 24px", maxWidth: "860px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>
+      <Link to="/app/fitment" style={{ color: "#2563eb", fontSize: "14px", fontWeight: "600", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px", marginBottom: "20px" }}>
+        ← Back to Fitment Catalog
+      </Link>
 
-      <h1 style={{ fontSize: "22px", fontWeight: "700", margin: "16px 0 4px" }}>Import Fitment CSV</h1>
-      <p style={{ color: "#6d7175", margin: "0 0 24px" }}>
-        Paste or upload a CSV with columns: <strong>year, make, model, product_handle</strong> (product_handle is optional).
-      </p>
-
-      {actionData?.error && (
-        <div style={{ background: "#f8d7da", color: "#721c24", padding: "12px 16px", borderRadius: "6px", marginBottom: "16px" }}>
-          {actionData.error}
-        </div>
-      )}
-
-      {actionData?.results && (
-        <div style={{ background: "#d4edda", color: "#155724", padding: "16px", borderRadius: "6px", marginBottom: "20px" }}>
-          <strong>Import Complete</strong>
-          <ul style={{ margin: "8px 0 0", paddingLeft: "20px" }}>
-            <li>Created / Updated: {actionData.results.created}</li>
-            <li>Skipped: {actionData.results.skipped}</li>
-          </ul>
-          {actionData.results.errors.length > 0 && (
-            <details style={{ marginTop: "8px" }}>
-              <summary style={{ cursor: "pointer" }}>View {actionData.results.errors.length} error(s)</summary>
-              <ul style={{ marginTop: "8px", color: "#856404" }}>
-                {actionData.results.errors.map((e, i) => <li key={i}>{e}</li>)}
-              </ul>
-            </details>
-          )}
-        </div>
-      )}
-
-      {/* Sample */}
-      <details style={{ marginBottom: "20px" }}>
-        <summary style={{ cursor: "pointer", color: "#2c6ecb", fontSize: "14px" }}>View sample CSV format</summary>
-        <pre style={{ background: "#f6f6f7", padding: "12px", borderRadius: "6px", fontSize: "13px", marginTop: "8px", overflowX: "auto" }}>
-          {sampleCSV}
-        </pre>
-      </details>
-
-      {!planAllowsImport && (
-        <div style={{ background: "#fff4e5", border: "1px solid #f5c99c", color: "#7a4a00", padding: "16px", borderRadius: "6px", marginBottom: "20px" }}>
-          <strong>CSV Bulk Import is a Growth Professional feature.</strong>
-          <p style={{ margin: "6px 0 8px" }}>Your current plan ({planLabel}) doesn&apos;t include CSV import. Upgrade to add records in bulk.</p>
-          <a href="/app/plans" style={{ color: "#2c6ecb", fontWeight: "600" }}>View Plans →</a>
-        </div>
-      )}
-
-      <Form method="post" aria-disabled={!planAllowsImport}>
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", fontWeight: "500", marginBottom: "8px" }}>
-            Paste CSV data
-          </label>
-          <textarea
-            name="csv"
-            rows={12}
-            placeholder={sampleCSV}
-            disabled={!planAllowsImport}
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              border: "1px solid #c9cccf",
-              borderRadius: "6px",
-              fontSize: "13px",
-              fontFamily: "monospace",
-              boxSizing: "border-box",
-              resize: "vertical",
-            }}
-          />
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)" }}>
+        <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "20px", marginBottom: "24px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+            <span style={{ fontSize: "24px" }}>📊</span>
+            <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>Bulk Import Fitments via CSV</h1>
+          </div>
+          <p style={{ color: "#64748b", margin: 0, fontSize: "14px" }}>
+            Upload or paste CSV formatted vehicle fitments and optional Shopify product handles for batch creation.
+          </p>
         </div>
 
-        <div style={{ display: "flex", gap: "12px" }}>
-          <button
-            type="submit"
-            disabled={importing || !planAllowsImport}
-            style={{
-              background: "#2c6ecb",
-              color: "#fff",
-              border: "none",
-              padding: "10px 20px",
-              borderRadius: "6px",
-              fontSize: "14px",
-              fontWeight: "500",
-              cursor: "pointer",
-            }}
-          >
-            {importing ? "Importing…" : "Import CSV"}
-          </button>
-          <a
-            href="/app/fitment"
-            style={{
-              display: "inline-block",
-              background: "#f4f6f8",
-              color: "#333",
-              border: "1px solid #c9cccf",
-              padding: "10px 20px",
-              borderRadius: "6px",
-              textDecoration: "none",
-            }}
-          >
-            Cancel
-          </a>
-        </div>
-      </Form>
+        {actionData?.error && (
+          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "14px 18px", borderRadius: "10px", marginBottom: "24px", fontSize: "14px", fontWeight: "500" }}>
+            ⚠️ {actionData.error}
+          </div>
+        )}
+
+        {actionData?.results && (
+          <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "20px", borderRadius: "12px", marginBottom: "24px" }}>
+            <strong style={{ fontSize: "16px", display: "block", marginBottom: "8px" }}>🎉 Import Operation Complete</strong>
+            <div style={{ display: "flex", gap: "16px", margin: "12px 0 0" }}>
+              <span style={{ background: "#ffffff", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", border: "1px solid #a7f3d0", fontSize: "13px" }}>
+                ✓ Created / Updated: {actionData.results.created}
+              </span>
+              <span style={{ background: "#ffffff", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", border: "1px solid #a7f3d0", fontSize: "13px", color: "#b45309" }}>
+                ⚠️ Skipped: {actionData.results.skipped}
+              </span>
+            </div>
+            {actionData.results.errors.length > 0 && (
+              <details style={{ marginTop: "12px" }}>
+                <summary style={{ cursor: "pointer", fontWeight: "600" }}>View {actionData.results.errors.length} warning / error details</summary>
+                <ul style={{ marginTop: "8px", color: "#b45309", fontSize: "13px" }}>
+                  {actionData.results.errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+
+        {/* Sample */}
+        <details style={{ marginBottom: "24px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px 16px" }}>
+          <summary style={{ cursor: "pointer", color: "#2563eb", fontSize: "14px", fontWeight: "700" }}>
+            📄 View Standard CSV Header & Rows Format
+          </summary>
+          <pre style={{ background: "#0f172a", color: "#e2e8f0", padding: "16px", borderRadius: "8px", fontSize: "13px", marginTop: "12px", overflowX: "auto", fontFamily: "monospace" }}>
+            {sampleCSV}
+          </pre>
+        </details>
+
+        {!planAllowsImport && (
+          <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", color: "#78350f", padding: "20px", borderRadius: "12px", marginBottom: "24px" }}>
+            <strong style={{ color: "#b45309", fontSize: "15px", display: "block", marginBottom: "4px" }}>🔒 Growth Professional Feature</strong>
+            <p style={{ margin: "0 0 12px", fontSize: "14px" }}>
+              Bulk CSV Import requires the Growth Professional plan. Upgrade to import thousands of records at once.
+            </p>
+            <Link to="/app/plans" style={{ color: "#2563eb", fontWeight: "700", fontSize: "14px", textDecoration: "none" }}>Upgrade Plan →</Link>
+          </div>
+        )}
+
+        <Form method="post" aria-disabled={!planAllowsImport}>
+          <div style={{ marginBottom: "20px" }}>
+            <label style={{ display: "block", fontWeight: "700", color: "#1e293b", marginBottom: "8px", fontSize: "14px" }}>
+              CSV Content Data
+            </label>
+            <textarea
+              name="csv"
+              rows={10}
+              placeholder={sampleCSV}
+              disabled={!planAllowsImport}
+              style={{
+                width: "100%",
+                padding: "14px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "10px",
+                fontSize: "13px",
+                fontFamily: "monospace",
+                boxSizing: "border-box",
+                resize: "vertical",
+                outline: "none",
+                background: planAllowsImport ? "#ffffff" : "#f1f5f9",
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: "12px", paddingTop: "16px", borderTop: "1px solid #f1f5f9" }}>
+            <button
+              type="submit"
+              disabled={importing || !planAllowsImport}
+              style={{
+                background: "#2563eb",
+                color: "#ffffff",
+                border: "none",
+                padding: "11px 24px",
+                borderRadius: "8px",
+                fontSize: "14px",
+                fontWeight: "700",
+                cursor: "pointer",
+                boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
+              }}
+            >
+              {importing ? "Processing CSV…" : "Start Bulk Import →"}
+            </button>
+            <Link
+              to="/app/fitment"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                background: "#ffffff",
+                color: "#475569",
+                border: "1px solid #cbd5e1",
+                padding: "11px 20px",
+                borderRadius: "8px",
+                fontSize: "14px",
+                fontWeight: "600",
+                textDecoration: "none",
+              }}
+            >
+              Cancel
+            </Link>
+          </div>
+        </Form>
+      </div>
     </div>
   );
 }

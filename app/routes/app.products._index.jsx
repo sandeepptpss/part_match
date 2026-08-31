@@ -45,7 +45,7 @@ export default function ProductsIndex() {
         </p>
         <p style={{ color: "#6d7175", fontSize: "14px", margin: 0 }}>
           To manage which products are linked to each vehicle, go to{" "}
-          <a href="/app/fitment" style={{ color: "#008060", fontWeight: "600" }}>Fitment Records</a> and click <strong>Products</strong> on a record.
+          <Link to="/app/fitment" style={{ color: "#008060", fontWeight: "600" }}>Fitment Records</Link> and click <strong>Products</strong> on a record.
         </p>
       </div>
     </div>

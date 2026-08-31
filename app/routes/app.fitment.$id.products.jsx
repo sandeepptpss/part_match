@@ -1,6 +1,5 @@
-import { redirect } from "react-router";
+import { redirect, useLoaderData, Form, useNavigation, useActionData, Link } from "react-router";
 const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Form, useNavigation, useActionData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
@@ -135,7 +134,7 @@ export default function FitmentProducts({ params }) {
 
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
-      <a href="/app/fitment" style={{ color: "#2c6ecb", fontSize: "14px" }}>← Back to Fitment Records</a>
+      <Link to="/app/fitment" style={{ color: "#2c6ecb", fontSize: "14px" }}>← Back to Fitment Records</Link>
 
       <div style={{ margin: "16px 0 24px" }}>
         <h1 style={{ fontSize: "22px", fontWeight: "700", margin: "0 0 4px" }}>
@@ -186,7 +185,7 @@ export default function FitmentProducts({ params }) {
 
           {!canUseAi && (
             <p style={{ fontSize: "12px", color: "#6d7175", margin: "0 0 14px" }}>
-              AI-Powered Fitment Suggestions is an Enterprise plan feature. <a href="/app/plans" style={{ color: "#2c6ecb" }}>Upgrade to unlock</a>.
+              AI-Powered Fitment Suggestions is an Enterprise plan feature. <Link to="/app/plans" style={{ color: "#2c6ecb" }}>Upgrade to unlock</Link>.
             </p>
           )}
           {canUseAi && !aiConfigured && (

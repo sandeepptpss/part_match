@@ -1,5 +1,5 @@
 const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Form, useNavigation, useSearchParams } from "react-router";
+import { useLoaderData, Form, useNavigation, useSearchParams, Link } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -62,78 +62,127 @@ export default function FitmentIndex() {
   const loading = navigation.state !== "idle";
 
   return (
-    <div style={{ padding: "20px", maxWidth: "1100px", margin: "0 auto" }}>
+    <div style={{ padding: "28px 24px", maxWidth: "1240px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
         <div>
-          <h1 style={{ fontSize: "22px", fontWeight: "700", margin: 0 }}>Fitment Records</h1>
-          <p style={{ color: "#6d7175", margin: "4px 0 0" }}>{total} total records</p>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+            <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>Fitment Master Catalog</h1>
+            <span style={{ background: "#f1f5f9", color: "#475569", padding: "2px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "700" }}>
+              {total.toLocaleString()} Records
+            </span>
+          </div>
+          <p style={{ color: "#64748b", margin: 0, fontSize: "14px" }}>
+            Manage vehicle fitment specifications (Year → Make → Model) and assigned catalog parts.
+          </p>
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <a href="/app/fitment/add" style={btn("#008060")}>+ Add Record</a>
-          <a href="/app/fitment/import" style={btn("#2c6ecb")}>↑ Import CSV</a>
-          <a href="/app/fitment/export" style={btn("#6d7175")}>↓ Export CSV</a>
+
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <Link to="/app/fitment/add" style={primaryBtn}>
+            + Add Fitment Record
+          </Link>
+          <Link to="/app/fitment/import" style={secondaryBtn}>
+            ↑ Import CSV
+          </Link>
+          <a href="/app/fitment/export" style={outlineBtn}>
+            ↓ Export CSV
+          </a>
         </div>
       </div>
 
-      {/* Search */}
-      <Form method="get" style={{ marginBottom: "16px", display: "flex", gap: "10px" }}>
-        <input
-          name="q"
-          defaultValue={search}
-          placeholder="Search year, make, model…"
-          style={inputStyle}
-        />
-        <button type="submit" style={btn("#008060")}>Search</button>
-        {search && <a href="/app/fitment" style={btn("#6d7175")}>Clear</a>}
-      </Form>
+      {/* Search & Filter Card */}
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px 20px", marginBottom: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+        <Form method="get" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <input
+              name="q"
+              defaultValue={search}
+              placeholder="🔍 Search by Year, Make, or Model (e.g. 2025 Ford F-150)…"
+              style={searchInputStyle}
+            />
+          </div>
+          <button type="submit" style={primaryBtn}>Search Catalog</button>
+          {search && (
+            <Link to="/app/fitment" style={outlineBtn}>
+              ✕ Clear Search
+            </Link>
+          )}
+        </Form>
+      </div>
 
-      {/* Table */}
-      <div style={{ background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden" }}>
+      {/* Main Records Table Card */}
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0, 0, 0, 0.03)" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead style={{ background: "#f6f6f7" }}>
+          <thead style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
             <tr>
-              <th style={th}>Year</th>
-              <th style={th}>Make</th>
-              <th style={th}>Model</th>
-              <th style={{ ...th, textAlign: "center" }}>Products</th>
-              <th style={{ ...th, textAlign: "right" }}>Actions</th>
+              <th style={thStyle}>Year</th>
+              <th style={thStyle}>Make</th>
+              <th style={thStyle}>Model</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>Assigned Parts</th>
+              <th style={{ ...thStyle, textAlign: "right" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {records.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "#6d7175" }}>
-                  No records found.{" "}
-                  <a href="/app/fitment/add">Add your first fitment record →</a>
+                <td colSpan={5} style={{ padding: "48px 24px", textAlign: "center", color: "#64748b" }}>
+                  <div style={{ fontSize: "28px", marginBottom: "8px" }}>🚗</div>
+                  <strong style={{ display: "block", color: "#1e293b", fontSize: "16px", marginBottom: "4px" }}>
+                    No Fitment Records Found
+                  </strong>
+                  <span style={{ fontSize: "14px" }}>{search ? `No records matched "${search}".` : "Your catalog is currently empty."}</span>
+                  <div style={{ marginTop: "16px" }}>
+                    <Link to="/app/fitment/add" style={{ ...primaryBtn, display: "inline-flex" }}>
+                      + Add First Fitment Record
+                    </Link>
+                  </div>
                 </td>
               </tr>
             )}
             {records.map((r) => (
-              <tr key={r.id} style={{ borderTop: "1px solid #f1f2f3" }}>
-                <td style={td}>{r.year}</td>
-                <td style={td}>{r.make}</td>
-                <td style={td}>{r.model}</td>
-                <td style={{ ...td, textAlign: "center" }}>
-                  <a href={`/app/fitment/${r.id}/products`} style={{ color: "#2c6ecb", fontWeight: "600" }}>
-                    {r._count.products}
-                  </a>
+              <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.15s" }}>
+                <td style={{ ...tdStyle, fontWeight: "700", color: "#0f172a" }}>{r.year}</td>
+                <td style={{ ...tdStyle, fontWeight: "600", color: "#334155" }}>{r.make}</td>
+                <td style={{ ...tdStyle, fontWeight: "600", color: "#334155" }}>{r.model}</td>
+                <td style={{ ...tdStyle, textAlign: "center" }}>
+                  <Link
+                    to={`/app/fitment/${r.id}/products`}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      background: r._count.products > 0 ? "#ecfdf5" : "#f1f5f9",
+                      border: `1px solid ${r._count.products > 0 ? "#a7f3d0" : "#cbd5e1"}`,
+                      color: r._count.products > 0 ? "#047857" : "#64748b",
+                      padding: "4px 12px",
+                      borderRadius: "14px",
+                      fontWeight: "700",
+                      fontSize: "13px",
+                      textDecoration: "none",
+                    }}
+                  >
+                    📦 {r._count.products} Product{r._count.products === 1 ? "" : "s"}
+                  </Link>
                 </td>
-                <td style={{ ...td, textAlign: "right", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                  <a href={`/app/fitment/${r.id}/products`} style={btn("#2c6ecb", "sm")}>Products</a>
-                  <Form method="post" style={{ display: "inline" }}>
-                    <input type="hidden" name="intent" value="delete" />
-                    <input type="hidden" name="id" value={r.id} />
-                    <button
-                      type="submit"
-                      style={btn("#c0392b", "sm")}
-                      onClick={(e) => {
-                        if (!confirm(`Delete ${r.year} ${r.make} ${r.model}?`)) e.preventDefault();
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </Form>
+                <td style={{ ...tdStyle, textAlign: "right" }}>
+                  <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                    <Link to={`/app/fitment/${r.id}/products`} style={tableActionBtn("#2563eb", "#dbeafe")}>
+                      Manage Products
+                    </Link>
+                    <Form method="post" style={{ display: "inline" }}>
+                      <input type="hidden" name="intent" value="delete" />
+                      <input type="hidden" name="id" value={r.id} />
+                      <button
+                        type="submit"
+                        style={tableActionBtn("#dc2626", "#fee2e2")}
+                        onClick={(e) => {
+                          if (!confirm(`Delete fitment record for ${r.year} ${r.make} ${r.model}?`)) e.preventDefault();
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </Form>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -141,20 +190,31 @@ export default function FitmentIndex() {
         </table>
       </div>
 
-      {/* Pagination */}
+      {/* Pagination Bar */}
       {totalPages > 1 && (
-        <div style={{ display: "flex", gap: "8px", marginTop: "16px", justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: "8px", marginTop: "24px", justifyContent: "center", alignItems: "center" }}>
           {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-            <a
+            <Link
               key={p}
-              href={`/app/fitment?page=${p}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
+              to={`/app/fitment?page=${p}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
               style={{
-                ...btn(p === page ? "#008060" : "#e1e3e5", "sm"),
-                color: p === page ? "#fff" : "#333",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "36px",
+                height: "36px",
+                borderRadius: "8px",
+                textDecoration: "none",
+                fontSize: "14px",
+                fontWeight: "700",
+                background: p === page ? "#008060" : "#ffffff",
+                color: p === page ? "#ffffff" : "#475569",
+                border: `1px solid ${p === page ? "#008060" : "#cbd5e1"}`,
+                boxShadow: p === page ? "0 2px 6px rgba(0, 128, 96, 0.3)" : "none",
               }}
             >
               {p}
-            </a>
+            </Link>
           ))}
         </div>
       )}
@@ -162,36 +222,86 @@ export default function FitmentIndex() {
   );
 }
 
-const btn = (bg, size) => ({
-  display: "inline-block",
-  background: bg,
-  color: bg === "#e1e3e5" ? "#333" : "#fff",
-  padding: size === "sm" ? "5px 12px" : "8px 16px",
-  borderRadius: "6px",
+const primaryBtn = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  background: "#008060",
+  color: "#ffffff",
+  padding: "10px 18px",
+  borderRadius: "8px",
   textDecoration: "none",
-  fontSize: size === "sm" ? "13px" : "14px",
-  fontWeight: "500",
+  fontSize: "14px",
+  fontWeight: "700",
   border: "none",
   cursor: "pointer",
-});
-
-const inputStyle = {
-  flex: 1,
-  padding: "8px 12px",
-  border: "1px solid #c9cccf",
-  borderRadius: "6px",
-  fontSize: "14px",
+  boxShadow: "0 2px 6px rgba(0, 128, 96, 0.25)",
 };
 
-const th = {
-  padding: "12px 16px",
+const secondaryBtn = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  background: "#2563eb",
+  color: "#ffffff",
+  padding: "10px 16px",
+  borderRadius: "8px",
+  textDecoration: "none",
+  fontSize: "14px",
+  fontWeight: "600",
+  border: "none",
+  boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
+};
+
+const outlineBtn = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  background: "#ffffff",
+  color: "#475569",
+  border: "1px solid #cbd5e1",
+  padding: "10px 16px",
+  borderRadius: "8px",
+  textDecoration: "none",
+  fontSize: "14px",
+  fontWeight: "600",
+};
+
+const searchInputStyle = {
+  width: "100%",
+  padding: "11px 16px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "8px",
+  fontSize: "14px",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+const thStyle = {
+  padding: "14px 18px",
   textAlign: "left",
-  fontSize: "13px",
-  color: "#6d7175",
-  fontWeight: "500",
+  fontSize: "12px",
+  color: "#64748b",
+  fontWeight: "700",
+  textTransform: "uppercase",
+  letterSpacing: "0.5px",
 };
 
-const td = {
-  padding: "12px 16px",
+const tdStyle = {
+  padding: "14px 18px",
   fontSize: "14px",
 };
+
+const tableActionBtn = (color, bg) => ({
+  display: "inline-flex",
+  alignItems: "center",
+  background: bg,
+  color: color,
+  border: "none",
+  padding: "6px 12px",
+  borderRadius: "6px",
+  textDecoration: "none",
+  fontSize: "13px",
+  fontWeight: "700",
+  cursor: "pointer",
+});

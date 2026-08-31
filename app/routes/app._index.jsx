@@ -63,59 +63,130 @@ export default function Dashboard() {
   const { shop, stats, recentSearches, topVehicles } = useLoaderData();
 
   const cards = [
-    { label: "Fitment Records", value: stats.fitmentCount, href: "/app/fitment", color: "#008060" },
-    { label: "Product Mappings", value: stats.productMappingCount, href: "/app/products", color: "#2c6ecb" },
-    { label: "Universal Products", value: stats.universalCount, href: "/app/products/universal", color: "#6d5bd0" },
-    { label: "Searches This Month", value: stats.monthSearches, href: "/app/analytics", color: "#e67e22" },
-    { label: "No-Result Searches", value: stats.noResultSearches, href: "/app/analytics", color: "#c0392b" },
+    { label: "Fitment Records", value: stats.fitmentCount, href: "/app/fitment", color: "#008060", bgGradient: "linear-gradient(135deg, #008060 0%, #005e46 100%)", icon: "🚗" },
+    { label: "Product Mappings", value: stats.productMappingCount, href: "/app/products", color: "#2c6ecb", bgGradient: "linear-gradient(135deg, #2c6ecb 0%, #1e4f94 100%)", icon: "⚙️" },
+    { label: "Universal Products", value: stats.universalCount, href: "/app/products/universal", color: "#6d5bd0", bgGradient: "linear-gradient(135deg, #6d5bd0 0%, #4f3ea3 100%)", icon: "🌐" },
+    { label: "Searches This Month", value: stats.monthSearches, href: "/app/analytics", color: "#e67e22", bgGradient: "linear-gradient(135deg, #e67e22 0%, #b85e10 100%)", icon: "📊" },
+    { label: "No-Result Opportunity", value: stats.noResultSearches, href: "/app/analytics", color: "#c0392b", bgGradient: "linear-gradient(135deg, #c0392b 0%, #8e2519 100%)", icon: "💡" },
   ];
 
   return (
-    <div style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
-      <div style={{ marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "24px", fontWeight: "700", margin: 0 }}>PartMatch Dashboard</h1>
-        <p style={{ color: "#6d7175", marginTop: "4px" }}>{shop}</p>
-      </div>
-
-      {/* Quick Actions */}
-      <div style={{ display: "flex", gap: "12px", marginBottom: "28px", flexWrap: "wrap" }}>
-        <a href="/app/fitment/add" style={btnStyle("#008060")}>+ Add Fitment Record</a>
-        <a href="/app/fitment/import" style={btnStyle("#2c6ecb")}>↑ Import CSV</a>
-        <a href="/app/widget" style={btnStyle("#6d5bd0")}>Customize Widget</a>
-        <a href="/app/analytics" style={btnStyle("#e67e22")}>View Analytics</a>
-      </div>
-
-      {/* Stats Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px,1fr))", gap: "16px", marginBottom: "32px" }}>
-        {cards.map((c) => (
-          <a key={c.label} href={c.href} style={{ textDecoration: "none" }}>
-            <div style={{ background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px", padding: "20px", borderTop: `4px solid ${c.color}` }}>
-              <div style={{ fontSize: "32px", fontWeight: "700", color: c.color }}>{c.value}</div>
-              <div style={{ fontSize: "13px", color: "#6d7175", marginTop: "4px" }}>{c.label}</div>
+    <div style={{ padding: "28px 24px", maxWidth: "1240px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>
+      {/* Executive Header Banner */}
+      <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", borderRadius: "14px", padding: "28px 32px", color: "#ffffff", marginBottom: "28px", boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.25)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+              <span style={{ fontSize: "24px" }}>🏎️</span>
+              <h1 style={{ margin: 0, fontSize: "26px", fontWeight: "800", letterSpacing: "-0.5px" }}>
+                PartMatch Auto Fitment Center
+              </h1>
+              <span style={{ background: "rgba(16, 185, 129, 0.2)", border: "1px solid rgba(16, 185, 129, 0.4)", color: "#34d399", padding: "3px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" }}>
+                Active & Live
+              </span>
             </div>
-          </a>
+            <p style={{ margin: 0, color: "#94a3b8", fontSize: "14px" }}>
+              Connected Store: <strong style={{ color: "#cbd5e1" }}>{shop}</strong>
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <Link to="/app/fitment/add" style={primaryActionBtn}>
+              <span>+ Add Fitment</span>
+            </Link>
+            <Link to="/app/fitment/import" style={secondaryActionBtn}>
+              <span>↑ Import CSV</span>
+            </Link>
+            <Link to="/app/widget" style={secondaryActionBtn}>
+              <span>🎨 Widget Editor</span>
+            </Link>
+            <Link to="/app/analytics" style={secondaryActionBtn}>
+              <span>📈 Analytics</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Cards Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "18px", marginBottom: "32px" }}>
+        {cards.map((c) => (
+          <Link key={c.label} to={c.href} style={{ textDecoration: "none" }}>
+            <div
+              style={{
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "12px",
+                padding: "22px 20px",
+                position: "relative",
+                overflow: "hidden",
+                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.03)",
+                transition: "all 0.2s ease-in-out",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                height: "100%",
+                boxSizing: "border-box",
+              }}
+            >
+              <div style={{ height: "4px", width: "100%", position: "absolute", top: 0, left: 0, background: c.bgGradient }} />
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <span style={{ fontSize: "13px", fontWeight: "600", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    {c.label}
+                  </span>
+                  <span style={{ fontSize: "20px" }}>{c.icon}</span>
+                </div>
+                <div style={{ fontSize: "34px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>
+                  {c.value.toLocaleString()}
+                </div>
+              </div>
+              <div style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "4px", color: c.color, fontSize: "13px", fontWeight: "600" }}>
+                <span>Manage</span> <span>→</span>
+              </div>
+            </div>
+          </Link>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", flexWrap: "wrap" }}>
-        {/* Top Vehicles */}
-        <div style={cardStyle}>
-          <h3 style={sectionHead}>Top Searched Vehicles</h3>
+      {/* Two Column Section */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(450px, 1fr))", gap: "24px", marginBottom: "32px" }}>
+        {/* Top Searched Vehicles Card */}
+        <div style={cardContainer}>
+          <div style={cardHeaderStyle}>
+            <div>
+              <h3 style={cardTitleStyle}>🔥 Top Searched Vehicles</h3>
+              <p style={cardSubtitleStyle}>Most queried Year/Make/Model combinations</p>
+            </div>
+            <Link to="/app/analytics" style={{ fontSize: "13px", color: "#2563eb", fontWeight: "600", textDecoration: "none" }}>
+              View Report →
+            </Link>
+          </div>
+
           {topVehicles.length === 0 ? (
-            <p style={{ color: "#6d7175" }}>No searches yet.</p>
+            <div style={emptyStateStyle}>
+              <span>🔍 No vehicle search history recorded yet.</span>
+            </div>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #e1e3e5" }}>
-                  <th style={th}>Vehicle</th>
-                  <th style={{ ...th, textAlign: "right" }}>Searches</th>
+                <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
+                  <th style={tableThStyle}>Rank</th>
+                  <th style={tableThStyle}>Vehicle Specification</th>
+                  <th style={{ ...tableThStyle, textAlign: "right" }}>Total Searches</th>
                 </tr>
               </thead>
               <tbody>
                 {topVehicles.map((v, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid #f1f2f3" }}>
-                    <td style={td}>{v.year} {v.make} {v.model}</td>
-                    <td style={{ ...td, textAlign: "right", fontWeight: "600" }}>{v._count.id}</td>
+                  <tr key={i} style={{ borderBottom: "1px solid #f8fafc" }}>
+                    <td style={{ ...tableTdStyle, width: "40px", fontWeight: "700", color: "#64748b" }}>#{i + 1}</td>
+                    <td style={{ ...tableTdStyle, fontWeight: "600", color: "#1e293b" }}>
+                      {v.year} {v.make} {v.model}
+                    </td>
+                    <td style={{ ...tableTdStyle, textAlign: "right" }}>
+                      <span style={{ background: "#f1f5f9", color: "#334155", padding: "4px 10px", borderRadius: "12px", fontWeight: "700", fontSize: "13px" }}>
+                        {v._count.id} searches
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -123,35 +194,57 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Recent Searches */}
-        <div style={cardStyle}>
-          <h3 style={sectionHead}>Recent Searches</h3>
+        {/* Recent Searches Card */}
+        <div style={cardContainer}>
+          <div style={cardHeaderStyle}>
+            <div>
+              <h3 style={cardTitleStyle}>⏱️ Live Search Activity</h3>
+              <p style={cardSubtitleStyle}>Real-time storefront vehicle queries</p>
+            </div>
+            <Link to="/app/analytics" style={{ fontSize: "13px", color: "#2563eb", fontWeight: "600", textDecoration: "none" }}>
+              View Log →
+            </Link>
+          </div>
+
           {recentSearches.length === 0 ? (
-            <p style={{ color: "#6d7175" }}>No searches yet.</p>
+            <div style={emptyStateStyle}>
+              <span>⚡ Storefront search events will appear here live.</span>
+            </div>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #e1e3e5" }}>
-                  <th style={th}>Vehicle</th>
-                  <th style={{ ...th, textAlign: "center" }}>Result</th>
-                  <th style={{ ...th, textAlign: "right" }}>Time</th>
+                <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
+                  <th style={tableThStyle}>Vehicle</th>
+                  <th style={{ ...tableThStyle, textAlign: "center" }}>Status</th>
+                  <th style={{ ...tableThStyle, textAlign: "right" }}>Time</th>
                 </tr>
               </thead>
               <tbody>
                 {recentSearches.map((s, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid #f1f2f3" }}>
-                    <td style={td}>{s.year} {s.make} {s.model}</td>
-                    <td style={{ ...td, textAlign: "center" }}>
-                      <span style={{
-                        background: s.hasResults ? "#d4edda" : "#f8d7da",
-                        color: s.hasResults ? "#155724" : "#721c24",
-                        padding: "2px 8px", borderRadius: "10px", fontSize: "12px"
-                      }}>
-                        {s.hasResults ? "Found" : "No Result"}
+                  <tr key={i} style={{ borderBottom: "1px solid #f8fafc" }}>
+                    <td style={{ ...tableTdStyle, fontWeight: "600", color: "#1e293b" }}>
+                      {s.year} {s.make} {s.model}
+                    </td>
+                    <td style={{ ...tableTdStyle, textAlign: "center" }}>
+                      <span
+                        style={{
+                          background: s.hasResults ? "#ecfdf5" : "#fef2f2",
+                          border: `1px solid ${s.hasResults ? "#a7f3d0" : "#fecaca"}`,
+                          color: s.hasResults ? "#047857" : "#b91c1c",
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        {s.hasResults ? "✓ Matched" : "⚠️ No Product"}
                       </span>
                     </td>
-                    <td style={{ ...td, textAlign: "right", color: "#6d7175", fontSize: "12px" }}>
-                      {new Date(s.createdAt).toLocaleString()}
+                    <td style={{ ...tableTdStyle, textAlign: "right", color: "#64748b", fontSize: "13px" }}>
+                      {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </td>
                   </tr>
                 ))}
@@ -161,55 +254,163 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Getting Started */}
+      {/* Getting Started / Quick Launch Guide */}
       {stats.fitmentCount === 0 && (
-        <div style={{ marginTop: "24px", background: "#f0f7ff", border: "1px solid #b3d4f5", borderRadius: "8px", padding: "20px" }}>
-          <h3 style={{ margin: "0 0 12px" }}>Getting Started</h3>
-          <ol style={{ paddingLeft: "20px", lineHeight: "2" }}>
-            <li><a href="/app/fitment/add">Add fitment records</a> (Year / Make / Model)</li>
-            <li><a href="/app/fitment/import">Import a CSV</a> to bulk-load your fitment data</li>
-            <li><a href="/app/products">Assign products</a> to fitment records</li>
-            <li><a href="/app/widget">Customize the search widget</a> for your store</li>
-          </ol>
+        <div style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #e6f4ea 100%)", border: "1px solid #b7e1cd", borderRadius: "14px", padding: "28px 32px", boxShadow: "0 4px 16px rgba(0, 128, 96, 0.06)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+            <span style={{ fontSize: "24px" }}>🚀</span>
+            <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#005e46" }}>
+              Quick Launch Checklist — 4 Easy Steps
+            </h3>
+          </div>
+          <p style={{ margin: "0 0 20px", color: "#137333", fontSize: "14px" }}>
+            Follow these steps to enable vehicle search on your Shopify storefront.
+          </p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+            <Link to="/app/fitment/add" style={guideStepStyle}>
+              <div style={stepNumStyle}>1</div>
+              <div>
+                <strong style={{ display: "block", color: "#0f172a", fontSize: "14px", marginBottom: "2px" }}>Add Fitment Record</strong>
+                <span style={{ color: "#64748b", fontSize: "12px" }}>Create Year/Make/Model records</span>
+              </div>
+            </Link>
+
+            <Link to="/app/fitment/import" style={guideStepStyle}>
+              <div style={stepNumStyle}>2</div>
+              <div>
+                <strong style={{ display: "block", color: "#0f172a", fontSize: "14px", marginBottom: "2px" }}>Bulk Import CSV</strong>
+                <span style={{ color: "#64748b", fontSize: "12px" }}>Upload thousands of fitments</span>
+              </div>
+            </Link>
+
+            <Link to="/app/products" style={guideStepStyle}>
+              <div style={stepNumStyle}>3</div>
+              <div>
+                <strong style={{ display: "block", color: "#0f172a", fontSize: "14px", marginBottom: "2px" }}>Map Store Products</strong>
+                <span style={{ color: "#64748b", fontSize: "12px" }}>Assign parts to vehicles</span>
+              </div>
+            </Link>
+
+            <Link to="/app/widget" style={guideStepStyle}>
+              <div style={stepNumStyle}>4</div>
+              <div>
+                <strong style={{ display: "block", color: "#0f172a", fontSize: "14px", marginBottom: "2px" }}>Publish Search Widget</strong>
+                <span style={{ color: "#64748b", fontSize: "12px" }}>Add Theme App Extension</span>
+              </div>
+            </Link>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-const btnStyle = (bg) => ({
-  display: "inline-block",
-  background: bg,
-  color: "#fff",
-  padding: "8px 16px",
-  borderRadius: "6px",
+// Styling Tokens
+const primaryActionBtn = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  background: "#008060",
+  color: "#ffffff",
+  padding: "10px 18px",
+  borderRadius: "8px",
   textDecoration: "none",
   fontSize: "14px",
-  fontWeight: "500",
-});
+  fontWeight: "700",
+  boxShadow: "0 2px 6px rgba(0, 128, 96, 0.3)",
+};
 
-const cardStyle = {
-  background: "#fff",
-  border: "1px solid #e1e3e5",
+const secondaryActionBtn = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  background: "rgba(255, 255, 255, 0.1)",
+  color: "#ffffff",
+  border: "1px solid rgba(255, 255, 255, 0.2)",
+  padding: "10px 16px",
   borderRadius: "8px",
-  padding: "20px",
-};
-
-const sectionHead = {
-  fontSize: "16px",
-  fontWeight: "600",
-  margin: "0 0 16px",
-};
-
-const th = {
-  textAlign: "left",
-  padding: "8px 4px",
-  fontSize: "13px",
-  color: "#6d7175",
-  fontWeight: "500",
-};
-
-const td = {
-  padding: "10px 4px",
+  textDecoration: "none",
   fontSize: "14px",
+  fontWeight: "600",
+  backdropFilter: "blur(4px)",
+};
+
+const cardContainer = {
+  background: "#ffffff",
+  border: "1px solid #e2e8f0",
+  borderRadius: "14px",
+  padding: "24px",
+  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.03)",
+};
+
+const cardHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  marginBottom: "20px",
+};
+
+const cardTitleStyle = {
+  margin: "0 0 4px",
+  fontSize: "17px",
+  fontWeight: "700",
+  color: "#0f172a",
+};
+
+const cardSubtitleStyle = {
+  margin: 0,
+  fontSize: "13px",
+  color: "#64748b",
+};
+
+const emptyStateStyle = {
+  padding: "36px 16px",
+  textAlign: "center",
+  color: "#64748b",
+  fontSize: "14px",
+  background: "#f8fafc",
+  borderRadius: "8px",
+  border: "1px dashed #cbd5e1",
+};
+
+const tableThStyle = {
+  padding: "10px 8px",
+  textAlign: "left",
+  fontSize: "12px",
+  color: "#64748b",
+  fontWeight: "700",
+  textTransform: "uppercase",
+  letterSpacing: "0.5px",
+};
+
+const tableTdStyle = {
+  padding: "14px 8px",
+  fontSize: "14px",
+};
+
+const guideStepStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  background: "#ffffff",
+  border: "1px solid #b7e1cd",
+  borderRadius: "10px",
+  padding: "14px 16px",
+  textDecoration: "none",
+  boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+};
+
+const stepNumStyle = {
+  width: "28px",
+  height: "28px",
+  borderRadius: "50%",
+  background: "#008060",
+  color: "#ffffff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontWeight: "800",
+  fontSize: "13px",
+  flexShrink: 0,
 };
