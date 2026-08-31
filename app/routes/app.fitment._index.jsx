@@ -32,7 +32,7 @@ export const loader = async ({ request }) => {
       orderBy: [{ year: "desc" }, { make: "asc" }, { model: "asc" }],
       skip,
       take: PAGE_SIZE,
-      include: { _count: { select: { products: true } } },
+      include: { _count: { select: { products: true, collections: true, tags: true } } },
     }),
     prisma.fitmentRecord?.count({ where }),
   ]);
@@ -118,7 +118,7 @@ export default function FitmentIndex() {
               <th style={thStyle}>Year</th>
               <th style={thStyle}>Make</th>
               <th style={thStyle}>Model</th>
-              <th style={{ ...thStyle, textAlign: "center" }}>Assigned Parts</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>Search Results Mapping</th>
               <th style={{ ...thStyle, textAlign: "right" }}>Actions</th>
             </tr>
           </thead>
@@ -149,24 +149,61 @@ export default function FitmentIndex() {
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
-                      gap: "4px",
-                      background: r._count.products > 0 ? "#ecfdf5" : "#f1f5f9",
-                      border: `1px solid ${r._count.products > 0 ? "#a7f3d0" : "#cbd5e1"}`,
-                      color: r._count.products > 0 ? "#047857" : "#64748b",
-                      padding: "4px 12px",
-                      borderRadius: "14px",
-                      fontWeight: "700",
-                      fontSize: "13px",
+                      gap: "6px",
                       textDecoration: "none",
+                      flexWrap: "wrap",
+                      justifyContent: "center",
                     }}
                   >
-                    {r._count.products} Product{r._count.products === 1 ? "" : "s"}
+                    <span
+                      style={{
+                        background: r._count.products > 0 ? "#ecfdf5" : "#f1f5f9",
+                        border: `1px solid ${r._count.products > 0 ? "#a7f3d0" : "#cbd5e1"}`,
+                        color: r._count.products > 0 ? "#047857" : "#64748b",
+                        padding: "3px 10px",
+                        borderRadius: "12px",
+                        fontWeight: "700",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {r._count.products} Product{r._count.products === 1 ? "" : "s"}
+                    </span>
+                    {r._count.collections > 0 && (
+                      <span
+                        style={{
+                          background: "#f3e8ff",
+                          border: "1px solid #ddd6fe",
+                          color: "#7c3aed",
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          fontWeight: "700",
+                          fontSize: "12px",
+                        }}
+                      >
+                        {r._count.collections} Collection{r._count.collections === 1 ? "" : "s"}
+                      </span>
+                    )}
+                    {r._count.tags > 0 && (
+                      <span
+                        style={{
+                          background: "#ecfdf5",
+                          border: "1px solid #a7f3d0",
+                          color: "#059669",
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          fontWeight: "700",
+                          fontSize: "12px",
+                        }}
+                      >
+                        {r._count.tags} Tag{r._count.tags === 1 ? "" : "s"}
+                      </span>
+                    )}
                   </Link>
                 </td>
                 <td style={{ ...tdStyle, textAlign: "right" }}>
                   <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
                     <Link to={`/app/fitment/${r.id}/products`} style={tableActionBtn("#2563eb", "#dbeafe")}>
-                      Manage Products
+                      Manage Mappings
                     </Link>
                     <Form method="post" style={{ display: "inline" }}>
                       <input type="hidden" name="intent" value="delete" />

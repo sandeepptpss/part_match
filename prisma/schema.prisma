@@ -42,7 +42,9 @@ model FitmentRecord {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products FitmentProduct[]
+  products    FitmentProduct[]
+  collections FitmentCollection[]
+  tags        FitmentTag[]
 
   @@unique([shop, year, make, model])
   @@index([shop])
@@ -64,6 +66,36 @@ model FitmentProduct {
   @@unique([fitmentId, shopifyProductId])
   @@index([fitmentId])
   @@index([shopifyProductId])
+}
+
+// ─── Fitment ↔ Collection Junction ───────────────────────────────────────────
+// Links a FitmentRecord to entire Shopify Collections by GID or handle.
+model FitmentCollection {
+  id                  Int    @id @default(autoincrement())
+  fitmentId          Int
+  shopifyCollectionId String // Shopify GID e.g. "gid://shopify/Collection/123"
+  shopifyHandle       String @default("")
+  collectionTitle     String @default("")
+
+  fitment FitmentRecord @relation(fields: [fitmentId], references: [id], onDelete: Cascade)
+
+  @@unique([fitmentId, shopifyCollectionId])
+  @@index([fitmentId])
+  @@index([shopifyCollectionId])
+}
+
+// ─── Fitment ↔ Tag Junction ──────────────────────────────────────────────────
+// Links a FitmentRecord to product Tags.
+model FitmentTag {
+  id        Int    @id @default(autoincrement())
+  fitmentId Int
+  tag       String // e.g. "bmw-m2" or "2000-fitment"
+
+  fitment FitmentRecord @relation(fields: [fitmentId], references: [id], onDelete: Cascade)
+
+  @@unique([fitmentId, tag])
+  @@index([fitmentId])
+  @@index([tag])
 }
 
 // ─── Universal Products ───────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 const json = (data, init) => Response.json(data, init);
 import { useState } from "react";
-import { useLoaderData, useActionData, useNavigation, Form, Link } from "react-router";
+import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { BillingInterval } from "@shopify/shopify-app-react-router/server";
@@ -454,19 +454,6 @@ export default function PlansPage() {
             Annual Billing <span style={{ background: "rgba(52, 211, 153, 0.2)", color: "#34d399", border: "1px solid rgba(52, 211, 153, 0.4)", padding: "3px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "700", marginLeft: "6px" }}>Save {totalAnnualDiscount}%</span>
           </span>
         </div>
-      </div>
-
-      {/* Quick Navigation Sub-Tabs */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "28px", background: "#f8fafc", padding: "6px", borderRadius: "12px", border: "1px solid #e2e8f0", width: "fit-content", flexWrap: "wrap" }}>
-        <Link to="/app/settings" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
-          ⚙️ Store Settings
-        </Link>
-        <Link to="/app/widget" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
-          🎨 Widget Editor
-        </Link>
-        <Link to="/app/plans" style={{ background: "#ffffff", color: "#008060", border: "1px solid #cbd5e1", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-          💳 Plans & Pricing
-        </Link>
       </div>
 
       {/* Pricing Cards Grid */}

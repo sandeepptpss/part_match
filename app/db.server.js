@@ -1,10 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 
-// Ensure PrismaClient re-loads updated schema models
-if (process.env.NODE_ENV !== "production") {
-  global.prismaGlobal = new PrismaClient();
-}
+let prisma;
 
-const prisma = global.prismaGlobal ?? new PrismaClient();
+if (process.env.NODE_ENV === "production") {
+  prisma = new PrismaClient();
+} else {
+  if (!global.prismaGlobal) {
+    global.prismaGlobal = new PrismaClient();
+  }
+  prisma = global.prismaGlobal;
+}
 
 export default prisma;

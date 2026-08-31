@@ -1,6 +1,6 @@
 const json = (data, init) => Response.json(data, init);
 import { useState, useMemo, useEffect } from "react";
-import { useLoaderData, useFetcher, Link, redirect } from "react-router";
+import { useLoaderData, useFetcher, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -427,19 +427,6 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Quick Navigation Sub-Tabs */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "28px", background: "#ffffff", padding: "6px", borderRadius: "12px", border: "1px solid #e2e8f0", width: "fit-content", flexWrap: "wrap", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
-        <Link to="/app/settings" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
-          ⚙️ Store Settings
-        </Link>
-        <Link to="/app/widget" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
-          🎨 Widget Editor
-        </Link>
-        <Link to="/app/plans" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
-          💳 Plans & Pricing
-        </Link>
       </div>
 
       {/* System Metrics & Key Indicators */}

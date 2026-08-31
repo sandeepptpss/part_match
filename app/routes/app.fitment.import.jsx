@@ -42,6 +42,8 @@ export const action = async ({ request }) => {
   const makeIdx = headers.indexOf("make");
   const modelIdx = headers.indexOf("model");
   const handleIdx = headers.indexOf("product_handle");
+  const collectionIdx = headers.indexOf("collection_handle");
+  const tagIdx = headers.indexOf("tag");
 
   if (yearIdx === -1 || makeIdx === -1 || modelIdx === -1) {
     return json({
@@ -75,6 +77,8 @@ export const action = async ({ request }) => {
     const make = cols[makeIdx];
     const model = cols[modelIdx];
     const handle = handleIdx >= 0 ? cols[handleIdx] : null;
+    const collectionHandle = collectionIdx >= 0 ? cols[collectionIdx] : null;
+    const tagVal = tagIdx >= 0 ? cols[tagIdx]?.replace(/^#/, "") : null;
 
     if (!year || !make || !model) {
       results.errors.push(`Row ${i + 1}: missing year, make, or model`);
@@ -134,6 +138,23 @@ export const action = async ({ request }) => {
         }
       }
 
+      if (collectionHandle) {
+        const keyId = `custom-${collectionHandle}`;
+        await prisma.fitmentCollection.upsert({
+          where: { fitmentId_shopifyCollectionId: { fitmentId: fitment.id, shopifyCollectionId: keyId } },
+          create: { fitmentId: fitment.id, shopifyCollectionId: keyId, shopifyHandle: collectionHandle, collectionTitle: collectionHandle },
+          update: { shopifyHandle: collectionHandle },
+        });
+      }
+
+      if (tagVal) {
+        await prisma.fitmentTag.upsert({
+          where: { fitmentId_tag: { fitmentId: fitment.id, tag: tagVal } },
+          create: { fitmentId: fitment.id, tag: tagVal },
+          update: {},
+        });
+      }
+
       results.created++;
     } catch (err) {
       results.errors.push(`Row ${i + 1}: ${err.message}`);
@@ -150,11 +171,10 @@ export default function FitmentImport() {
   const navigation = useNavigation();
   const importing = navigation.state !== "idle";
 
-  const sampleCSV = `year,make,model,product_handle
-2025,Arctic Cat,Norseman 400,brake-pad-arctic-cat
-2025,Arctic Cat,Norseman 400,oil-filter-arctic-cat
-2024,Polaris,Sportsman 850,brake-pad-polaris
-2024,Polaris,Sportsman 850,air-filter-polaris`;
+  const sampleCSV = `year,make,model,product_handle,collection_handle,tag
+2025,Arctic Cat,Norseman 400,brake-pad-arctic-cat,,
+2025,Arctic Cat,Norseman 400,,arctic-cat-parts,
+2024,Polaris,Sportsman 850,,,polaris-sportsman-2024`;
 
   return (
     <div style={{ padding: "32px 24px", maxWidth: "860px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>

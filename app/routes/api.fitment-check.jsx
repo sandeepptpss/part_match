@@ -1,5 +1,5 @@
 const json = (data, init) => Response.json(data, init);
-import { authenticate } from "../shopify.server";
+import { authenticate, unauthenticated } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
 
@@ -44,7 +44,7 @@ export async function loader({ request }) {
     }
   }
 
-  // Check fitment mapping
+  // Check fitment mapping (products, collections, tags)
   const fitment = await prisma.fitmentRecord?.findUnique({
     where: { shop_year_make_model: { shop, year, make, model } },
     include: {
@@ -52,9 +52,74 @@ export async function loader({ request }) {
         where: { shopifyHandle: handle },
         take: 1,
       },
+      collections: true,
+      tags: true,
     },
   });
 
-  const fits = (fitment?.products?.length ?? 0) > 0;
-  return json({ fits, fitmentId: fitment?.id ?? null });
+  if (!fitment) {
+    return json({ fits: false, fitmentId: null });
+  }
+
+  // 1. Direct product match
+  if (fitment.products && fitment.products.length > 0) {
+    return json({ fits: true, fitmentId: fitment.id, matchedBy: "product" });
+  }
+
+  const assignedCollections = fitment.collections || [];
+  const assignedTags = fitment.tags || [];
+
+  // 2. Collection or Tag match via Shopify GraphQL
+  if (assignedCollections.length > 0 || assignedTags.length > 0) {
+    try {
+      const { admin } = await unauthenticated.admin(shop);
+      const prodRes = await admin.graphql(
+        `query getProdInfo($handle: String!) {
+          productByHandle(handle: $handle) {
+            id
+            tags
+            collections(first: 30) {
+              nodes {
+                handle
+              }
+            }
+          }
+        }`,
+        { variables: { handle } },
+      );
+      const prodData = await prodRes.json();
+      const productInfo = prodData.data?.productByHandle;
+
+      if (productInfo) {
+        // Check Collection match
+        const prodColHandles = new Set(
+          (productInfo.collections?.nodes ?? []).map((c) => c.handle.toLowerCase()),
+        );
+        const colMatch = assignedCollections.some((c) =>
+          c.shopifyHandle && prodColHandles.has(c.shopifyHandle.toLowerCase()),
+        );
+        if (colMatch) {
+          return json({ fits: true, fitmentId: fitment.id, matchedBy: "collection" });
+        }
+
+        // Check Tag match
+        const prodTags = new Set(
+          (productInfo.tags ?? []).map((t) => t.toLowerCase().replace(/^#/, "")),
+        );
+        const tagMatch = assignedTags.some((t) =>
+          t.tag && prodTags.has(t.tag.toLowerCase().replace(/^#/, "")),
+        );
+        if (tagMatch) {
+          return json({ fits: true, fitmentId: fitment.id, matchedBy: "tag" });
+        }
+      }
+    } catch (err) {
+      console.error("[api/fitment-check] Error verifying Shopify collection/tag fitment:", err);
+    }
+  }
+
+  return json({
+    fits: false,
+    fitmentId: fitment.id,
+  });
 }

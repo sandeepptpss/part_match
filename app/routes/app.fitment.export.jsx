@@ -18,19 +18,30 @@ export async function loader({ request }) {
 
   const records = await prisma.fitmentRecord?.findMany({
     where: { shop },
-    include: { products: true },
+    include: { products: true, collections: true, tags: true },
     orderBy: [{ year: "desc" }, { make: "asc" }, { model: "asc" }],
   });
 
-  const rows = ["year,make,model,product_handle,product_title"];
+  const rows = ["year,make,model,product_handle,product_title,collection_handle,tag"];
 
   records.forEach((r) => {
-    if (r.products.length === 0) {
-      rows.push(`${r.year},${csvEsc(r.make)},${csvEsc(r.model)},,`);
+    const hasAny = r.products.length > 0 || r.collections.length > 0 || r.tags.length > 0;
+    if (!hasAny) {
+      rows.push(`${r.year},${csvEsc(r.make)},${csvEsc(r.model)},,,,`);
     } else {
       r.products.forEach((p) => {
         rows.push(
-          `${r.year},${csvEsc(r.make)},${csvEsc(r.model)},${csvEsc(p.shopifyHandle)},${csvEsc(p.productTitle)}`
+          `${r.year},${csvEsc(r.make)},${csvEsc(r.model)},${csvEsc(p.shopifyHandle)},${csvEsc(p.productTitle)},,`
+        );
+      });
+      r.collections.forEach((c) => {
+        rows.push(
+          `${r.year},${csvEsc(r.make)},${csvEsc(r.model)},,,${csvEsc(c.shopifyHandle)},`
+        );
+      });
+      r.tags.forEach((t) => {
+        rows.push(
+          `${r.year},${csvEsc(r.make)},${csvEsc(r.model)},,,,${csvEsc(t.tag)}`
         );
       });
     }

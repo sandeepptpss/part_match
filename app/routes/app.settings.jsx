@@ -178,19 +178,6 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Quick Navigation Sub-Tabs */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "28px", background: "#f8fafc", padding: "6px", borderRadius: "12px", border: "1px solid #e2e8f0", width: "fit-content", flexWrap: "wrap" }}>
-        <Link to="/app/settings" style={{ background: "#ffffff", color: "#008060", border: "1px solid #cbd5e1", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-          ⚙️ Store Settings
-        </Link>
-        <Link to="/app/widget" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
-          🎨 Widget Editor
-        </Link>
-        <Link to="/app/plans" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
-          💳 Plans & Pricing
-        </Link>
-      </div>
-
       {/* Success Notification Alert */}
       {actionData?.saved && (
         <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "16px 20px", borderRadius: "12px", marginBottom: "28px", display: "flex", alignItems: "center", gap: "12px", boxShadow: "0 4px 12px rgba(4, 120, 87, 0.06)" }}>
