@@ -21,6 +21,17 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
+  // eslint-disable-next-line no-undef
+  const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
+  // eslint-disable-next-line no-undef
+  const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
+  const sessionEmail = session.email || adminEmail;
+  const isAdmin =
+    shop.includes(adminStore) ||
+    shop.includes("quickstart-749ac396") ||
+    sessionEmail.includes("sandeepptpss") ||
+    sessionEmail === adminEmail;
+
   let settings = null;
   try {
     settings = await prisma.appSettings.findUnique({
@@ -43,6 +54,7 @@ export const loader = async ({ request }) => {
     settings: settings || DEFAULT_SETTINGS,
     planAllowsFitmentChecker: limits.fitmentChecker,
     planLabel: limits.label,
+    isAdmin,
   });
 };
 
@@ -81,7 +93,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Settings() {
-  const { shop, settings, planAllowsFitmentChecker, planLabel } = useLoaderData();
+  const { shop, settings, planAllowsFitmentChecker, planLabel, isAdmin } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
 
@@ -125,7 +137,7 @@ export default function Settings() {
     <div style={{ padding: "28px 24px 60px", maxWidth: "1140px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
       
       {/* Executive Header Banner */}
-      <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", borderRadius: "16px", padding: "32px", color: "#ffffff", marginBottom: "28px", boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.25)" }}>
+      <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", borderRadius: "16px", padding: "32px", color: "#ffffff", marginBottom: "24px", boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.25)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px" }}>
@@ -164,6 +176,19 @@ export default function Settings() {
             Open Theme Customizer →
           </a>
         </div>
+      </div>
+
+      {/* Quick Navigation Sub-Tabs */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "28px", background: "#f8fafc", padding: "6px", borderRadius: "12px", border: "1px solid #e2e8f0", width: "fit-content", flexWrap: "wrap" }}>
+        <Link to="/app/settings" style={{ background: "#ffffff", color: "#008060", border: "1px solid #cbd5e1", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+          ⚙️ Store Settings
+        </Link>
+        <Link to="/app/widget" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
+          🎨 Widget Editor
+        </Link>
+        <Link to="/app/plans" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
+          💳 Plans & Pricing
+        </Link>
       </div>
 
       {/* Success Notification Alert */}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Form, useNavigation, useActionData } from "react-router";
+import { useLoaderData, Form, useNavigation, useActionData, Link } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -8,13 +8,24 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
+  // eslint-disable-next-line no-undef
+  const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
+  // eslint-disable-next-line no-undef
+  const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
+  const sessionEmail = session.email || adminEmail;
+  const isAdmin =
+    shop.includes(adminStore) ||
+    shop.includes("quickstart-749ac396") ||
+    sessionEmail.includes("sandeepptpss") ||
+    sessionEmail === adminEmail;
+
   const settings = await prisma.widgetSettings?.upsert({
     where: { shop },
     create: { shop },
     update: {},
   });
 
-  return json({ settings });
+  return json({ settings, isAdmin });
 };
 
 export const action = async ({ request }) => {
@@ -49,7 +60,7 @@ export const action = async ({ request }) => {
 };
 
 export default function WidgetSettings() {
-  const { settings } = useLoaderData();
+  const { settings, isAdmin } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const saving = navigation.state !== "idle";
@@ -85,11 +96,24 @@ export default function WidgetSettings() {
   return (
     <div style={{ padding: "28px 24px", maxWidth: "1240px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>
       {/* Header */}
-      <div style={{ marginBottom: "28px" }}>
+      <div style={{ marginBottom: "20px" }}>
         <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 6px", color: "#0f172a", letterSpacing: "-0.5px" }}>Storefront Search Widget Editor</h1>
         <p style={{ color: "#64748b", margin: 0, fontSize: "14px" }}>
           Customize the appearance, labels, colors, and layout of the vehicle fitment search widget on your storefront.
         </p>
+      </div>
+
+      {/* Quick Navigation Sub-Tabs */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "28px", background: "#f8fafc", padding: "6px", borderRadius: "12px", border: "1px solid #e2e8f0", width: "fit-content", flexWrap: "wrap" }}>
+        <Link to="/app/settings" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
+          ⚙️ Store Settings
+        </Link>
+        <Link to="/app/widget" style={{ background: "#ffffff", color: "#008060", border: "1px solid #cbd5e1", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "700", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+          🎨 Widget Editor
+        </Link>
+        <Link to="/app/plans" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
+          💳 Plans & Pricing
+        </Link>
       </div>
 
       {actionData?.saved && (

@@ -1,6 +1,6 @@
 const json = (data, init) => Response.json(data, init);
-import { useState, useMemo } from "react";
-import { useLoaderData, useFetcher } from "react-router";
+import { useState, useMemo, useEffect } from "react";
+import { useLoaderData, useFetcher, Link, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -20,8 +20,11 @@ export const loader = async ({ request }) => {
     currentShop.includes(adminStore) ||
     currentShop.includes("quickstart-749ac396") ||
     sessionEmail.includes("sandeepptpss") ||
-    sessionEmail === adminEmail ||
-    true;
+    sessionEmail === adminEmail;
+
+  if (!isAdmin) {
+    return redirect("/app");
+  }
 
   let shopsList = [];
   let totalRecords = 0;
@@ -149,23 +152,31 @@ export const action = async ({ request }) => {
       return json({ success: false, message: "Invalid shop domain or discount rate." }, { status: 400 });
     }
 
+    const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+    const globalDiscount = globalSettings?.annualDiscountPercent ?? 20;
+    const annualDiscountToSave = userDiscount > 0 ? userDiscount : globalDiscount;
+
     try {
       await prisma.appSettings.upsert({
         where: { shop: targetShop },
-        update: { merchantDiscountPercent: userDiscount },
+        update: {
+          merchantDiscountPercent: userDiscount,
+          annualDiscountPercent: annualDiscountToSave,
+        },
         create: {
           shop: targetShop,
           merchantDiscountPercent: userDiscount,
+          annualDiscountPercent: annualDiscountToSave,
         },
       });
     } catch (err) {
       console.warn("[saveUserDiscount] Falling back to annualDiscountPercent field:", err?.message);
       await prisma.appSettings.upsert({
         where: { shop: targetShop },
-        update: { annualDiscountPercent: userDiscount },
+        update: { annualDiscountPercent: annualDiscountToSave },
         create: {
           shop: targetShop,
-          annualDiscountPercent: userDiscount,
+          annualDiscountPercent: annualDiscountToSave,
         },
       });
     }
@@ -174,23 +185,30 @@ export const action = async ({ request }) => {
       success: true,
       intent: "saveUserDiscount",
       targetShop,
-      message: `Merchant VIP discount of ${userDiscount}% applied successfully for: ${targetShop}!`,
+      message:
+        userDiscount > 0
+          ? `Merchant VIP discount of ${userDiscount}% applied successfully for: ${targetShop}!`
+          : `Merchant discount for ${targetShop} set to 0% (Standard)!`,
     });
   }
 
   if (intent === "resetUserDiscount") {
     const targetShop = formData.get("targetShop");
     if (targetShop) {
+      const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+      const globalDiscount = globalSettings?.annualDiscountPercent ?? 20;
+
       try {
         await prisma.appSettings.upsert({
           where: { shop: targetShop },
-          update: { merchantDiscountPercent: 0 },
-          create: { shop: targetShop, merchantDiscountPercent: 0 },
+          update: {
+            merchantDiscountPercent: 0,
+            annualDiscountPercent: globalDiscount,
+          },
+          create: { shop: targetShop, merchantDiscountPercent: 0, annualDiscountPercent: globalDiscount },
         });
       } catch (err) {
         console.warn("[resetUserDiscount] Falling back to annualDiscountPercent reset:", err?.message);
-        const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
-        const globalDiscount = globalSettings?.annualDiscountPercent ?? 20;
         await prisma.appSettings.upsert({
           where: { shop: targetShop },
           update: { annualDiscountPercent: globalDiscount },
@@ -240,6 +258,14 @@ export default function AdminPage() {
     });
     return initial;
   });
+
+  useEffect(() => {
+    const updatedInputs = {};
+    shopsList.forEach((s) => {
+      updatedInputs[s.shop] = s.merchantDiscountPercent;
+    });
+    setUserDiscountInputs(updatedInputs);
+  }, [shopsList]);
 
   const isSubmitting = fetcher.state !== "idle";
 
@@ -401,6 +427,19 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Quick Navigation Sub-Tabs */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "28px", background: "#ffffff", padding: "6px", borderRadius: "12px", border: "1px solid #e2e8f0", width: "fit-content", flexWrap: "wrap", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+        <Link to="/app/settings" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
+          ⚙️ Store Settings
+        </Link>
+        <Link to="/app/widget" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
+          🎨 Widget Editor
+        </Link>
+        <Link to="/app/plans" style={{ background: "transparent", color: "#64748b", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontSize: "14px", fontWeight: "600" }}>
+          💳 Plans & Pricing
+        </Link>
       </div>
 
       {/* System Metrics & Key Indicators */}

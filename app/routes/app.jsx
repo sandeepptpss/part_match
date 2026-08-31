@@ -10,6 +10,18 @@ export const loader = async ({ request }) => {
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const shop = session.shop;
 
+  // eslint-disable-next-line no-undef
+  const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
+  // eslint-disable-next-line no-undef
+  const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
+  const sessionEmail = session.email || adminEmail;
+
+  const isAdmin =
+    shop.includes(adminStore) ||
+    shop.includes("quickstart-749ac396") ||
+    sessionEmail.includes("sandeepptpss") ||
+    sessionEmail === adminEmail;
+
   // Show onboarding badge if no fitment data yet
   let fitmentCount = 0;
   try {
@@ -18,27 +30,24 @@ export const loader = async ({ request }) => {
     console.error("[app loader] fitment count error:", err);
   }
 
-  return { apiKey, fitmentCount };
+  return { apiKey, fitmentCount, isAdmin };
 };
 
 export default function App() {
-  const { apiKey, fitmentCount } = useLoaderData();
+  const { apiKey, fitmentCount, isAdmin } = useLoaderData();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Dashboard</s-link>
         {fitmentCount === 0 && <s-link href="/app/onboarding">Get Started</s-link>}
-        <s-link href="/app/fitment">Fitment Data</s-link>
-        <s-link href="/app/fitment/add">Add Record</s-link>
-        <s-link href="/app/fitment/import">Import CSV</s-link>
+        <s-link href="/app/fitment">Fitment Catalog</s-link>
         <s-link href="/app/products">Products</s-link>
-        <s-link href="/app/products/universal">Universal Products</s-link>
         <s-link href="/app/widget">Search Widget</s-link>
         <s-link href="/app/analytics">Analytics</s-link>
         <s-link href="/app/plans">Plans & Pricing</s-link>
         <s-link href="/app/settings">Settings</s-link>
-        <s-link href="/app/admin">App Admin</s-link>
+        {isAdmin && <s-link href="/app/admin">App Admin</s-link>}
       </s-app-nav>
       <Outlet />
     </AppProvider>
