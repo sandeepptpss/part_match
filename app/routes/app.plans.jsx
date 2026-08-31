@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { BILLING_PLAN_KEYS, isTestCharge, planLimits, syncShopPlanFromBilling } from "../plans.server";
+import { BILLING_PLAN_KEYS, getIsTestCharge, isTestCharge, planLimits } from "../plans.config";
+import { syncShopPlanFromBilling } from "../plans.server";
 
 export const loader = async ({ request }) => {
   const { session, billing } = await authenticate.admin(request);
@@ -94,12 +95,17 @@ export const action = async ({ request }) => {
   if (intent === "selectPlan") {
     const selectedPlan = formData.get("plan");
     const billingCycle = formData.get("billingCycle") === "annual" ? "annual" : "monthly";
+    const isTest = getIsTestCharge(shop);
 
     if (selectedPlan === "free") {
-      const { appSubscriptions } = await billing.check();
-      const active = appSubscriptions?.[0];
-      if (active) {
-        await billing.cancel({ subscriptionId: active.id, isTest: isTestCharge });
+      try {
+        const { appSubscriptions } = await billing.check();
+        const active = appSubscriptions?.[0];
+        if (active) {
+          await billing.cancel({ subscriptionId: active.id, isTest });
+        }
+      } catch (err) {
+        console.warn("[plans action] Error cancelling existing subscription:", err);
       }
       await prisma.shopPlan.upsert({
         where: { shop },
@@ -115,12 +121,56 @@ export const action = async ({ request }) => {
     }
 
     const url = new URL(request.url);
-    const returnUrl = `${url.origin}/app/plans${url.search}`;
+    const origin = process.env.SHOPIFY_APP_URL
+      ? new URL(process.env.SHOPIFY_APP_URL).origin
+      : url.origin;
+    let returnUrl = `${origin}/app/plans${url.search}`;
+    if (returnUrl.startsWith("http://")) {
+      returnUrl = returnUrl.replace("http://", "https://");
+    }
 
-    // Throws a redirect to Shopify's real charge-confirmation screen. Once the
-    // merchant approves, Shopify redirects back to returnUrl and the loader's
-    // syncShopPlanFromBilling call re-reads the real subscription state.
-    await billing.request({ plan: billingPlanKey, isTest: isTestCharge, returnUrl });
+    try {
+      // Throws a redirect to Shopify's real charge-confirmation screen. Once the
+      // merchant approves, Shopify redirects back to returnUrl and the loader's
+      // syncShopPlanFromBilling call re-reads the real subscription state.
+      await billing.request({ plan: billingPlanKey, isTest, returnUrl });
+    } catch (error) {
+      if (
+        error instanceof Response ||
+        (error && typeof error === "object" && "status" in error && "headers" in error)
+      ) {
+        throw error;
+      }
+
+      console.error("[plans action] Error requesting billing:", error);
+      const detail =
+        error?.errorData?.[0]?.message ||
+        error?.message ||
+        "Error requesting billing subscription.";
+
+      // Handle non-public / draft app distribution restriction gracefully
+      if (detail.includes("public distribution") || detail.includes("cannot use the Billing API")) {
+        await prisma.shopPlan.upsert({
+          where: { shop },
+          update: { plan: selectedPlan, billingCycle, subscriptionId: null },
+          create: { shop, plan: selectedPlan, billingCycle, subscriptionId: null },
+        });
+
+        const planName = selectedPlan === "growth" ? "Growth Professional" : "Enterprise Unlimited";
+        return json({
+          success: true,
+          message: `Plan activated: ${planName}! (Development/Custom App Mode: Live Shopify Billing requires setting Public Distribution in Partner Dashboard).`,
+        });
+      }
+
+      return json(
+        {
+          success: false,
+          message: `Billing Error: ${detail}`,
+        },
+        { status: 400 }
+      );
+    }
   }
 
   return json({ success: false });
@@ -185,6 +235,7 @@ export default function PlansPage() {
         "Product Compatibility Checker",
         "CSV Bulk Import & Export",
         "Search Analytics & Logs",
+        "AI-Powered Fitment Suggestions",
       ],
     },
     {
@@ -207,7 +258,7 @@ export default function PlansPage() {
         "Search Analytics & Failed Query Logging",
         "Priority Email & Chat Support",
       ],
-      disabledFeatures: [],
+      disabledFeatures: ["AI-Powered Fitment Suggestions"],
     },
     {
       id: "enterprise",
@@ -223,6 +274,7 @@ export default function PlansPage() {
         "Unlimited Fitment Records",
         "Unlimited Universal Products",
         "All Growth Professional Features",
+        "AI-Powered Fitment Suggestions (Beta)",
         "Server-Side Cross-Device Garage Sync",
         "High-Speed Proxy SLA & CDN Caching",
         "Daily Automated Database Backups",
@@ -263,8 +315,18 @@ export default function PlansPage() {
     <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "24px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       {/* Toast Notification */}
       {actionData?.message && (
-        <div style={{ background: "#e6f4ea", border: "1px solid #b7e1cd", color: "#137333", padding: "14px 20px", borderRadius: "8px", marginBottom: "24px", fontWeight: "600" }}>
-          ✓ {actionData.message}
+        <div
+          style={{
+            background: actionData?.success !== false ? "#e6f4ea" : "#fdeded",
+            border: `1px solid ${actionData?.success !== false ? "#b7e1cd" : "#f5c2c7"}`,
+            color: actionData?.success !== false ? "#137333" : "#842029",
+            padding: "14px 20px",
+            borderRadius: "8px",
+            marginBottom: "24px",
+            fontWeight: "600",
+          }}
+        >
+          {actionData?.success !== false ? "✓" : "⚠️"} {actionData.message}
         </div>
       )}
 
@@ -486,6 +548,15 @@ export default function PlansPage() {
                 <td style={{ padding: "12px", textAlign: "center" }}>Standard Email</td>
                 <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb" }}>Priority Support</td>
                 <td style={{ padding: "12px", textAlign: "center" }}>VIP 1-on-1 Manager</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #eeeeee" }}>
+                <td style={{ padding: "12px", fontWeight: "600" }}>
+                  AI-Powered Fitment Suggestions{" "}
+                  <span style={{ background: "#e6f4ea", color: "#137333", padding: "2px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: "700", marginLeft: "4px" }}>NEW</span>
+                </td>
+                <td style={{ padding: "12px", textAlign: "center", color: "#8c9196" }}>✕</td>
+                <td style={{ padding: "12px", textAlign: "center", background: "#f9fafb", color: "#8c9196" }}>✕</td>
+                <td style={{ padding: "12px", textAlign: "center" }}>✓ Beta</td>
               </tr>
             </tbody>
           </table>

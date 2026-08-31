@@ -1,60 +1,23 @@
 import prisma from "./db.server";
+import {
+  PLAN_TIERS,
+  BILLING_PLAN_KEYS,
+  ALL_BILLING_PLAN_KEYS,
+  planLimits,
+  resolveTierFromBillingName,
+  getIsTestCharge,
+  isTestCharge,
+} from "./plans.config";
 
-// Controls whether billing.request()/billing.cancel() create real charges.
-// Real money only moves when this app is actually running with NODE_ENV=production.
-export const isTestCharge = process.env.NODE_ENV !== "production";
-
-export const PLAN_TIERS = {
-  free: {
-    label: "Starter Free",
-    fitmentLimit: 100,
-    universalProducts: false,
-    fitmentChecker: false,
-    csvImportExport: false,
-    garageSync: false,
-    analyticsDetail: "basic",
-  },
-  growth: {
-    label: "Growth Professional",
-    fitmentLimit: 5000,
-    universalProducts: true,
-    fitmentChecker: true,
-    csvImportExport: true,
-    garageSync: true,
-    analyticsDetail: "detailed",
-  },
-  enterprise: {
-    label: "Enterprise Unlimited",
-    fitmentLimit: Infinity,
-    universalProducts: true,
-    fitmentChecker: true,
-    csvImportExport: true,
-    garageSync: true,
-    analyticsDetail: "detailed",
-  },
+export {
+  PLAN_TIERS,
+  BILLING_PLAN_KEYS,
+  ALL_BILLING_PLAN_KEYS,
+  planLimits,
+  resolveTierFromBillingName,
+  getIsTestCharge,
+  isTestCharge,
 };
-
-export const BILLING_PLAN_KEYS = {
-  growth: { monthly: "growth_monthly", annual: "growth_annual" },
-  enterprise: { monthly: "enterprise_monthly", annual: "enterprise_annual" },
-};
-
-export const ALL_BILLING_PLAN_KEYS = Object.values(BILLING_PLAN_KEYS).flatMap((cycles) =>
-  Object.values(cycles),
-);
-
-export function planLimits(planId) {
-  return PLAN_TIERS[planId] || PLAN_TIERS.free;
-}
-
-export function resolveTierFromBillingName(name) {
-  for (const [plan, cycles] of Object.entries(BILLING_PLAN_KEYS)) {
-    for (const [billingCycle, key] of Object.entries(cycles)) {
-      if (key === name) return { plan, billingCycle };
-    }
-  }
-  return null;
-}
 
 export async function getShopPlan(shop) {
   try {
@@ -77,17 +40,16 @@ export async function syncShopPlanFromBilling(billing, shop) {
     const active = appSubscriptions?.[0];
     const tier = active ? resolveTierFromBillingName(active.name) : null;
 
-    const data = tier
-      ? { plan: tier.plan, billingCycle: tier.billingCycle, subscriptionId: active.id }
-      : { plan: "free", billingCycle: "monthly", subscriptionId: null };
-
-    return await prisma.shopPlan?.upsert({
-      where: { shop },
-      update: data,
-      create: { shop, ...data },
-    });
+    if (tier) {
+      const data = { plan: tier.plan, billingCycle: tier.billingCycle, subscriptionId: active.id };
+      return await prisma.shopPlan?.upsert({
+        where: { shop },
+        update: data,
+        create: { shop, ...data },
+      });
+    }
   } catch (err) {
     console.error("syncShopPlanFromBilling fallback:", err);
-    return { shop, plan: "free", billingCycle: "monthly", subscriptionId: null };
   }
+  return await getShopPlan(shop);
 }

@@ -3,6 +3,8 @@ const json = (data, init) => Response.json(data, init);
 import { useLoaderData, Form, useNavigation, useActionData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
+import { suggestFitmentProducts, isAiConfigured } from "../ai.server";
 
 export const loader = async ({ request, params }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -34,11 +36,14 @@ export const loader = async ({ request, params }) => {
   const shopifyData = await shopifyRes.json();
   const shopifyProducts = shopifyData.data?.products?.nodes ?? [];
 
-  return json({ fitment, shopifyProducts });
+  const shopPlan = await getShopPlan(session.shop);
+  const canUseAi = planLimits(shopPlan.plan).aiFitmentSuggestions;
+
+  return json({ fitment, shopifyProducts, canUseAi, aiConfigured: isAiConfigured() });
 };
 
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const fitmentId = parseInt(params.id, 10);
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -46,8 +51,43 @@ export const action = async ({ request, params }) => {
   // Verify ownership
   const fitment = await prisma.fitmentRecord?.findFirst({
     where: { id: fitmentId, shop: session.shop },
+    include: { products: true },
   });
   if (!fitment) throw new Response("Not found", { status: 404 });
+
+  if (intent === "aiSuggest") {
+    const shopPlan = await getShopPlan(session.shop);
+    if (!planLimits(shopPlan.plan).aiFitmentSuggestions) {
+      return json(
+        { intent: "aiSuggest", error: "AI-Powered Fitment Suggestions is an Enterprise plan feature. Upgrade to unlock it." },
+        { status: 403 },
+      );
+    }
+
+    const assignedIds = new Set(fitment.products.map((p) => p.shopifyProductId));
+    const shopifyRes = await admin.graphql(`
+      query {
+        products(first: 50) {
+          nodes { id title description }
+        }
+      }
+    `);
+    const shopifyData = await shopifyRes.json();
+    const candidates = (shopifyData.data?.products?.nodes ?? []).filter((p) => !assignedIds.has(p.id));
+
+    try {
+      const { suggestions, mock } = await suggestFitmentProducts({
+        year: fitment.year,
+        make: fitment.make,
+        model: fitment.model,
+        products: candidates,
+      });
+      return json({ intent: "aiSuggest", suggestions, mock });
+    } catch (err) {
+      console.error("[app.fitment.$id.products] AI suggest failed:", err);
+      return json({ intent: "aiSuggest", error: "AI suggestion request failed. Please try again." }, { status: 502 });
+    }
+  }
 
   if (intent === "add") {
     const productId = formData.get("shopifyProductId")?.toString();
@@ -73,13 +113,25 @@ export const action = async ({ request, params }) => {
 };
 
 export default function FitmentProducts({ params }) {
-  const { fitment, shopifyProducts } = useLoaderData();
+  const { fitment, shopifyProducts, canUseAi, aiConfigured } = useLoaderData();
   const navigation = useNavigation();
+  const actionData = useActionData();
   const saving = navigation.state !== "idle";
+  const aiLoading = navigation.state !== "idle" && navigation.formData?.get("intent") === "aiSuggest";
 
   // IDs already assigned
   const assignedIds = new Set(fitment.products.map((p) => p.shopifyProductId));
   const available = shopifyProducts.filter((p) => !assignedIds.has(p.id));
+
+  const aiResult = actionData?.intent === "aiSuggest" ? actionData : null;
+  const suggestionMap = new Map((aiResult?.suggestions ?? []).map((s) => [s.shopifyProductId, s]));
+
+  // Suggested products float to the top, highest confidence first.
+  const sortedAvailable = [...available].sort((a, b) => {
+    const confA = suggestionMap.get(a.id)?.confidence ?? -1;
+    const confB = suggestionMap.get(b.id)?.confidence ?? -1;
+    return confB - confA;
+  });
 
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
@@ -117,26 +169,72 @@ export default function FitmentProducts({ params }) {
 
         {/* Available Products */}
         <div style={card}>
-          <h3 style={cardHead}>Add Products</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+            <h3 style={{ ...cardHead, margin: 0 }}>Add Products</h3>
+            <Form method="post">
+              <input type="hidden" name="intent" value="aiSuggest" />
+              <button
+                type="submit"
+                disabled={saving || !canUseAi}
+                title={!canUseAi ? "AI Suggestions are available on the Enterprise plan" : ""}
+                style={{ ...aiBtn, opacity: !canUseAi ? 0.5 : 1, cursor: !canUseAi ? "not-allowed" : "pointer" }}
+              >
+                {aiLoading ? "Analyzing…" : "✨ AI Suggest Products"}
+              </button>
+            </Form>
+          </div>
+
+          {!canUseAi && (
+            <p style={{ fontSize: "12px", color: "#6d7175", margin: "0 0 14px" }}>
+              AI-Powered Fitment Suggestions is an Enterprise plan feature. <a href="/app/plans" style={{ color: "#2c6ecb" }}>Upgrade to unlock</a>.
+            </p>
+          )}
+          {canUseAi && !aiConfigured && (
+            <p style={{ fontSize: "12px", color: "#8a6d00", background: "#fff8e1", padding: "8px 10px", borderRadius: "6px", margin: "0 0 14px" }}>
+              🧪 Demo Mode: ANTHROPIC_API_KEY is not set on the server, so AI Suggest will show simulated keyword-matched results for testing. Add a real key for actual AI-powered matching.
+            </p>
+          )}
+          {aiResult?.error && (
+            <p style={{ fontSize: "12px", color: "#c0392b", background: "#fdecea", padding: "8px 10px", borderRadius: "6px", margin: "0 0 14px" }}>
+              {aiResult.error}
+            </p>
+          )}
+          {aiResult?.suggestions && !aiResult.error && (
+            <p style={{ fontSize: "12px", color: aiResult.mock ? "#8a6d00" : "#137333", background: aiResult.mock ? "#fff8e1" : "#e6f4ea", padding: "8px 10px", borderRadius: "6px", margin: "0 0 14px" }}>
+              {aiResult.mock ? "🧪 Demo results (keyword match, no API key): " : "✨ AI results: "}
+              {aiResult.suggestions.length > 0
+                ? `Found ${aiResult.suggestions.length} likely match${aiResult.suggestions.length === 1 ? "" : "es"} for ${fitment.year} ${fitment.make} ${fitment.model}.`
+                : "No likely matches found among current store products."}
+            </p>
+          )}
+
           {available.length === 0 ? (
             <p style={{ color: "#6d7175", fontSize: "14px" }}>All products already assigned.</p>
           ) : (
             <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-              {available.map((p) => (
-                <div key={p.id} style={productRow}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: "500", fontSize: "14px" }}>{p.title}</div>
-                    <div style={{ color: "#6d7175", fontSize: "12px" }}>{p.handle}</div>
+              {sortedAvailable.map((p) => {
+                const suggestion = suggestionMap.get(p.id);
+                return (
+                  <div key={p.id} style={productRow}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "500", fontSize: "14px" }}>{p.title}</div>
+                      <div style={{ color: "#6d7175", fontSize: "12px" }}>{p.handle}</div>
+                      {suggestion && (
+                        <div style={{ marginTop: "4px", fontSize: "11px", color: "#8a6d00", background: "#fff8e1", display: "inline-block", padding: "2px 8px", borderRadius: "10px" }}>
+                          ✨ {suggestion.confidence}% match — {suggestion.reason}
+                        </div>
+                      )}
+                    </div>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="add" />
+                      <input type="hidden" name="shopifyProductId" value={p.id} />
+                      <input type="hidden" name="shopifyHandle" value={p.handle} />
+                      <input type="hidden" name="productTitle" value={p.title} />
+                      <button type="submit" style={addBtn} disabled={saving}>+ Add</button>
+                    </Form>
                   </div>
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="add" />
-                    <input type="hidden" name="shopifyProductId" value={p.id} />
-                    <input type="hidden" name="shopifyHandle" value={p.handle} />
-                    <input type="hidden" name="productTitle" value={p.title} />
-                    <button type="submit" style={addBtn} disabled={saving}>+ Add</button>
-                  </Form>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -177,5 +275,14 @@ const addBtn = {
   borderRadius: "4px",
   cursor: "pointer",
   fontWeight: "500",
+  fontSize: "13px",
+};
+const aiBtn = {
+  background: "#6b21a8",
+  color: "#ffffff",
+  border: "none",
+  padding: "8px 14px",
+  borderRadius: "6px",
+  fontWeight: "600",
   fontSize: "13px",
 };
