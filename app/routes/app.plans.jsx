@@ -32,6 +32,7 @@ export const loader = async ({ request }) => {
   let universalCount = 0;
   let searchLogCount = 0;
   let appSettings = null;
+  let globalSettings = null;
 
   try {
     const res = await Promise.all([
@@ -40,17 +41,21 @@ export const loader = async ({ request }) => {
       prisma.universalProduct?.count({ where: { shop } }) ?? 0,
       prisma.searchLog?.count({ where: { shop } }) ?? 0,
       prisma.appSettings?.findFirst({ where: { shop } }),
+      prisma.appSettings?.findFirst({ where: { shop: "__GLOBAL__" } }),
     ]);
     fitmentCount = res[0];
     productMappingCount = res[1];
     universalCount = res[2];
     searchLogCount = res[3];
     appSettings = res[4];
+    globalSettings = res[5];
   } catch (err) {
     console.error("[plans loader] Error fetching stats:", err);
   }
 
-  const discountPercent = appSettings?.annualDiscountPercent ?? 20;
+  const globalDiscount = globalSettings?.annualDiscountPercent ?? 20;
+  const isCustomDiscount = appSettings?.annualDiscountPercent != null;
+  const discountPercent = isCustomDiscount ? appSettings.annualDiscountPercent : globalDiscount;
 
   const shopPlan = await syncShopPlanFromBilling(billing, shop);
   const limits = planLimits(shopPlan.plan);
@@ -64,6 +69,7 @@ export const loader = async ({ request }) => {
     sessionEmail,
     isAdmin,
     discountPercent,
+    isCustomDiscount,
     activePlan: shopPlan.plan,
     billingCycle: shopPlan.billingCycle,
     recordsLimit: Number.isFinite(limits.fitmentLimit) ? limits.fitmentLimit : null,
@@ -130,9 +136,6 @@ export const action = async ({ request }) => {
     }
 
     try {
-      // Throws a redirect to Shopify's real charge-confirmation screen. Once the
-      // merchant approves, Shopify redirects back to returnUrl and the loader's
-      // syncShopPlanFromBilling call re-reads the real subscription state.
       await billing.request({ plan: billingPlanKey, isTest, returnUrl });
     } catch (error) {
       if (
@@ -148,7 +151,6 @@ export const action = async ({ request }) => {
         error?.message ||
         "Error requesting billing subscription.";
 
-      // Handle non-public / draft app distribution restriction gracefully
       if (detail.includes("public distribution") || detail.includes("cannot use the Billing API")) {
         await prisma.shopPlan.upsert({
           where: { shop },
@@ -186,6 +188,7 @@ export default function PlansPage() {
     sessionEmail,
     isAdmin,
     discountPercent: initialDiscount,
+    isCustomDiscount,
     activePlan,
     recordsLimit,
   } = useLoaderData();
@@ -329,6 +332,34 @@ export default function PlansPage() {
           }}
         >
           {actionData?.success !== false ? "✓" : ""} {actionData.message}
+        </div>
+      )}
+
+      {/* User-Specific Custom Discount Notification */}
+      {isCustomDiscount && (
+        <div
+          style={{
+            background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+            border: "1px solid #f59e0b",
+            color: "#92400e",
+            padding: "18px 24px",
+            borderRadius: "16px",
+            marginBottom: "28px",
+            boxShadow: "0 6px 18px rgba(245, 158, 11, 0.12)",
+            display: "flex",
+            alignItems: "center",
+            gap: "14px",
+          }}
+        >
+          <span style={{ fontSize: "28px" }}>🎁</span>
+          <div>
+            <div style={{ fontWeight: "800", fontSize: "16px", color: "#78350f", marginBottom: "2px" }}>
+              Exclusive Merchant VIP Discount Unlocked!
+            </div>
+            <div style={{ fontSize: "14px", color: "#92400e" }}>
+              Admin has assigned a custom discount rate of <strong>{currentDiscount}% OFF</strong> on all Annual Billing plans for store: <strong>{shop}</strong>.
+            </div>
+          </div>
         </div>
       )}
 
