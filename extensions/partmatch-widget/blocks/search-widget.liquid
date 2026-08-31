@@ -6,17 +6,54 @@
 {{ 'partmatch.css' | asset_url | stylesheet_tag }}
 
 {%- liquid
-  assign pm_heading = block.settings.heading | default: 'Find Your Part'
-  assign pm_subheading = block.settings.subheading | default: 'Search by Application'
-  assign pm_year_label = block.settings.year_label | default: 'YEAR'
-  assign pm_make_label = block.settings.make_label | default: 'MAKE'
-  assign pm_model_label = block.settings.model_label | default: 'MODEL'
-  assign pm_search_text = block.settings.search_text | default: 'Search'
-  assign pm_clear_text = block.settings.clear_text | default: 'Clear'
-  assign pm_primary_color = block.settings.primary_color | default: '#008060'
-  assign pm_bg_color = block.settings.bg_color | default: '#1a1a1a'
-  assign pm_text_color = block.settings.text_color | default: '#ffffff'
-  assign pm_border_radius = block.settings.border_radius | default: 4
+  assign pm_heading = block.settings.heading
+  if pm_heading == blank or pm_heading == 'Find Your Part'
+    assign pm_heading = 'FIND YOUR PART'
+  endif
+
+  assign pm_subheading = block.settings.subheading
+  if pm_subheading == blank or pm_subheading == 'Search by Application'
+    assign pm_subheading = 'SEARCH BY APPLICATION'
+  endif
+
+  assign pm_year_label = block.settings.year_label
+  if pm_year_label == blank or pm_year_label == 'Year'
+    assign pm_year_label = 'YEAR'
+  endif
+
+  assign pm_make_label = block.settings.make_label
+  if pm_make_label == blank or pm_make_label == 'Make'
+    assign pm_make_label = 'MAKE'
+  endif
+
+  assign pm_model_label = block.settings.model_label
+  if pm_model_label == blank or pm_model_label == 'Model'
+    assign pm_model_label = 'MODEL'
+  endif
+
+  assign pm_search_text = block.settings.search_text
+  if pm_search_text == blank or pm_search_text == 'Search'
+    assign pm_search_text = 'SEARCH'
+  endif
+
+  assign pm_clear_text = block.settings.clear_text
+  if pm_clear_text == blank or pm_clear_text == 'Clear'
+    assign pm_clear_text = 'CLEAR'
+  endif
+
+  assign pm_primary_color = '#0f172a'
+
+  assign pm_bg_color = block.settings.bg_color
+  if pm_bg_color == blank or pm_bg_color == '#1a1a1a' or pm_bg_color == '#f4f6f8'
+    assign pm_bg_color = '#ffffff'
+  endif
+
+  assign pm_text_color = block.settings.text_color
+  if pm_text_color == blank or pm_text_color == pm_bg_color or pm_text_color == '#ffffff' and pm_bg_color == '#ffffff'
+    assign pm_text_color = '#0f172a'
+  endif
+
+  assign pm_border_radius = block.settings.border_radius | default: 6
   assign pm_results_mode = block.settings.results_mode
   assign pm_show_inline = block.settings.show_inline
   assign pm_results_url = block.settings.results_page_url | default: '/collections/all'
@@ -31,6 +68,8 @@
   data-results-url="{{ pm_results_url }}"
   style="
     --pm-primary: {{ pm_primary_color }};
+    --pm-bg: {{ pm_bg_color }};
+    --pm-text: {{ pm_text_color }};
     --pm-radius: {{ pm_border_radius }}px;
     --pm-btn-radius: {{ pm_border_radius }}px;
     background-color: {{ pm_bg_color }};
@@ -38,7 +77,7 @@
   "
   {{ block.shopify_attributes }}
 >
-  {%- if block.settings.show_heading -%}
+  {%- if block.settings.show_heading or block.settings.show_heading == nil -%}
     <p class="pm-widget__heading-small">{{ pm_subheading }}</p>
     <h2 class="pm-widget__heading">
       {{ pm_heading }}
@@ -82,7 +121,6 @@
       class="pm-btn pm-btn--search"
       data-partmatch-search
       disabled
-      style="background: {{ pm_primary_color }};"
     >
       {{ pm_search_text }}
       <span class="pm-spinner" data-partmatch-spinner></span>
@@ -111,13 +149,13 @@
       "type": "text",
       "id": "heading",
       "label": "Heading",
-      "default": "Find Your Part"
+      "default": "FIND YOUR PART"
     },
     {
       "type": "text",
       "id": "subheading",
       "label": "Subheading",
-      "default": "Search by Application"
+      "default": "SEARCH BY APPLICATION"
     },
     {
       "type": "text",
@@ -141,13 +179,13 @@
       "type": "text",
       "id": "search_text",
       "label": "Search button text",
-      "default": "Search"
+      "default": "SEARCH"
     },
     {
       "type": "text",
       "id": "clear_text",
       "label": "Clear button text",
-      "default": "Clear"
+      "default": "CLEAR"
     },
     {
       "type": "header",
@@ -157,19 +195,19 @@
       "type": "color",
       "id": "primary_color",
       "label": "Primary Button color",
-      "default": "#008060"
+      "default": "#0f172a"
     },
     {
       "type": "color",
       "id": "bg_color",
       "label": "Background color",
-      "default": "#1a1a1a"
+      "default": "#ffffff"
     },
     {
       "type": "color",
       "id": "text_color",
       "label": "Text color",
-      "default": "#ffffff"
+      "default": "#0f172a"
     },
     {
       "type": "range",
@@ -179,7 +217,7 @@
       "max": 20,
       "step": 1,
       "unit": "px",
-      "default": 4
+      "default": 6
     },
     {
       "type": "header",

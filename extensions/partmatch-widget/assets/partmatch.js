@@ -165,44 +165,66 @@
     }
   }
 
-  // ─── Apply Admin Widget Settings ─────────────────────────────────────────────
+  function isDarkColor(colorHex) {
+    if (!colorHex || typeof colorHex !== 'string') return false;
+    let hex = colorHex.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    if (hex.length !== 6) return false;
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return ((r * 299 + g * 587 + b * 114) / 1000) < 128;
+  }
+
   function applyWidgetSettings(widget, widgetSettings) {
     if (!widgetSettings) return;
 
-    widget.style.setProperty('--pm-primary', widgetSettings.primaryColor);
-    widget.style.setProperty('--pm-radius', `${widgetSettings.borderRadius}px`);
-    widget.style.setProperty('--pm-btn-radius', `${widgetSettings.borderRadius}px`);
-    widget.style.backgroundColor = widgetSettings.backgroundColor;
-    widget.style.color = widgetSettings.textColor;
+    const primary = widgetSettings.primaryColor || '#0f172a';
+    const bg = widgetSettings.backgroundColor || '#ffffff';
+    const isDark = isDarkColor(bg);
+
+    const text = isDark ? (widgetSettings.textColor || '#ffffff') : ((widgetSettings.textColor && widgetSettings.textColor !== '#ffffff') ? widgetSettings.textColor : '#0f172a');
+    const subheadingColor = isDark ? '#94a3b8' : '#64748b';
+
+    widget.style.setProperty('--pm-primary', primary);
+    widget.style.setProperty('--pm-bg', bg);
+    widget.style.setProperty('--pm-text', text);
+    widget.style.setProperty('--pm-radius', `${widgetSettings.borderRadius || 6}px`);
+    widget.style.setProperty('--pm-btn-radius', `${widgetSettings.borderRadius || 6}px`);
+    widget.style.backgroundColor = bg;
+    widget.style.color = text;
     widget.classList.toggle('pm-widget--stacked', widgetSettings.layout === 'stacked');
 
     const headingSmall = widget.querySelector('.pm-widget__heading-small');
-    if (headingSmall) {
+    if (headingSmall && widgetSettings.subheading) {
       headingSmall.textContent = widgetSettings.subheading;
-      headingSmall.style.display = widgetSettings.showSubheading ? '' : 'none';
+      headingSmall.style.color = subheadingColor;
+      headingSmall.style.display = widgetSettings.showSubheading !== false ? '' : 'none';
     }
     const headingEl = widget.querySelector('.pm-widget__heading');
-    if (headingEl) {
+    if (headingEl && widgetSettings.heading) {
       headingEl.textContent = widgetSettings.heading;
-      headingEl.style.display = widgetSettings.showHeading ? '' : 'none';
+      headingEl.style.color = text;
+      headingEl.style.display = widgetSettings.showHeading !== false ? '' : 'none';
     }
 
     const yearSel = widget.querySelector('[data-partmatch-year]');
     const makeSel = widget.querySelector('[data-partmatch-make]');
     const modelSel = widget.querySelector('[data-partmatch-model]');
-    if (yearSel) yearSel.dataset.placeholder = widgetSettings.yearLabel;
-    if (makeSel) makeSel.dataset.placeholder = widgetSettings.makeLabel;
-    if (modelSel) modelSel.dataset.placeholder = widgetSettings.modelLabel;
+    if (yearSel && widgetSettings.yearLabel) yearSel.dataset.placeholder = widgetSettings.yearLabel;
+    if (makeSel && widgetSettings.makeLabel) makeSel.dataset.placeholder = widgetSettings.makeLabel;
+    if (modelSel && widgetSettings.modelLabel) modelSel.dataset.placeholder = widgetSettings.modelLabel;
 
     const searchBtn = widget.querySelector('[data-partmatch-search]');
-    if (searchBtn) {
+    if (searchBtn && widgetSettings.searchButtonText) {
       const spinner = searchBtn.querySelector('[data-partmatch-spinner]');
       searchBtn.textContent = widgetSettings.searchButtonText;
       if (spinner) searchBtn.appendChild(spinner);
-      searchBtn.style.background = widgetSettings.primaryColor;
+      searchBtn.style.background = 'var(--pm-primary, #0f172a)';
+      searchBtn.style.color = '#ffffff';
     }
     const clearBtn = widget.querySelector('[data-partmatch-clear]');
-    if (clearBtn) clearBtn.textContent = widgetSettings.clearButtonText;
+    if (clearBtn && widgetSettings.clearButtonText) clearBtn.textContent = widgetSettings.clearButtonText;
   }
 
   // ─── Populate Select ─────────────────────────────────────────────────────────
@@ -220,17 +242,17 @@
 
   function setLoading(select, loading) {
     select.disabled = loading;
-    if (loading) {
-      const opt = document.createElement('option');
-      opt.textContent = 'Loading…'; opt.selected = true;
-      select.innerHTML = ''; select.appendChild(opt);
-    }
   }
 
   // ─── Search Widget ───────────────────────────────────────────────────────────
   async function initSearchWidget(widget) {
-    const config = await loadConfig();
-    applyWidgetSettings(widget, config.widget);
+    const isDesignMode = window.Shopify && window.Shopify.designMode;
+    if (!isDesignMode) {
+      const config = await loadConfig();
+      if (config && config.widget) {
+        applyWidgetSettings(widget, config.widget);
+      }
+    }
 
     const yearSel   = widget.querySelector('[data-partmatch-year]');
     const makeSel   = widget.querySelector('[data-partmatch-make]');
