@@ -165,7 +165,6 @@ export default function FitmentImport() {
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)" }}>
         <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "20px", marginBottom: "24px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-            <span style={{ fontSize: "24px" }}>📊</span>
             <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>Bulk Import Fitments via CSV</h1>
           </div>
           <p style={{ color: "#64748b", margin: 0, fontSize: "14px" }}>
@@ -175,19 +174,19 @@ export default function FitmentImport() {
 
         {actionData?.error && (
           <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "14px 18px", borderRadius: "10px", marginBottom: "24px", fontSize: "14px", fontWeight: "500" }}>
-            ⚠️ {actionData.error}
+            {actionData.error}
           </div>
         )}
 
         {actionData?.results && (
           <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "20px", borderRadius: "12px", marginBottom: "24px" }}>
-            <strong style={{ fontSize: "16px", display: "block", marginBottom: "8px" }}>🎉 Import Operation Complete</strong>
+            <strong style={{ fontSize: "16px", display: "block", marginBottom: "8px" }}>Import Operation Complete</strong>
             <div style={{ display: "flex", gap: "16px", margin: "12px 0 0" }}>
               <span style={{ background: "#ffffff", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", border: "1px solid #a7f3d0", fontSize: "13px" }}>
                 ✓ Created / Updated: {actionData.results.created}
               </span>
               <span style={{ background: "#ffffff", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", border: "1px solid #a7f3d0", fontSize: "13px", color: "#b45309" }}>
-                ⚠️ Skipped: {actionData.results.skipped}
+                Skipped: {actionData.results.skipped}
               </span>
             </div>
             {actionData.results.errors.length > 0 && (
@@ -204,7 +203,7 @@ export default function FitmentImport() {
         {/* Sample */}
         <details style={{ marginBottom: "24px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px 16px" }}>
           <summary style={{ cursor: "pointer", color: "#2563eb", fontSize: "14px", fontWeight: "700" }}>
-            📄 View Standard CSV Header & Rows Format
+            View Standard CSV Header & Rows Format
           </summary>
           <pre style={{ background: "#0f172a", color: "#e2e8f0", padding: "16px", borderRadius: "8px", fontSize: "13px", marginTop: "12px", overflowX: "auto", fontFamily: "monospace" }}>
             {sampleCSV}
@@ -213,7 +212,7 @@ export default function FitmentImport() {
 
         {!planAllowsImport && (
           <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", color: "#78350f", padding: "20px", borderRadius: "12px", marginBottom: "24px" }}>
-            <strong style={{ color: "#b45309", fontSize: "15px", display: "block", marginBottom: "4px" }}>🔒 Growth Professional Feature</strong>
+            <strong style={{ color: "#b45309", fontSize: "15px", display: "block", marginBottom: "4px" }}>Growth Professional Feature</strong>
             <p style={{ margin: "0 0 12px", fontSize: "14px" }}>
               Bulk CSV Import requires the Growth Professional plan. Upgrade to import thousands of records at once.
             </p>

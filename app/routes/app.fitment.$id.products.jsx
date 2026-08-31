@@ -178,7 +178,7 @@ export default function FitmentProducts({ params }) {
                 title={!canUseAi ? "AI Suggestions are available on the Enterprise plan" : ""}
                 style={{ ...aiBtn, opacity: !canUseAi ? 0.5 : 1, cursor: !canUseAi ? "not-allowed" : "pointer" }}
               >
-                {aiLoading ? "Analyzing…" : "✨ AI Suggest Products"}
+                {aiLoading ? "Analyzing…" : "AI Suggest Products"}
               </button>
             </Form>
           </div>
@@ -190,7 +190,7 @@ export default function FitmentProducts({ params }) {
           )}
           {canUseAi && !aiConfigured && (
             <p style={{ fontSize: "12px", color: "#8a6d00", background: "#fff8e1", padding: "8px 10px", borderRadius: "6px", margin: "0 0 14px" }}>
-              🧪 Demo Mode: ANTHROPIC_API_KEY is not set on the server, so AI Suggest will show simulated keyword-matched results for testing. Add a real key for actual AI-powered matching.
+              Demo Mode: ANTHROPIC_API_KEY is not set on the server, so AI Suggest will show simulated keyword-matched results for testing. Add a real key for actual AI-powered matching.
             </p>
           )}
           {aiResult?.error && (
@@ -200,7 +200,7 @@ export default function FitmentProducts({ params }) {
           )}
           {aiResult?.suggestions && !aiResult.error && (
             <p style={{ fontSize: "12px", color: aiResult.mock ? "#8a6d00" : "#137333", background: aiResult.mock ? "#fff8e1" : "#e6f4ea", padding: "8px 10px", borderRadius: "6px", margin: "0 0 14px" }}>
-              {aiResult.mock ? "🧪 Demo results (keyword match, no API key): " : "✨ AI results: "}
+              {aiResult.mock ? "Demo results (keyword match, no API key): " : "AI results: "}
               {aiResult.suggestions.length > 0
                 ? `Found ${aiResult.suggestions.length} likely match${aiResult.suggestions.length === 1 ? "" : "es"} for ${fitment.year} ${fitment.make} ${fitment.model}.`
                 : "No likely matches found among current store products."}
@@ -220,7 +220,7 @@ export default function FitmentProducts({ params }) {
                       <div style={{ color: "#6d7175", fontSize: "12px" }}>{p.handle}</div>
                       {suggestion && (
                         <div style={{ marginTop: "4px", fontSize: "11px", color: "#8a6d00", background: "#fff8e1", display: "inline-block", padding: "2px 8px", borderRadius: "10px" }}>
-                          ✨ {suggestion.confidence}% match — {suggestion.reason}
+                          {suggestion.confidence}% match — {suggestion.reason}
                         </div>
                       )}
                     </div>

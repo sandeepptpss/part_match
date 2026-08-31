@@ -328,7 +328,7 @@ export default function PlansPage() {
             boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
           }}
         >
-          {actionData?.success !== false ? "✓" : "⚠️"} {actionData.message}
+          {actionData?.success !== false ? "✓" : ""} {actionData.message}
         </div>
       )}
 
@@ -337,7 +337,6 @@ export default function PlansPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px", marginBottom: "24px" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-              <span style={{ fontSize: "26px" }}>💎</span>
               <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "800", letterSpacing: "-0.5px" }}>
                 Flexible Billing & Growth Plans
               </h1>

@@ -92,7 +92,6 @@ export default function FitmentAdd() {
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)" }}>
         <div style={{ borderBottom: "1px solid #f1f5f9", pb: "20px", marginBottom: "24px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-            <span style={{ fontSize: "24px" }}>📝</span>
             <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>Add Fitment Specification</h1>
           </div>
           <p style={{ color: "#64748b", margin: 0, fontSize: "14px" }}>
@@ -102,7 +101,7 @@ export default function FitmentAdd() {
 
         {errors.general && (
           <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "14px 18px", borderRadius: "10px", marginBottom: "20px", fontSize: "14px", fontWeight: "500" }}>
-            ⚠️ {errors.general}
+            {errors.general}
           </div>
         )}
 

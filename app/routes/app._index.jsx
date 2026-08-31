@@ -63,11 +63,11 @@ export default function Dashboard() {
   const { shop, stats, recentSearches, topVehicles } = useLoaderData();
 
   const cards = [
-    { label: "Fitment Records", value: stats.fitmentCount, href: "/app/fitment", color: "#008060", bgGradient: "linear-gradient(135deg, #008060 0%, #005e46 100%)", icon: "🚗" },
-    { label: "Product Mappings", value: stats.productMappingCount, href: "/app/products", color: "#2c6ecb", bgGradient: "linear-gradient(135deg, #2c6ecb 0%, #1e4f94 100%)", icon: "⚙️" },
-    { label: "Universal Products", value: stats.universalCount, href: "/app/products/universal", color: "#6d5bd0", bgGradient: "linear-gradient(135deg, #6d5bd0 0%, #4f3ea3 100%)", icon: "🌐" },
-    { label: "Searches This Month", value: stats.monthSearches, href: "/app/analytics", color: "#e67e22", bgGradient: "linear-gradient(135deg, #e67e22 0%, #b85e10 100%)", icon: "📊" },
-    { label: "No-Result Opportunity", value: stats.noResultSearches, href: "/app/analytics", color: "#c0392b", bgGradient: "linear-gradient(135deg, #c0392b 0%, #8e2519 100%)", icon: "💡" },
+    { label: "Fitment Records", value: stats.fitmentCount, href: "/app/fitment", color: "#008060", bgGradient: "linear-gradient(135deg, #008060 0%, #005e46 100%)", icon: "" },
+    { label: "Product Mappings", value: stats.productMappingCount, href: "/app/products", color: "#2c6ecb", bgGradient: "linear-gradient(135deg, #2c6ecb 0%, #1e4f94 100%)", icon: "" },
+    { label: "Universal Products", value: stats.universalCount, href: "/app/products/universal", color: "#6d5bd0", bgGradient: "linear-gradient(135deg, #6d5bd0 0%, #4f3ea3 100%)", icon: "" },
+    { label: "Searches This Month", value: stats.monthSearches, href: "/app/analytics", color: "#e67e22", bgGradient: "linear-gradient(135deg, #e67e22 0%, #b85e10 100%)", icon: "" },
+    { label: "No-Result Opportunity", value: stats.noResultSearches, href: "/app/analytics", color: "#c0392b", bgGradient: "linear-gradient(135deg, #c0392b 0%, #8e2519 100%)", icon: "" },
   ];
 
   return (
@@ -77,7 +77,6 @@ export default function Dashboard() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-              <span style={{ fontSize: "24px" }}>🏎️</span>
               <h1 style={{ margin: 0, fontSize: "26px", fontWeight: "800", letterSpacing: "-0.5px" }}>
                 PartMatch Auto Fitment Center
               </h1>
@@ -98,10 +97,10 @@ export default function Dashboard() {
               <span>↑ Import CSV</span>
             </Link>
             <Link to="/app/widget" style={secondaryActionBtn}>
-              <span>🎨 Widget Editor</span>
+              <span>Widget Editor</span>
             </Link>
             <Link to="/app/analytics" style={secondaryActionBtn}>
-              <span>📈 Analytics</span>
+              <span>Analytics</span>
             </Link>
           </div>
         </div>
@@ -134,7 +133,7 @@ export default function Dashboard() {
                   <span style={{ fontSize: "13px", fontWeight: "600", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                     {c.label}
                   </span>
-                  <span style={{ fontSize: "20px" }}>{c.icon}</span>
+                  {c.icon ? <span style={{ fontSize: "20px" }}>{c.icon}</span> : null}
                 </div>
                 <div style={{ fontSize: "34px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>
                   {c.value.toLocaleString()}
@@ -154,7 +153,7 @@ export default function Dashboard() {
         <div style={cardContainer}>
           <div style={cardHeaderStyle}>
             <div>
-              <h3 style={cardTitleStyle}>🔥 Top Searched Vehicles</h3>
+              <h3 style={cardTitleStyle}>Top Searched Vehicles</h3>
               <p style={cardSubtitleStyle}>Most queried Year/Make/Model combinations</p>
             </div>
             <Link to="/app/analytics" style={{ fontSize: "13px", color: "#2563eb", fontWeight: "600", textDecoration: "none" }}>
@@ -164,7 +163,7 @@ export default function Dashboard() {
 
           {topVehicles.length === 0 ? (
             <div style={emptyStateStyle}>
-              <span>🔍 No vehicle search history recorded yet.</span>
+              <span>No vehicle search history recorded yet.</span>
             </div>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -198,7 +197,7 @@ export default function Dashboard() {
         <div style={cardContainer}>
           <div style={cardHeaderStyle}>
             <div>
-              <h3 style={cardTitleStyle}>⏱️ Live Search Activity</h3>
+              <h3 style={cardTitleStyle}>Live Search Activity</h3>
               <p style={cardSubtitleStyle}>Real-time storefront vehicle queries</p>
             </div>
             <Link to="/app/analytics" style={{ fontSize: "13px", color: "#2563eb", fontWeight: "600", textDecoration: "none" }}>
@@ -208,7 +207,7 @@ export default function Dashboard() {
 
           {recentSearches.length === 0 ? (
             <div style={emptyStateStyle}>
-              <span>⚡ Storefront search events will appear here live.</span>
+              <span>Storefront search events will appear here live.</span>
             </div>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -240,7 +239,7 @@ export default function Dashboard() {
                           gap: "4px",
                         }}
                       >
-                        {s.hasResults ? "✓ Matched" : "⚠️ No Product"}
+                        {s.hasResults ? "✓ Matched" : "No Product"}
                       </span>
                     </td>
                     <td style={{ ...tableTdStyle, textAlign: "right", color: "#64748b", fontSize: "13px" }}>
@@ -258,7 +257,6 @@ export default function Dashboard() {
       {stats.fitmentCount === 0 && (
         <div style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #e6f4ea 100%)", border: "1px solid #b7e1cd", borderRadius: "14px", padding: "28px 32px", boxShadow: "0 4px 16px rgba(0, 128, 96, 0.06)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
-            <span style={{ fontSize: "24px" }}>🚀</span>
             <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#005e46" }}>
               Quick Launch Checklist — 4 Easy Steps
             </h3>

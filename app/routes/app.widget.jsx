@@ -102,7 +102,7 @@ export default function WidgetSettings() {
         {/* Settings Form */}
         <Form method="post">
           <div style={sectionCard}>
-            <h3 style={secHead}>🏷️ Text & Labels</h3>
+            <h3 style={secHead}>Text & Labels</h3>
             {renderField("Heading Title", "heading", s.heading, handleChange)}
             {renderField("Subheading Text", "subheading", s.subheading, handleChange)}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
@@ -117,7 +117,7 @@ export default function WidgetSettings() {
           </div>
 
           <div style={sectionCard}>
-            <h3 style={secHead}>🎨 Styling & Layout</h3>
+            <h3 style={secHead}>Styling & Layout</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px", marginBottom: "16px" }}>
               <div>
                 <label style={lbl}>Button Fill Color</label>
@@ -148,7 +148,7 @@ export default function WidgetSettings() {
           </div>
 
           <div style={sectionCard}>
-            <h3 style={secHead}>👁️ Element Visibility</h3>
+            <h3 style={secHead}>Element Visibility</h3>
             <label style={checkboxLabelStyle}>
               <input type="checkbox" name="showHeading" checked={s.showHeading} onChange={handleChange} style={{ width: "16px", height: "16px" }} />
               <span style={{ fontSize: "14px", fontWeight: "600", color: "#1e293b" }}>Show heading title</span>
@@ -171,7 +171,7 @@ export default function WidgetSettings() {
         {/* Sticky Live Preview */}
         <div style={{ position: "sticky", top: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-            <h3 style={{ fontSize: "17px", fontWeight: "800", margin: 0, color: "#0f172a" }}>🖥️ Storefront Live Preview</h3>
+            <h3 style={{ fontSize: "17px", fontWeight: "800", margin: 0, color: "#0f172a" }}>Storefront Live Preview</h3>
             <span style={{ fontSize: "12px", background: "#e2e8f0", color: "#475569", padding: "2px 8px", borderRadius: "10px", fontWeight: "600" }}>
               Realtime State
             </span>
@@ -203,7 +203,6 @@ export default function WidgetSettings() {
 
           <div style={{ marginTop: "20px", background: "linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)", border: "1px solid #bae6fd", borderRadius: "14px", padding: "20px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-              <span style={{ fontSize: "18px" }}>💡</span>
               <h4 style={{ margin: 0, fontSize: "15px", fontWeight: "700", color: "#0369a1" }}>How to Embed on Storefront</h4>
             </div>
             <p style={{ fontSize: "13px", color: "#0c4a6e", margin: 0, lineHeight: "1.6" }}>

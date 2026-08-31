@@ -74,10 +74,10 @@ export default function Analytics() {
   const { stats, topVehicles, noResultVehicles, dailySearches, detailed, planLabel } = useLoaderData();
 
   const cards = [
-    { label: "Total Searches", value: stats.totalSearches, color: "#2563eb", icon: "🔍", bgGradient: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)" },
+    { label: "Total Searches", value: stats.totalSearches, color: "#2563eb", icon: "", bgGradient: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)" },
     { label: "Matched Searches", value: stats.successfulSearches, color: "#008060", icon: "✓", bgGradient: "linear-gradient(135deg, #008060 0%, #005e46 100%)" },
-    { label: "No-Result Searches", value: stats.noResultSearches, color: "#dc2626", icon: "⚠️", bgGradient: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)" },
-    { label: "Search Success Rate", value: `${stats.successRate}%`, color: "#d97706", icon: "📈", bgGradient: "linear-gradient(135deg, #d97706 0%, #b45309 100%)" },
+    { label: "No-Result Searches", value: stats.noResultSearches, color: "#dc2626", icon: "", bgGradient: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)" },
+    { label: "Search Success Rate", value: `${stats.successRate}%`, color: "#d97706", icon: "", bgGradient: "linear-gradient(135deg, #d97706 0%, #b45309 100%)" },
   ];
 
   const maxDailyCount = Math.max(...dailySearches.map((d) => d.count), 1);
@@ -101,7 +101,7 @@ export default function Analytics() {
               <span style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                 {c.label}
               </span>
-              <span style={{ fontSize: "18px" }}>{c.icon}</span>
+              {c.icon ? <span style={{ fontSize: "18px" }}>{c.icon}</span> : null}
             </div>
             <div style={{ fontSize: "36px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>
               {typeof c.value === "number" ? c.value.toLocaleString() : c.value}
@@ -112,7 +112,7 @@ export default function Analytics() {
 
       {!detailed && (
         <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", borderRadius: "14px", padding: "24px", marginBottom: "32px", boxShadow: "0 4px 12px rgba(217, 119, 6, 0.08)" }}>
-          <strong style={{ color: "#b45309", fontSize: "16px", display: "block", marginBottom: "6px" }}>⚡ Upgrade to Growth Professional for Deep Intelligence</strong>
+          <strong style={{ color: "#b45309", fontSize: "16px", display: "block", marginBottom: "6px" }}>Upgrade to Growth Professional for Deep Intelligence</strong>
           <p style={{ margin: "0 0 16px", fontSize: "14px", color: "#78350f" }}>
             Your current plan ({planLabel}) shows overall summary counts. Upgrade to unlock daily interactive trend charts, top vehicle rankings, and the No-Result Opportunity Gap report.
           </p>
@@ -123,7 +123,7 @@ export default function Analytics() {
       {/* Daily Chart */}
       {detailed && dailySearches.length > 0 && (
         <div style={{ ...cardContainer, marginBottom: "32px" }}>
-          <h3 style={cardTitleStyle}>📊 Daily Search Activity (Last 30 Days)</h3>
+          <h3 style={cardTitleStyle}>Daily Search Activity (Last 30 Days)</h3>
           <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 20px" }}>Storefront fitment widget query volume over time</p>
           <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", height: "140px", overflowX: "auto", paddingTop: "20px", borderBottom: "1px solid #e2e8f0" }}>
             {dailySearches.map((d) => (
@@ -152,7 +152,7 @@ export default function Analytics() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(460px, 1fr))", gap: "24px" }}>
           {/* Top Vehicles */}
           <div style={cardContainer}>
-            <h3 style={cardTitleStyle}>🏆 Most Popular Vehicles Searched</h3>
+            <h3 style={cardTitleStyle}>Most Popular Vehicles Searched</h3>
             <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 16px" }}>High-demand vehicle applications on your store</p>
             {topVehicles.length === 0 ? (
               <p style={{ color: "#64748b", fontSize: "14px" }}>No vehicle searches recorded yet.</p>
@@ -184,7 +184,7 @@ export default function Analytics() {
 
           {/* Opportunity Gap */}
           <div style={cardContainer}>
-            <h3 style={{ ...cardTitleStyle, color: "#dc2626" }}>💡 Opportunity Gap (No-Result Queries)</h3>
+            <h3 style={{ ...cardTitleStyle, color: "#dc2626" }}>Opportunity Gap (No-Result Queries)</h3>
             <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 16px" }}>
               Vehicles searched by customers that returned 0 matching products.
             </p>

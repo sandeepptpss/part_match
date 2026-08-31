@@ -97,7 +97,7 @@ export default function FitmentIndex() {
             <input
               name="q"
               defaultValue={search}
-              placeholder="🔍 Search by Year, Make, or Model (e.g. 2025 Ford F-150)…"
+              placeholder="Search by Year, Make, or Model (e.g. 2025 Ford F-150)…"
               style={searchInputStyle}
             />
           </div>
@@ -126,7 +126,6 @@ export default function FitmentIndex() {
             {records.length === 0 && (
               <tr>
                 <td colSpan={5} style={{ padding: "48px 24px", textAlign: "center", color: "#64748b" }}>
-                  <div style={{ fontSize: "28px", marginBottom: "8px" }}>🚗</div>
                   <strong style={{ display: "block", color: "#1e293b", fontSize: "16px", marginBottom: "4px" }}>
                     No Fitment Records Found
                   </strong>
@@ -161,7 +160,7 @@ export default function FitmentIndex() {
                       textDecoration: "none",
                     }}
                   >
-                    📦 {r._count.products} Product{r._count.products === 1 ? "" : "s"}
+                    {r._count.products} Product{r._count.products === 1 ? "" : "s"}
                   </Link>
                 </td>
                 <td style={{ ...tdStyle, textAlign: "right" }}>

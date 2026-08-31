@@ -408,7 +408,6 @@
     if (!result.hasResults || !result.products.length) {
       el.innerHTML = `
         <div class="pm-no-results">
-          <div class="pm-no-results__icon">🔍</div>
           <h3>No products found</h3>
           <p>No compatible products for <strong>${result.year} ${result.make} ${result.model}</strong>.</p>
           <div class="pm-no-results__actions">
@@ -444,7 +443,7 @@
       return `
         <a href="/products/${p.shopifyHandle}" class="pm-product-card">
           <div class="pm-product-card__img-wrap">
-            ${imageSrc ? `<img src="${imageSrc}" alt="${title}" loading="lazy" class="pm-product-card__img"/>` : `<div class="pm-product-card__placeholder">📷</div>`}
+            ${imageSrc ? `<img src="${imageSrc}" alt="${title}" loading="lazy" class="pm-product-card__img"/>` : `<div class="pm-product-card__placeholder">No Image</div>`}
           </div>
           <div class="pm-product-card__content">
             <div class="pm-product-card__badge">✓ Fits ${result.year} ${result.make} ${result.model}</div>
@@ -526,7 +525,6 @@
     const vehicleStr = v ? `${v.year} ${v.make} ${v.model}` : '';
     const states = {
       none: `<div class="pm-checker pm-checker--none">
-               <span class="pm-checker__icon">🚗</span>
                <span>Select your vehicle to check compatibility.</span>
                <a href="#partmatch-widget" class="pm-checker__link">Find your part →</a>
              </div>`,
@@ -535,11 +533,11 @@
                   <span>Checking compatibility for ${vehicleStr}…</span>
                 </div>`,
       yes: `<div class="pm-checker pm-checker--yes">
-              <span class="pm-checker__icon">✅</span>
+              <span class="pm-checker__icon">✓</span>
               <span><strong>Yes, this product fits your ${vehicleStr}.</strong></span>
             </div>`,
       no: `<div class="pm-checker pm-checker--no">
-             <span class="pm-checker__icon">❌</span>
+             <span class="pm-checker__icon">✕</span>
              <span><strong>This product does not fit your ${vehicleStr}.</strong></span>
              <a href="#partmatch-widget" class="pm-checker__link">Change vehicle →</a>
            </div>`,
@@ -640,7 +638,7 @@
             <p style="color: #6d7175; margin: 0; font-size: 14px;">Showing all compatible products and universal items for your vehicle.</p>
           </div>
           <button id="pm-standalone-search-another" style="font-size: 13px; font-weight: 600; color: #008060; background: none; border: 1px solid #008060; padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: background 0.2s;">
-            🔍 Search Another Vehicle
+            Search Another Vehicle
           </button>
         </div>
         <div data-partmatch-auto-results>
