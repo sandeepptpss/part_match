@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { BillingInterval } from "@shopify/shopify-app-react-router/server";
 import { BILLING_PLAN_KEYS, getIsTestCharge, isTestCharge, planLimits } from "../plans.config";
 import { syncShopPlanFromBilling } from "../plans.server";
 
@@ -53,9 +54,16 @@ export const loader = async ({ request }) => {
     console.error("[plans loader] Error fetching stats:", err);
   }
 
-  const globalDiscount = globalSettings?.annualDiscountPercent ?? 20;
-  const isCustomDiscount = appSettings?.annualDiscountPercent != null;
-  const discountPercent = isCustomDiscount ? appSettings.annualDiscountPercent : globalDiscount;
+  const globalAnnualDiscount = globalSettings?.annualDiscountPercent ?? 20;
+  const merchantDiscount =
+    appSettings?.merchantDiscountPercent != null
+      ? appSettings.merchantDiscountPercent
+      : appSettings?.annualDiscountPercent != null && appSettings.annualDiscountPercent !== globalAnnualDiscount
+      ? appSettings.annualDiscountPercent
+      : 0;
+
+  const isCustomMerchantDiscount = merchantDiscount > 0;
+  const totalAnnualDiscount = globalAnnualDiscount + merchantDiscount;
 
   const shopPlan = await syncShopPlanFromBilling(billing, shop);
   const limits = planLimits(shopPlan.plan);
@@ -68,8 +76,10 @@ export const loader = async ({ request }) => {
     searchLogCount,
     sessionEmail,
     isAdmin,
-    discountPercent,
-    isCustomDiscount,
+    globalAnnualDiscount,
+    merchantDiscount,
+    totalAnnualDiscount,
+    isCustomMerchantDiscount,
     activePlan: shopPlan.plan,
     billingCycle: shopPlan.billingCycle,
     recordsLimit: Number.isFinite(limits.fitmentLimit) ? limits.fitmentLimit : null,
@@ -81,22 +91,6 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
   const intent = formData.get("intent");
-
-  if (intent === "updateDiscount") {
-    const discount = parseInt(formData.get("annualDiscountPercent"), 10) || 20;
-
-    // Update discount in DB for shop
-    await prisma.appSettings.upsert({
-      where: { shop },
-      update: { annualDiscountPercent: discount },
-      create: { shop, annualDiscountPercent: discount },
-    });
-
-    return json({
-      success: true,
-      message: `Annual Discount updated to ${discount}% by Admin!`,
-    });
-  }
 
   if (intent === "selectPlan") {
     const selectedPlan = formData.get("plan");
@@ -135,8 +129,44 @@ export const action = async ({ request }) => {
       returnUrl = returnUrl.replace("http://", "https://");
     }
 
+    // Dynamic Combined Discount Calculation for Shopify Billing Charge
+    const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+    const appSettings = await prisma.appSettings.findFirst({ where: { shop } });
+    const globalAnnualDiscount = globalSettings?.annualDiscountPercent ?? 20;
+    const merchantDiscount =
+      appSettings?.merchantDiscountPercent != null
+        ? appSettings.merchantDiscountPercent
+        : appSettings?.annualDiscountPercent != null && appSettings.annualDiscountPercent !== globalAnnualDiscount
+        ? appSettings.annualDiscountPercent
+        : 0;
+    const totalAnnualDiscount = globalAnnualDiscount + merchantDiscount;
+
+    const baseMonthlyPrice = selectedPlan === "growth" ? 19.99 : 49.99;
+    let dynamicLineItem;
+
+    if (billingCycle === "annual") {
+      const annualPrice = parseFloat(((baseMonthlyPrice * 12) * (1 - totalAnnualDiscount / 100)).toFixed(2));
+      dynamicLineItem = {
+        amount: annualPrice,
+        currencyCode: "USD",
+        interval: BillingInterval.Annual,
+      };
+    } else {
+      const monthlyPrice = parseFloat((baseMonthlyPrice * (1 - merchantDiscount / 100)).toFixed(2));
+      dynamicLineItem = {
+        amount: monthlyPrice,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+      };
+    }
+
     try {
-      await billing.request({ plan: billingPlanKey, isTest, returnUrl });
+      await billing.request({
+        plan: billingPlanKey,
+        isTest,
+        returnUrl,
+        lineItems: [dynamicLineItem],
+      });
     } catch (error) {
       if (
         error instanceof Response ||
@@ -187,8 +217,10 @@ export default function PlansPage() {
     searchLogCount,
     sessionEmail,
     isAdmin,
-    discountPercent: initialDiscount,
-    isCustomDiscount,
+    globalAnnualDiscount,
+    merchantDiscount,
+    totalAnnualDiscount,
+    isCustomMerchantDiscount,
     activePlan,
     recordsLimit,
   } = useLoaderData();
@@ -196,7 +228,6 @@ export default function PlansPage() {
   const actionData = useActionData();
   const navigation = useNavigation();
   const [billingCycle, setBillingCycle] = useState("monthly"); // "monthly" | "annual"
-  const [adminDiscountInput, setAdminDiscountInput] = useState(initialDiscount);
   const [openFaq, setOpenFaq] = useState({});
 
   const toggleFaq = (id) => {
@@ -204,14 +235,18 @@ export default function PlansPage() {
   };
 
   const isSubmitting = navigation.state !== "idle";
-  const currentDiscount = navigation.formData?.get("intent") === "updateDiscount"
-    ? parseInt(navigation.formData.get("annualDiscountPercent"), 10) || initialDiscount
-    : initialDiscount;
 
-  // Calculate annual prices based on dynamic admin discount percentage
-  const calcAnnual = (monthlyPrice) => {
-    if (monthlyPrice === 0) return "$0";
-    const discounted = monthlyPrice * (1 - currentDiscount / 100);
+  // Monthly price: Applies Merchant VIP discount if any
+  const calcMonthly = (basePrice) => {
+    if (basePrice === 0) return "$0";
+    const discounted = basePrice * (1 - merchantDiscount / 100);
+    return `$${discounted.toFixed(2)}`;
+  };
+
+  // Annual price: Applies BOTH Annual Discount + Merchant VIP discount combined!
+  const calcAnnual = (basePrice) => {
+    if (basePrice === 0) return "$0";
+    const discounted = basePrice * (1 - totalAnnualDiscount / 100);
     return `$${discounted.toFixed(2)}`;
   };
 
@@ -244,7 +279,7 @@ export default function PlansPage() {
     {
       id: "growth",
       name: "Growth Professional",
-      priceMonthly: "$19.99",
+      priceMonthly: calcMonthly(19.99),
       priceAnnual: calcAnnual(19.99),
       period: "per month",
       description: "Complete fitment solution for growing auto parts retailers.",
@@ -266,7 +301,7 @@ export default function PlansPage() {
     {
       id: "enterprise",
       name: "Enterprise Unlimited",
-      priceMonthly: "$49.99",
+      priceMonthly: calcMonthly(49.99),
       priceAnnual: calcAnnual(49.99),
       period: "per month",
       description: "Maximum scale & dedicated performance for large automotive catalogs.",
@@ -310,7 +345,7 @@ export default function PlansPage() {
     {
       id: "faq-4",
       question: "How does the annual billing discount work?",
-      answer: `Choosing annual billing saves you ${currentDiscount}% compared to monthly billing, giving you discounted rate every year.`,
+      answer: `Choosing annual billing saves you ${globalAnnualDiscount}% compared to monthly billing.${merchantDiscount > 0 ? ` Additionally, your store has an exclusive merchant VIP discount of ${merchantDiscount}%, bringing your total annual savings to ${totalAnnualDiscount}%.` : ""}`,
     },
   ];
 
@@ -336,7 +371,7 @@ export default function PlansPage() {
       )}
 
       {/* User-Specific Custom Discount Notification */}
-      {isCustomDiscount && (
+      {isCustomMerchantDiscount && (
         <div
           style={{
             background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
@@ -354,10 +389,10 @@ export default function PlansPage() {
           <span style={{ fontSize: "28px" }}>🎁</span>
           <div>
             <div style={{ fontWeight: "800", fontSize: "16px", color: "#78350f", marginBottom: "2px" }}>
-              Exclusive Merchant VIP Discount Unlocked!
+              Exclusive Merchant VIP Discount Active!
             </div>
             <div style={{ fontSize: "14px", color: "#92400e" }}>
-              Admin has assigned a custom discount rate of <strong>{currentDiscount}% OFF</strong> on all Annual Billing plans for store: <strong>{shop}</strong>.
+              Admin has assigned a custom discount rate of <strong>{merchantDiscount}% OFF</strong> for store: <strong>{shop}</strong> (Monthly: {merchantDiscount}% OFF | Annual: {totalAnnualDiscount}% OFF total!).
             </div>
           </div>
         </div>
@@ -386,7 +421,7 @@ export default function PlansPage() {
         {/* Monthly vs Annual Billing Toggle */}
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "16px" }}>
           <span style={{ fontSize: "15px", fontWeight: billingCycle === "monthly" ? "700" : "500", color: billingCycle === "monthly" ? "#ffffff" : "#94a3b8" }}>
-            Monthly Billing
+            Monthly Billing {merchantDiscount > 0 && <span style={{ background: "rgba(251, 191, 36, 0.2)", color: "#fbbf24", border: "1px solid rgba(251, 191, 36, 0.4)", padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: "700", marginLeft: "4px" }}>{merchantDiscount}% OFF</span>}
           </span>
 
           <button
@@ -417,7 +452,7 @@ export default function PlansPage() {
           </button>
 
           <span style={{ fontSize: "15px", fontWeight: billingCycle === "annual" ? "700" : "500", color: billingCycle === "annual" ? "#ffffff" : "#94a3b8" }}>
-            Annual Billing <span style={{ background: "rgba(52, 211, 153, 0.2)", color: "#34d399", border: "1px solid rgba(52, 211, 153, 0.4)", padding: "3px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "700", marginLeft: "6px" }}>Save {currentDiscount}%</span>
+            Annual Billing <span style={{ background: "rgba(52, 211, 153, 0.2)", color: "#34d399", border: "1px solid rgba(52, 211, 153, 0.4)", padding: "3px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "700", marginLeft: "6px" }}>Save {totalAnnualDiscount}%</span>
           </span>
         </div>
       </div>

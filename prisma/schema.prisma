@@ -153,6 +153,7 @@ model AppSettings {
   showFitmentChecker  Boolean @default(true)
   themeExtensionConfirmed Boolean @default(false)
   annualDiscountPercent Int   @default(20)
+  merchantDiscountPercent Int @default(0)
 
   @@index([shop])
 }

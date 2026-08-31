@@ -73,8 +73,13 @@ export const loader = async ({ request }) => {
             : "Starter Free ($0/mo)"
           : "Growth Professional ($19.99/mo)";
 
-        const hasCustomDiscount = settings?.annualDiscountPercent != null;
-        const effectiveDiscount = hasCustomDiscount ? settings.annualDiscountPercent : globalDiscount;
+        const merchantDiscount =
+          settings?.merchantDiscountPercent != null
+            ? settings.merchantDiscountPercent
+            : settings?.annualDiscountPercent != null && settings.annualDiscountPercent !== globalDiscount
+            ? settings.annualDiscountPercent
+            : 0;
+        const isCustomDiscount = merchantDiscount > 0;
 
         return {
           shop: domain,
@@ -83,8 +88,8 @@ export const loader = async ({ request }) => {
           mappings,
           universals,
           searches,
-          discountPercent: effectiveDiscount,
-          isCustomDiscount: hasCustomDiscount,
+          merchantDiscountPercent: merchantDiscount,
+          isCustomDiscount,
           activePlan: activePlanLabel,
           status: "Active",
         };
@@ -144,49 +149,60 @@ export const action = async ({ request }) => {
       return json({ success: false, message: "Invalid shop domain or discount rate." }, { status: 400 });
     }
 
-    await prisma.appSettings.upsert({
-      where: { shop: targetShop },
-      update: { annualDiscountPercent: userDiscount },
-      create: {
-        shop: targetShop,
-        annualDiscountPercent: userDiscount,
-        requireYear: true,
-        requireAllFields: true,
-        logNoResults: true,
-        includeUniversal: true,
-        redirectOnSearch: false,
-        resultsUrl: "/pages/find-your-part",
-        persistSelection: true,
-        enableGarage: true,
-        showFitmentChecker: true,
-      },
-    });
+    try {
+      await prisma.appSettings.upsert({
+        where: { shop: targetShop },
+        update: { merchantDiscountPercent: userDiscount },
+        create: {
+          shop: targetShop,
+          merchantDiscountPercent: userDiscount,
+        },
+      });
+    } catch (err) {
+      console.warn("[saveUserDiscount] Falling back to annualDiscountPercent field:", err?.message);
+      await prisma.appSettings.upsert({
+        where: { shop: targetShop },
+        update: { annualDiscountPercent: userDiscount },
+        create: {
+          shop: targetShop,
+          annualDiscountPercent: userDiscount,
+        },
+      });
+    }
 
     return json({
       success: true,
       intent: "saveUserDiscount",
       targetShop,
-      message: `User-specific discount of ${userDiscount}% applied successfully for merchant: ${targetShop}!`,
+      message: `Merchant VIP discount of ${userDiscount}% applied successfully for: ${targetShop}!`,
     });
   }
 
   if (intent === "resetUserDiscount") {
     const targetShop = formData.get("targetShop");
     if (targetShop) {
-      const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
-      const globalDiscount = globalSettings?.annualDiscountPercent ?? 20;
-
-      await prisma.appSettings.upsert({
-        where: { shop: targetShop },
-        update: { annualDiscountPercent: globalDiscount },
-        create: { shop: targetShop, annualDiscountPercent: globalDiscount },
-      });
+      try {
+        await prisma.appSettings.upsert({
+          where: { shop: targetShop },
+          update: { merchantDiscountPercent: 0 },
+          create: { shop: targetShop, merchantDiscountPercent: 0 },
+        });
+      } catch (err) {
+        console.warn("[resetUserDiscount] Falling back to annualDiscountPercent reset:", err?.message);
+        const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+        const globalDiscount = globalSettings?.annualDiscountPercent ?? 20;
+        await prisma.appSettings.upsert({
+          where: { shop: targetShop },
+          update: { annualDiscountPercent: globalDiscount },
+          create: { shop: targetShop, annualDiscountPercent: globalDiscount },
+        });
+      }
 
       return json({
         success: true,
         intent: "resetUserDiscount",
         targetShop,
-        message: `Merchant discount for ${targetShop} reset to Global Default (${globalDiscount}%)!`,
+        message: `Merchant VIP discount for ${targetShop} reset to 0%!`,
       });
     }
   }
@@ -220,7 +236,7 @@ export default function AdminPage() {
   const [userDiscountInputs, setUserDiscountInputs] = useState(() => {
     const initial = {};
     shopsList.forEach((s) => {
-      initial[s.shop] = s.discountPercent;
+      initial[s.shop] = s.merchantDiscountPercent;
     });
     return initial;
   });
@@ -718,7 +734,7 @@ export default function AdminPage() {
                 filteredShops.map((merchant) => {
                   const isCurrent = merchant.shop === currentShop;
                   const currentInputValue =
-                    userDiscountInputs[merchant.shop] ?? merchant.discountPercent;
+                    userDiscountInputs[merchant.shop] ?? merchant.merchantDiscountPercent;
 
                   return (
                     <tr
@@ -760,7 +776,7 @@ export default function AdminPage() {
                                 fontWeight: "800",
                               }}
                             >
-                              ★ CUSTOM DISCOUNT ({merchant.discountPercent}%)
+                              ★ MERCHANT VIP ({merchant.merchantDiscountPercent}% EXTRA OFF)
                             </span>
                           ) : (
                             <span
@@ -773,7 +789,7 @@ export default function AdminPage() {
                                 fontWeight: "700",
                               }}
                             >
-                              GLOBAL DEFAULT ({globalDiscount}%)
+                              STANDARD (0% EXTRA DISCOUNT)
                             </span>
                           )}
                         </div>
