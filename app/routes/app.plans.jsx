@@ -298,7 +298,7 @@ export default function PlansPage() {
       highlight: true,
       features: [
         "Up to 5,000 Fitment Records",
-        "100 VIN Lookups Included/mo ($0.05 extra)",
+        "100 Free VIN Lookups/mo ($0.05 after)",
         "ACES / PIES XML & CSV Import/Export",
         "Sub-Model & Trim Level Filtering",
         "Unlimited Universal Products",
@@ -323,7 +323,7 @@ export default function PlansPage() {
       highlight: false,
       features: [
         "Unlimited Fitment Records",
-        "1,000 VIN Lookups Included/mo ($0.03 extra)",
+        "1,000 Free VIN Lookups/mo ($0.03 after)",
         "Enterprise ACES / PIES Standard Engine",
         "Advanced Sub-Model & Trim Specs",
         "Unlimited Universal Products",
@@ -406,7 +406,7 @@ export default function PlansPage() {
               Catalog Usage: <strong style={{ color: "#34d399" }}>{fitmentCount.toLocaleString()}</strong> / {recordsLimit === null ? "Unlimited" : recordsLimit.toLocaleString()} Records
             </div>
             <div style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.2)", color: "#ffffff", padding: "10px 18px", borderRadius: "14px", fontSize: "13px", fontWeight: "700", backdropFilter: "blur(4px)" }}>
-              VIN Lookups (Month): <strong style={{ color: "#60a5fa" }}>{vinLookupCount.toLocaleString()}</strong> / {vinLimit === Infinity || vinLimit === null ? "Unlimited" : vinLimit.toLocaleString()} {vinOverageRate > 0 ? `($${vinOverageRate}/extra)` : ""}
+              VIN Lookups (Month): <strong style={{ color: "#60a5fa" }}>{vinLookupCount.toLocaleString()}</strong> / {vinLimit === Infinity || vinLimit === null ? "Unlimited" : vinLimit.toLocaleString()} {vinOverageRate > 0 ? `(Pay-as-you-grow $${vinOverageRate}/search after)` : ""}
             </div>
           </div>
         </div>
@@ -577,10 +577,10 @@ export default function PlansPage() {
                 <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Unlimited</td>
               </tr>
               <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>VIN Lookup Quota & Overage</td>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>VIN Lookups Allowance</td>
                 <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕ Disabled</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>100 / mo ($0.05/extra)</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>1,000 / mo ($0.03/extra)</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>100 Free/mo ($0.05 after)</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>1,000 Free/mo ($0.03 after)</td>
               </tr>
               <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
                 <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>ACES / PIES Data Standards (XML & CSV)</td>
