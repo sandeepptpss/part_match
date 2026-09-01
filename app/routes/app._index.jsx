@@ -16,12 +16,15 @@ export const loader = async ({ request }) => {
   let topVehicles = [];
 
   try {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
     const res = await Promise.all([
       prisma.fitmentRecord?.count({ where: { shop } }) ?? 0,
       prisma.fitmentProduct?.count({ where: { fitment: { shop } } }) ?? 0,
       prisma.universalProduct?.count({ where: { shop } }) ?? 0,
       prisma.searchLog?.count({
-        where: { shop, createdAt: { gte: new Date(new Date().setDate(1)) } },
+        where: { shop, createdAt: { gte: startOfMonth } },
       }) ?? 0,
       prisma.searchLog?.count({ where: { shop, hasResults: false } }) ?? 0,
       prisma.searchLog?.findMany({

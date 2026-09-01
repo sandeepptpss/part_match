@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLoaderData, Form, useNavigation, useActionData, Link } from "react-router";
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
@@ -246,6 +246,14 @@ export default function FitmentProducts() {
   const [customCollectionInput, setCustomCollectionInput] = useState("");
   const [customSkuInput, setCustomSkuInput] = useState("");
 
+  const [dismissedMessage, setDismissedMessage] = useState(false);
+
+  useEffect(() => {
+    if (actionData) {
+      setDismissedMessage(false);
+    }
+  }, [actionData]);
+
   const assignedProductIds = new Set(fitment.products.map((p) => p.shopifyProductId));
   const availableProducts = shopifyProducts.filter((p) => !assignedProductIds.has(p.id));
 
@@ -307,12 +315,12 @@ export default function FitmentProducts() {
       </div>
 
       {/* User Friendly Notification Banner (Green for Add, Soft Red for Remove) */}
-      {actionData?.message && (
+      {actionData?.message && !dismissedMessage && (
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "10px",
+            justifyContent: "space-between",
             background: isRemove ? "#fef2f2" : "#ecfdf5",
             border: `1px solid ${isRemove ? "#fecaca" : "#a7f3d0"}`,
             color: isRemove ? "#991b1b" : "#065f46",
@@ -324,17 +332,41 @@ export default function FitmentProducts() {
             fontWeight: "600",
           }}
         >
-          <span style={{ fontSize: "16px", fontWeight: "bold" }}>{isRemove ? "✕" : "✓"}</span>
-          <span>{actionData.message}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "16px", fontWeight: "bold" }}>✓</span>
+            <span>{actionData.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDismissedMessage(true)}
+            aria-label="Close notification"
+            title="Close"
+            style={{
+              background: "transparent",
+              border: `1px solid ${isRemove ? "#fca5a5" : "#6ee7b7"}`,
+              color: isRemove ? "#991b1b" : "#065f46",
+              fontSize: "14px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              padding: "4px 8px",
+              borderRadius: "6px",
+              lineHeight: 1,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
 
-      {actionData?.error && !actionData?.intent && (
+      {actionData?.error && !actionData?.intent && !dismissedMessage && (
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "10px",
+            justifyContent: "space-between",
             background: "#fef2f2",
             border: "1px solid #fecaca",
             color: "#991b1b",
@@ -345,8 +377,32 @@ export default function FitmentProducts() {
             fontWeight: "600",
           }}
         >
-          <span style={{ fontSize: "18px", fontWeight: "bold" }}>⚠️</span>
-          <span>{actionData.error}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "18px", fontWeight: "bold" }}>⚠️</span>
+            <span>{actionData.error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDismissedMessage(true)}
+            aria-label="Close notification"
+            title="Close"
+            style={{
+              background: "transparent",
+              border: "1px solid #fca5a5",
+              color: "#991b1b",
+              fontSize: "14px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              padding: "4px 8px",
+              borderRadius: "6px",
+              lineHeight: 1,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
 
