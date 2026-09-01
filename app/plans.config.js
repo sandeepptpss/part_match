@@ -35,6 +35,7 @@ export const PLAN_TIERS = {
     garageSync: false,
     analyticsDetail: "basic",
     aiFitmentSuggestions: false,
+    vinLookup: false,
   },
   growth: {
     label: "Growth Professional",
@@ -45,6 +46,7 @@ export const PLAN_TIERS = {
     garageSync: true,
     analyticsDetail: "detailed",
     aiFitmentSuggestions: false,
+    vinLookup: true,
   },
   enterprise: {
     label: "Enterprise Unlimited",
@@ -55,6 +57,7 @@ export const PLAN_TIERS = {
     garageSync: true,
     analyticsDetail: "detailed",
     aiFitmentSuggestions: true,
+    vinLookup: true,
   },
 };
 

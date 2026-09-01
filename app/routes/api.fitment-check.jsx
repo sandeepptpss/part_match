@@ -16,11 +16,13 @@ export async function loader({ request }) {
   const handle = url.searchParams.get("handle");
   const year = url.searchParams.get("year");
   const make = url.searchParams.get("make");
-  const model = url.searchParams.get("model");
+  const trim = url.searchParams.get("trim") || "";
 
   if (!handle || !year || !make || !model) {
-    return json({ error: "Missing parameters", fits: false }, { status: 400 });
+    return json({ error: "Missing parameters", fits: false, status: "UNKNOWN" }, { status: 400 });
   }
+
+  const vehicleTitle = `${year} ${make} ${model} ${trim}`.trim();
 
   const [appSettings, shopPlan] = await Promise.all([
     prisma.appSettings?.findUnique({ where: { shop } }),
@@ -29,7 +31,7 @@ export async function loader({ request }) {
   const limits = planLimits(shopPlan.plan);
 
   if (!limits.fitmentChecker) {
-    return json({ fits: false, reason: "plan_restricted" });
+    return json({ fits: false, status: "UNKNOWN", reason: "plan_restricted" });
   }
 
   const includeUniversal = (appSettings?.includeUniversal ?? true) && limits.universalProducts;
@@ -40,13 +42,24 @@ export async function loader({ request }) {
       where: { shop, shopifyHandle: handle },
     });
     if (universal) {
-      return json({ fits: true, reason: "universal" });
+      return json({
+        fits: true,
+        status: "FITS",
+        badgeText: `✓ Universal Fit for ${vehicleTitle}`,
+        badgeColor: "#10b981",
+        reason: "universal",
+      });
     }
   }
 
   // Check fitment mapping (products, collections, tags)
-  const fitment = await prisma.fitmentRecord?.findUnique({
-    where: { shop_year_make_model: { shop, year, make, model } },
+  const whereClause = { shop, year, make, model };
+  if (trim) {
+    whereClause.trim = trim;
+  }
+
+  const fitment = await prisma.fitmentRecord?.findFirst({
+    where: whereClause,
     include: {
       products: {
         where: { shopifyHandle: handle },
@@ -54,23 +67,38 @@ export async function loader({ request }) {
       },
       collections: true,
       tags: true,
+      skus: true,
     },
   });
 
   if (!fitment) {
-    return json({ fits: false, fitmentId: null });
+    return json({
+      fits: false,
+      status: "DOES_NOT_FIT",
+      badgeText: `✕ Does NOT fit ${vehicleTitle}`,
+      badgeColor: "#ef4444",
+      fitmentId: null,
+    });
   }
 
   // 1. Direct product match
   if (fitment.products && fitment.products.length > 0) {
-    return json({ fits: true, fitmentId: fitment.id, matchedBy: "product" });
+    return json({
+      fits: true,
+      status: "FITS",
+      badgeText: `✓ Confirmed Fit for ${vehicleTitle}`,
+      badgeColor: "#10b981",
+      fitmentId: fitment.id,
+      matchedBy: "product",
+    });
   }
 
   const assignedCollections = fitment.collections || [];
   const assignedTags = fitment.tags || [];
+  const assignedSkus = fitment.skus || [];
 
-  // 2. Collection or Tag match via Shopify GraphQL
-  if (assignedCollections.length > 0 || assignedTags.length > 0) {
+  // 2. Collection, Tag, or SKU match via Shopify GraphQL
+  if (assignedCollections.length > 0 || assignedTags.length > 0 || assignedSkus.length > 0) {
     try {
       const { admin } = await unauthenticated.admin(shop);
       const prodRes = await admin.graphql(
@@ -78,6 +106,11 @@ export async function loader({ request }) {
           productByHandle(handle: $handle) {
             id
             tags
+            variants(first: 30) {
+              nodes {
+                sku
+              }
+            }
             collections(first: 30) {
               nodes {
                 handle
@@ -99,7 +132,14 @@ export async function loader({ request }) {
           c.shopifyHandle && prodColHandles.has(c.shopifyHandle.toLowerCase()),
         );
         if (colMatch) {
-          return json({ fits: true, fitmentId: fitment.id, matchedBy: "collection" });
+          return json({
+            fits: true,
+            status: "FITS",
+            badgeText: `✓ Compatible Fit for ${vehicleTitle}`,
+            badgeColor: "#10b981",
+            fitmentId: fitment.id,
+            matchedBy: "collection",
+          });
         }
 
         // Check Tag match
@@ -110,16 +150,46 @@ export async function loader({ request }) {
           t.tag && prodTags.has(t.tag.toLowerCase().replace(/^#/, "")),
         );
         if (tagMatch) {
-          return json({ fits: true, fitmentId: fitment.id, matchedBy: "tag" });
+          return json({
+            fits: true,
+            status: "FITS",
+            badgeText: `✓ Compatible Fit for ${vehicleTitle}`,
+            badgeColor: "#10b981",
+            fitmentId: fitment.id,
+            matchedBy: "tag",
+          });
+        }
+
+        // Check SKU match
+        const prodSkus = new Set(
+          (productInfo.variants?.nodes ?? [])
+            .map((v) => v.sku?.trim().toLowerCase())
+            .filter(Boolean),
+        );
+        const skuMatch = assignedSkus.some((s) =>
+          s.sku && prodSkus.has(s.sku.trim().toLowerCase()),
+        );
+        if (skuMatch) {
+          return json({
+            fits: true,
+            status: "FITS",
+            badgeText: `✓ Compatible Fit for ${vehicleTitle}`,
+            badgeColor: "#10b981",
+            fitmentId: fitment.id,
+            matchedBy: "sku",
+          });
         }
       }
     } catch (err) {
-      console.error("[api/fitment-check] Error verifying Shopify collection/tag fitment:", err);
+      console.error("[api/fitment-check] Error verifying Shopify collection/tag/sku fitment:", err);
     }
   }
 
   return json({
     fits: false,
+    status: "DOES_NOT_FIT",
+    badgeText: `✕ Does NOT fit ${vehicleTitle}`,
+    badgeColor: "#ef4444",
     fitmentId: fitment.id,
   });
 }

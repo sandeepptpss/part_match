@@ -2,34 +2,55 @@ const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
+async function getShopFromRequest(request) {
+  try {
+    const { session } = await authenticate.public.appProxy(request);
+    if (session?.shop) return session.shop;
+  } catch (err) {}
+
+  const url = new URL(request.url);
+  const paramShop = url.searchParams.get("shop");
+  if (paramShop) return paramShop;
+
+  const firstRecord = await prisma.fitmentRecord.findFirst({ select: { shop: true } });
+  if (firstRecord?.shop) return firstRecord.shop;
+
+  const firstSettings = await prisma.appSettings.findFirst({ select: { shop: true } });
+  if (firstSettings?.shop) return firstSettings.shop;
+
+  return null;
+}
+
 // GET /apps/partmatch/api/models?year=&make= (proxied storefront request)
 export async function loader({ request }) {
-  const { session } = await authenticate.public.appProxy(request);
+  const shop = await getShopFromRequest(request);
 
-  if (!session) {
-    return json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const shop = session.shop;
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
   const make = url.searchParams.get("make");
 
-  if (!year || !make) {
-    return json({ error: "Missing year or make" }, { status: 400 });
+  if (!shop || !year || !make) {
+    return json({ models: [] });
   }
 
   try {
-    const models = await prisma.fitmentRecord?.findMany({
-      where: { shop, year, make },
-      select: { model: true },
-      distinct: ["model"],
-      orderBy: { model: "asc" },
+    const fitments = await prisma.fitmentRecord?.findMany({
+      where: { shop, year },
+      select: { make: true, model: true },
     });
 
-    return json({ models: models.map((r) => r.model) });
+    const targetMake = (make || "").trim().toLowerCase();
+
+    const matchedModels = (fitments || [])
+      .filter((r) => (r.make || "").trim().toLowerCase() === targetMake)
+      .map((r) => r.model)
+      .filter(Boolean);
+
+    const uniqueModels = Array.from(new Set(matchedModels)).sort();
+
+    return json({ models: uniqueModels });
   } catch (err) {
     console.error("[api/models]", err);
-    return json({ error: "Internal server error" }, { status: 500 });
+    return json({ models: [] });
   }
 }

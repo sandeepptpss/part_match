@@ -25,8 +25,8 @@ const DEFAULT_APP_SETTINGS = {
   requireAllFields: true,
   logNoResults: true,
   includeUniversal: true,
-  redirectOnSearch: false,
-  resultsUrl: "/pages/find-your-part",
+  redirectOnSearch: true,
+  resultsUrl: "/collections/all",
   persistSelection: true,
   enableGarage: true,
   showFitmentChecker: true,
@@ -78,5 +78,6 @@ export async function loader({ request }) {
   return json({
     widget,
     settings,
+    limits,
   });
 }

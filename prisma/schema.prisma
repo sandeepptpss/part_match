@@ -32,24 +32,27 @@ model Session {
 }
 
 // ─── Fitment Records ─────────────────────────────────────────────────────────
-// A FitmentRecord represents one unique Year+Make+Model combination per shop.
+// A FitmentRecord represents one unique Year+Make+Model+Trim combination per shop.
 model FitmentRecord {
   id        Int      @id @default(autoincrement())
-  shop      String
-  year      String
-  make      String
-  model     String
+  shop      String   @db.VarChar(100)
+  year      String   @db.VarChar(50)
+  make      String   @db.VarChar(100)
+  model     String   @db.VarChar(100)
+  trim      String   @default("") @db.VarChar(100)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   products    FitmentProduct[]
   collections FitmentCollection[]
   tags        FitmentTag[]
+  skus        FitmentSku[]
 
-  @@unique([shop, year, make, model])
+  @@unique([shop, year, make, model, trim])
   @@index([shop])
   @@index([shop, year])
   @@index([shop, year, make])
+  @@index([shop, year, make, model])
 }
 
 // ─── Fitment ↔ Product Junction ──────────────────────────────────────────────
@@ -98,11 +101,25 @@ model FitmentTag {
   @@index([tag])
 }
 
+// ─── Fitment ↔ SKU Junction ──────────────────────────────────────────────────
+// Links a FitmentRecord directly to Product SKUs.
+model FitmentSku {
+  id        Int    @id @default(autoincrement())
+  fitmentId Int
+  sku       String @db.VarChar(100)
+
+  fitment FitmentRecord @relation(fields: [fitmentId], references: [id], onDelete: Cascade)
+
+  @@unique([fitmentId, sku])
+  @@index([fitmentId])
+  @@index([sku])
+}
+
 // ─── Universal Products ───────────────────────────────────────────────────────
 // Products compatible with ALL vehicles for a shop.
 model UniversalProduct {
   id               Int    @id @default(autoincrement())
-  shop             String
+  shop             String @db.VarChar(100)
   shopifyProductId String
   shopifyHandle    String @default("")
   productTitle     String @default("")
@@ -115,10 +132,11 @@ model UniversalProduct {
 // Every storefront search is logged for analytics.
 model SearchLog {
   id           Int      @id @default(autoincrement())
-  shop         String
-  year         String
-  make         String
-  model        String
+  shop         String   @db.VarChar(100)
+  year         String   @db.VarChar(50)
+  make         String   @db.VarChar(100)
+  model        String   @db.VarChar(100)
+  trim         String   @default("") @db.VarChar(100)
   resultCount  Int      @default(0)
   hasResults   Boolean  @default(false)
   sessionId    String?  // browser session / customer identifier
@@ -140,6 +158,8 @@ model WidgetSettings {
   yearLabel       String @default("YEAR")
   makeLabel       String @default("MAKE")
   modelLabel      String @default("MODEL")
+  trimLabel       String @default("TRIM / ENGINE")
+  vinSearchLabel  String @default("SEARCH BY VIN")
   searchButtonText String @default("SEARCH")
   clearButtonText  String @default("CLEAR")
   primaryColor    String @default("#0f172a")
@@ -149,6 +169,7 @@ model WidgetSettings {
   layout          String @default("horizontal") // horizontal | stacked
   showHeading     Boolean @default(true)
   showSubheading  Boolean @default(true)
+  enableVinSearch Boolean @default(true)
 
   @@index([shop])
 }
@@ -163,9 +184,10 @@ model SavedVehicle {
   year       String   @db.VarChar(50)
   make       String   @db.VarChar(100)
   model      String   @db.VarChar(100)
+  trim       String   @default("") @db.VarChar(100)
   createdAt  DateTime @default(now())
 
-  @@unique([shop, customerId, year, make, model])
+  @@unique([shop, customerId, year, make, model, trim])
   @@index([shop, customerId])
 }
 
@@ -182,6 +204,9 @@ model AppSettings {
   resultsUrl          String  @default("/pages/find-your-part")
   persistSelection    Boolean @default(true)
   enableGarage        Boolean @default(true)
+  enableTrim          Boolean @default(true)
+  enableVinSearch     Boolean @default(true)
+  enablePdpBadges     Boolean @default(true)
   showFitmentChecker  Boolean @default(true)
   themeExtensionConfirmed Boolean @default(false)
   annualDiscountPercent Int   @default(20)

@@ -15,6 +15,21 @@
 
   let appConfig = null; // resolved once by loadConfig()
 
+  // Pre-hide collection grid immediately on search result pages to prevent flash of default products
+  (function preHideGrid() {
+    try {
+      const u = new URLSearchParams(window.location.search);
+      if (u.has('year') && u.has('make') && u.has('model')) {
+        const style = document.createElement('style');
+        style.id = 'pm-prehide-style';
+        style.textContent = `
+          .product-grid, #product-grid, .grid--product, ul.grid, .collection-matrix { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.25s ease; }
+        `;
+        (document.head || document.documentElement).appendChild(style);
+      }
+    } catch (e) {}
+  })();
+
   // ─── Config ─────────────────────────────────────────────────────────────────
   async function loadConfig() {
     if (appConfig) return appConfig;
@@ -141,12 +156,22 @@
   }
 
   async function doSearch(year, make, model) {
-    const res = await fetch(`${PROXY_BASE}/api/search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ year, make, model }),
-    });
-    return res.json();
+    try {
+      const res = await fetch(`${PROXY_BASE}/api/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, make, model }),
+      });
+      if (!res.ok) {
+        const getRes = await fetch(`${PROXY_BASE}/api/search?year=${encodeURIComponent(year)}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}`);
+        if (!getRes.ok) return { hasResults: false, products: [], resultCount: 0, year, make, model };
+        return await getRes.json();
+      }
+      return await res.json();
+    } catch (err) {
+      console.error('[PartMatch] doSearch fetch error:', err);
+      return { hasResults: false, products: [], resultCount: 0, year, make, model };
+    }
   }
 
   async function checkFitment(handle, year, make, model) {
@@ -228,6 +253,21 @@
   }
 
   // ─── Populate Select ─────────────────────────────────────────────────────────
+  function setSelectValue(select, val) {
+    if (!select || !select.options) return;
+    if (!val) { select.value = ''; return; }
+    select.value = val;
+    if (select.value === val) return;
+
+    const valLower = String(val).trim().toLowerCase();
+    for (let i = 0; i < select.options.length; i++) {
+      if (select.options[i].value.trim().toLowerCase() === valLower) {
+        select.selectedIndex = i;
+        return;
+      }
+    }
+  }
+
   function populateSelect(select, options, placeholder) {
     select.innerHTML = '';
     const def = document.createElement('option');
@@ -248,9 +288,9 @@
   async function initSearchWidget(widget) {
     const isDesignMode = window.Shopify && window.Shopify.designMode;
     if (!isDesignMode) {
-      const config = await loadConfig();
-      if (config && config.widget) {
-        applyWidgetSettings(widget, config.widget);
+      const cfg = await loadConfig();
+      if (cfg && cfg.widget) {
+        applyWidgetSettings(widget, cfg.widget);
       }
     }
 
@@ -277,18 +317,151 @@
       yearSel.disabled = false;
     } catch { yearSel.disabled = false; }
 
-    // Check URL parameters for search query
+    // Tab Switching (BY VEHICLE YMM vs BY VIN LOOKUP)
+    const tabs = widget.querySelectorAll('[data-pm-tab]');
+    const ymmPanel = widget.querySelector('[data-pm-ymm-panel]');
+    const vinPanel = widget.querySelector('[data-pm-vin-panel]');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => {
+          t.classList.remove('pm-tab--active');
+          t.style.background = '#ffffff';
+          t.style.color = '#475569';
+          t.style.borderColor = '#cbd5e1';
+        });
+        tab.classList.add('pm-tab--active');
+        tab.style.background = '#0f172a';
+        tab.style.color = '#ffffff';
+        tab.style.borderColor = '#0f172a';
+
+        const mode = tab.dataset.pmTab;
+        if (mode === 'vin') {
+          if (ymmPanel) ymmPanel.style.display = 'none';
+          if (vinPanel) vinPanel.style.display = 'block';
+        } else {
+          if (vinPanel) vinPanel.style.display = 'none';
+          if (ymmPanel) ymmPanel.style.display = 'flex';
+        }
+      });
+    });
+
+    // VIN Lookup Decoding & Dropdown Auto-Selection
+    const vinInput = widget.querySelector('[data-partmatch-vin]');
+    const vinBtn   = widget.querySelector('[data-partmatch-vin-btn]');
+    const vinFeedback = widget.querySelector('[data-partmatch-vin-feedback]');
+
+    if (vinBtn && vinInput) {
+      vinBtn.addEventListener('click', async () => {
+        const rawVin = vinInput.value ? vinInput.value.trim() : '';
+        if (!rawVin || rawVin.length !== 17) {
+          if (vinFeedback) {
+            vinFeedback.style.display = 'block';
+            vinFeedback.style.background = '#fef2f2';
+            vinFeedback.style.color = '#991b1b';
+            vinFeedback.style.border = '1px solid #fecaca';
+            vinFeedback.textContent = '❌ Please enter a valid 17-character VIN number.';
+          }
+          return;
+        }
+
+        if (vinFeedback) {
+          vinFeedback.style.display = 'block';
+          vinFeedback.style.background = '#f0f9ff';
+          vinFeedback.style.color = '#0369a1';
+          vinFeedback.style.border = '1px solid #bae6fd';
+          vinFeedback.textContent = '⏳ Decoding VIN with vehicle registry...';
+        }
+
+        try {
+          const res = await fetch(`${PROXY_BASE}/api/vin-lookup?vin=${encodeURIComponent(rawVin)}`);
+          const data = await res.json();
+
+          if (!res.ok || !data.success) {
+            if (vinFeedback) {
+              vinFeedback.style.background = '#fef2f2';
+              vinFeedback.style.color = '#991b1b';
+              vinFeedback.style.border = '1px solid #fecaca';
+              vinFeedback.textContent = `❌ ${data.error || 'Vehicle not found for this VIN'}`;
+            }
+            return;
+          }
+
+          const { year, make, model } = data;
+          if (vinFeedback) {
+            vinFeedback.style.background = '#ecfdf5';
+            vinFeedback.style.color = '#047857';
+            vinFeedback.style.border = '1px solid #a7f3d0';
+            vinFeedback.textContent = `✓ Decoded: ${year} ${make} ${model}. Auto-selecting vehicle dropdowns…`;
+          }
+
+          // Switch to YMM panel to show auto-selected dropdowns
+          setTimeout(() => {
+            const ymmTab = widget.querySelector('[data-pm-tab="ymm"]');
+            if (ymmTab) ymmTab.click();
+          }, 1200);
+
+          // Auto-Select Year -> Make -> Model
+          setSelectValue(yearSel, year);
+          yearSel.dispatchEvent(new Event('change'));
+
+          // Wait for makes to populate then select Make
+          await new Promise(r => {
+            let attempts = 0;
+            const checkMakes = () => {
+              if (!makeSel.disabled && makeSel.options.length > 1) {
+                setSelectValue(makeSel, make);
+                makeSel.dispatchEvent(new Event('change'));
+                r();
+              } else if (attempts > 60) {
+                r();
+              } else {
+                attempts++;
+                setTimeout(checkMakes, 50);
+              }
+            };
+            checkMakes();
+          });
+
+          // Wait for models to populate then select Model
+          await new Promise(r => {
+            let attempts = 0;
+            const checkModels = () => {
+              if (!modelSel.disabled && modelSel.options.length > 1) {
+                setSelectValue(modelSel, model);
+                modelSel.dispatchEvent(new Event('change'));
+                searchBtn.disabled = false;
+                r();
+              } else if (attempts > 60) {
+                r();
+              } else {
+                attempts++;
+                setTimeout(checkModels, 50);
+              }
+            };
+            checkModels();
+          });
+
+        } catch (err) {
+          if (vinFeedback) {
+            vinFeedback.style.background = '#fef2f2';
+            vinFeedback.style.color = '#991b1b';
+            vinFeedback.style.border = '1px solid #fecaca';
+            vinFeedback.textContent = '❌ Error decoding VIN. Please check your connection and try again.';
+          }
+        }
+      });
+    }
+
+    // Check URL parameters for search query restoration (only when URL contains explicit search params)
     const urlParams = new URLSearchParams(window.location.search);
     const urlYear  = urlParams.get('year');
     const urlMake  = urlParams.get('make');
     const urlModel = urlParams.get('model');
 
-    const saved = settingsAllow('persistSelection') ? savedVehicle() : null;
-    const activeVehicle = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel } : saved;
-
-    if (activeVehicle && activeVehicle.year) {
+    if (urlYear && urlMake && urlModel) {
       const restoreVehicle = async () => {
-        yearSel.value = activeVehicle.year;
+        setSelectValue(yearSel, urlYear);
         yearSel.dispatchEvent(new Event('change'));
         
         // Wait for makes to load with a timeout
@@ -307,8 +480,8 @@
           checkMakes();
         });
 
-        if (activeVehicle.make) {
-          makeSel.value = activeVehicle.make;
+        if (urlMake) {
+          setSelectValue(makeSel, urlMake);
           makeSel.dispatchEvent(new Event('change'));
           
           // Wait for models to load with a timeout
@@ -327,13 +500,13 @@
             checkModels();
           });
 
-          if (activeVehicle.model) {
-            modelSel.value = activeVehicle.model;
+          if (urlModel) {
+            setSelectValue(modelSel, urlModel);
             modelSel.dispatchEvent(new Event('change'));
             searchBtn.disabled = false;
 
             // Auto-trigger search if coming via URL query parameters
-            if (urlYear && urlMake && urlModel && resultsEl) {
+            if (resultsEl) {
               if (spinner) spinner.style.display = 'inline-block';
               const result = await doSearch(urlYear, urlMake, urlModel);
               if (spinner) spinner.style.display = 'none';
@@ -381,34 +554,54 @@
       searchBtn.disabled = true;
       if (spinner) spinner.style.display = 'inline-block';
 
-      // Save vehicle & garage
-      saveVehicle({ year, make, model });
-      await addToGarage({ year, make, model });
+      try {
+        // Save vehicle & garage
+        saveVehicle({ year, make, model });
+        await addToGarage({ year, make, model });
 
-      // Determine redirect URL & mode (App settings take precedence over theme block default)
-      const rawResultsUrl = config.settings?.resultsUrl || widget.dataset.resultsUrl || '/collections/all';
-      const targetUrl = rawResultsUrl.split('?')[0].replace(/\/$/, '') || '/collections/all';
-      const currentPath = window.location.pathname.replace(/\/$/, '');
-      const isResultsPage = currentPath === targetUrl;
+        // Determine search display & redirection mode (Hierarchy: App Admin Settings -> Theme Block Overrides)
+        const appRedirect = appConfig?.settings?.redirectOnSearch ?? true;
+        const themeInlineOverride = widget.dataset.showInline === 'true';
 
-      // Redirect if configured in app settings OR theme block, unless already on results page or explicitly forced inline
-      const showInlineTheme = widget.dataset.showInline === 'true';
-      const redirectConfigured = config.settings?.redirectOnSearch || widget.dataset.resultsMode === 'separate_page';
-      const shouldRedirect = redirectConfigured && !showInlineTheme && !isResultsPage;
+        const shouldRedirect = appRedirect && !themeInlineOverride;
 
-      if (shouldRedirect) {
-        const q = new URLSearchParams({ year, make, model });
-        window.location.href = `${targetUrl}?${q.toString()}`;
-        return;
-      }
+        // Resolve target URL
+        let rawResultsUrl = '/collections/all';
+        if (appConfig?.settings?.resultsUrl) {
+          rawResultsUrl = appConfig.settings.resultsUrl;
+        } else if (widget.dataset.resultsUrl) {
+          rawResultsUrl = widget.dataset.resultsUrl;
+        }
 
-      // Inline (Same Page) display
-      const result = await doSearch(year, make, model);
-      searchBtn.disabled = false;
-      if (spinner) spinner.style.display = 'none';
+        const targetUrl = rawResultsUrl.split('?')[0].replace(/\/$/, '') || '/collections/all';
+        const currentPath = window.location.pathname.replace(/\/$/, '');
+        const isResultsPage = currentPath === targetUrl;
 
-      if (resultsEl) {
-        await renderResults(resultsEl, result);
+        if (shouldRedirect && !isResultsPage) {
+          const q = new URLSearchParams({ year, make, model });
+          searchBtn.disabled = false;
+          if (spinner) spinner.style.display = 'none';
+          window.location.href = `${targetUrl}?${q.toString()}`;
+          return;
+        }
+
+        // Inline (Same Page) display (if on results page or showInline is true)
+        const result = await doSearch(year, make, model);
+
+        if (resultsEl) {
+          await renderResults(resultsEl, result);
+        }
+      } catch (err) {
+        console.error('[PartMatch] Search click error:', err);
+        if (resultsEl) {
+          resultsEl.innerHTML = `
+            <div class="pm-no-results" style="padding: 20px; text-align: center; color: #ef4444;">
+              <p style="margin: 0; font-weight: 600;">Search temporarily unavailable. Please try again.</p>
+            </div>`;
+        }
+      } finally {
+        searchBtn.disabled = false;
+        if (spinner) spinner.style.display = 'none';
       }
     });
 
@@ -765,6 +958,44 @@
         }
       }
     });
+
+    // Update Collection Heading if available
+    const pageTitle = document.querySelector('.collection-hero__title, h1.title, h1.collection-title, h1');
+    if (pageTitle && !isReset) {
+      pageTitle.textContent = `Results for ${year} ${make} ${model}`;
+    }
+
+    // Reveal grid after filtering completes
+    const prehideStyle = document.getElementById('pm-prehide-style');
+    if (prehideStyle) prehideStyle.remove();
+
+    const gridContainers = document.querySelectorAll('.product-grid, #product-grid, .grid--product, ul.grid, .collection-matrix, .template-collection__grid');
+    gridContainers.forEach(grid => {
+      grid.style.opacity = '1';
+      grid.style.visibility = 'visible';
+    });
+
+    // Handle 0 results empty state cleanly
+    let emptyStateEl = document.getElementById('pm-empty-results-banner');
+    if (!isReset && visibleCount === 0) {
+      if (!emptyStateEl) {
+        emptyStateEl = document.createElement('div');
+        emptyStateEl.id = 'pm-empty-results-banner';
+        emptyStateEl.style.cssText = 'background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:36px 24px; text-align:center; margin: 30px auto; max-width: 600px; font-family: inherit;';
+        emptyStateEl.innerHTML = `
+          <div style="font-size: 32px; margin-bottom: 8px;">🔍</div>
+          <h3 style="margin:0 0 8px; color:#0f172a; font-size:18px; font-weight:800;">No Matching Parts Found</h3>
+          <p style="color:#64748b; font-size:14px; margin:0 0 20px; line-height: 1.5;">We currently do not have matching parts in stock for <strong>${year} ${make} ${model}</strong>.</p>
+          <a href="/collections/all" style="display:inline-block; padding:10px 22px; background:#0f172a; color:#ffffff; text-decoration:none; border-radius:8px; font-weight:700; font-size:13px; transition: background 0.2s ease;">View All Store Catalog →</a>
+        `;
+        const firstGrid = gridContainers[0] || document.querySelector('main, #MainContent');
+        if (firstGrid && firstGrid.parentNode) {
+          firstGrid.parentNode.insertBefore(emptyStateEl, firstGrid);
+        }
+      }
+    } else if (emptyStateEl) {
+      emptyStateEl.remove();
+    }
 
     const countLabel = document.getElementById('ProductCount') || document.querySelector('.product-count') || document.getElementById('ProductCountDesktop');
     if (countLabel) {

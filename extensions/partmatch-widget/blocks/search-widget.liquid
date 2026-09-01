@@ -84,7 +84,26 @@
     </h2>
   {%- endif -%}
 
-  <div class="pm-widget__form">
+  <div class="pm-tabs" style="display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;">
+    <button type="button" class="pm-tab pm-tab--active" data-pm-tab="ymm" style="padding: 6px 16px; border-radius: 20px; border: 1px solid #0f172a; background: #0f172a; color: #ffffff; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+      BY VEHICLE (YMM)
+    </button>
+    <button type="button" class="pm-tab" data-pm-tab="vin" style="padding: 6px 16px; border-radius: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+      BY VIN LOOKUP
+    </button>
+  </div>
+
+  <div class="pm-vin-panel" data-pm-vin-panel style="display: none; max-width: 680px; margin: 0 auto 20px; text-align: center;">
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <input type="text" data-partmatch-vin placeholder="ENTER 17-DIGIT VIN NUMBER..." maxlength="17" style="flex: 1; height: 46px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: var(--pm-btn-radius, 6px); font-size: 14px; font-weight: 600; text-transform: uppercase; color: #0f172a;" />
+      <button type="button" class="pm-btn pm-btn--search" data-partmatch-vin-btn style="height: 46px;">
+        DECODE VIN
+      </button>
+    </div>
+    <div data-partmatch-vin-feedback style="display: none; font-size: 13px; font-weight: 600; margin-top: 10px; text-align: left; padding: 8px 12px; border-radius: 6px;"></div>
+  </div>
+
+  <div class="pm-widget__form" data-pm-ymm-panel>
     <div class="pm-widget__select-wrap">
       <select
         data-partmatch-year

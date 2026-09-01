@@ -227,11 +227,6 @@ export default function PlansPage() {
   const actionData = useActionData();
   const navigation = useNavigation();
   const [billingCycle, setBillingCycle] = useState("monthly"); // "monthly" | "annual"
-  const [openFaq, setOpenFaq] = useState({});
-
-  const toggleFaq = (id) => {
-    setOpenFaq((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
 
   const isSubmitting = navigation.state !== "idle";
 
@@ -263,15 +258,17 @@ export default function PlansPage() {
       features: [
         "Up to 100 Fitment Records",
         "Year / Make / Model Search Widget",
-        "Single Page Inline Results",
+        "Single Page & Collection Results Grid",
         "Local Storage Vehicle Garage",
         "Standard Email Support",
       ],
       disabledFeatures: [
+        "VIN Lookup & Auto-Decoder",
+        "Sub-Model & Trim Level Filtering",
         "Universal Products Support",
-        "Product Compatibility Checker",
+        "Product Page Compatibility Badge",
         "CSV Bulk Import & Export",
-        "Search Analytics & Logs",
+        "Search Analytics & Gap Logs",
         "AI-Powered Fitment Suggestions",
       ],
     },
@@ -287,6 +284,8 @@ export default function PlansPage() {
       highlight: true,
       features: [
         "Up to 5,000 Fitment Records",
+        "VIN Lookup Search & Auto-Select",
+        "Sub-Model & Trim Level Filtering",
         "Unlimited Universal Products",
         "Native Collection & Custom Results Grid",
         "Product Page Fitment Checker Badge",
@@ -309,6 +308,8 @@ export default function PlansPage() {
       highlight: false,
       features: [
         "Unlimited Fitment Records",
+        "Unlimited VIN Lookup Searches",
+        "Advanced Sub-Model & Trim Specs",
         "Unlimited Universal Products",
         "All Growth Professional Features",
         "AI-Powered Fitment Suggestions (Beta)",
@@ -319,32 +320,6 @@ export default function PlansPage() {
         "Custom Storefront Integration Help",
       ],
       disabledFeatures: [],
-    },
-  ];
-
-  const faqs = [
-    {
-      id: "faq-1",
-      question: "Can I upgrade or downgrade my plan at any time?",
-      answer:
-        "Yes! You can switch plans whenever your business needs change. Upgrade immediately to unlock higher record limits and features, or downgrade with zero data loss.",
-    },
-    {
-      id: "faq-2",
-      question: "What happens if I reach my fitment record limit?",
-      answer:
-        "Your existing vehicle search widgets and storefront fitment lookup will continue working seamlessly. You will simply be prompted to upgrade to add new vehicle records.",
-    },
-    {
-      id: "faq-3",
-      question: "Does PartMatch affect my storefront load speed?",
-      answer:
-        "Not at all. PartMatch storefront scripts are lightweight (under 12KB) and load asynchronously via CDN, ensuring zero delay to your theme rendering.",
-    },
-    {
-      id: "faq-4",
-      question: "How does the annual billing discount work?",
-      answer: `Choosing annual billing saves you ${globalAnnualDiscount}% compared to monthly billing.${merchantDiscount > 0 ? ` Additionally, your store has an exclusive merchant VIP discount of ${merchantDiscount}%, bringing your total annual savings to ${totalAnnualDiscount}%.` : ""}`,
     },
   ];
 
@@ -581,6 +556,18 @@ export default function PlansPage() {
                 <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Unlimited</td>
               </tr>
               <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>VIN Lookup & Decoder</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Included</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Unlimited & Auto-Fill</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Sub-Model & Trim Filtering</td>
+                <td style={{ padding: "14px 16px", textAlign: "center" }}>Basic Year/Make/Model</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Full Trim Support</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Advanced Engine Specs</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
                 <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Universal Products</td>
                 <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
                 <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Unlimited</td>
@@ -611,6 +598,30 @@ export default function PlansPage() {
                 <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Realtime Export</td>
               </tr>
               <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Results Display Options</td>
+                <td style={{ padding: "14px 16px", textAlign: "center" }}>Inline Only</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ /collections/all, Dedicated Page & Inline</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Multi-Layout & Custom Theme Integration</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>AI Fitment Matcher (Beta)</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", color: "#cbd5e1" }}>✕</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "800", color: "#047857" }}>✓ Included (AI Suggestions)</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Storefront Proxy SLA & Performance</td>
+                <td style={{ padding: "14px 16px", textAlign: "center" }}>Standard App Proxy</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ High-Speed CDN Proxy</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ VIP Dedicated Proxy & Edge Caching</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Database Backups & Safety</td>
+                <td style={{ padding: "14px 16px", textAlign: "center" }}>Weekly Auto-Backup</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700" }}>Daily Automated Backups</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Hourly Realtime Backups</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
                 <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Support SLA</td>
                 <td style={{ padding: "14px 16px", textAlign: "center" }}>Standard Email</td>
                 <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700" }}>Priority Support</td>
@@ -618,48 +629,6 @@ export default function PlansPage() {
               </tr>
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* FAQ Section */}
-      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 4px 16px rgba(0,0,0,0.03)" }}>
-        <h2 style={{ margin: "0 0 20px", fontSize: "22px", fontWeight: "800", color: "#0f172a" }}>
-          Frequently Asked Questions
-        </h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {faqs.map((faq) => {
-            const isOpen = openFaq[faq.id];
-            return (
-              <div key={faq.id} style={{ border: "1px solid #e2e8f0", borderRadius: "12px", overflow: "hidden" }}>
-                <button
-                  type="button"
-                  onClick={() => toggleFaq(faq.id)}
-                  style={{
-                    width: "100%",
-                    padding: "18px 24px",
-                    background: "#ffffff",
-                    border: "none",
-                    textAlign: "left",
-                    fontSize: "15px",
-                    fontWeight: "700",
-                    color: "#0f172a",
-                    cursor: "pointer",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <span>{faq.question}</span>
-                  <span style={{ color: "#64748b", fontSize: "14px" }}>{isOpen ? "▲" : "▼"}</span>
-                </button>
-                {isOpen && (
-                  <div style={{ padding: "0 24px 20px", color: "#64748b", fontSize: "14px", lineHeight: "1.6", borderTop: "1px solid #f1f5f9" }}>
-                    {faq.answer}
-                  </div>
-                )}
-              </div>
-            );
-          })}
         </div>
       </div>
     </div>

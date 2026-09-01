@@ -1,3 +1,4 @@
+import { useState } from "react";
 const json = (data, init) => Response.json(data, init);
 import { useLoaderData, Form, useNavigation, useSearchParams, Link } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -32,7 +33,7 @@ export const loader = async ({ request }) => {
       orderBy: [{ year: "desc" }, { make: "asc" }, { model: "asc" }],
       skip,
       take: PAGE_SIZE,
-      include: { _count: { select: { products: true, collections: true, tags: true } } },
+      include: { _count: { select: { products: true, collections: true, tags: true, skus: true } } },
     }),
     prisma.fitmentRecord?.count({ where }),
   ]);
@@ -60,6 +61,33 @@ export default function FitmentIndex() {
   const [searchParams] = useSearchParams();
   const totalPages = Math.ceil(total / pageSize);
   const loading = navigation.state !== "idle";
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportCSV = async () => {
+    try {
+      setExporting(true);
+      const res = await fetch("/app/fitment/export");
+      if (!res.ok) {
+        const text = await res.text();
+        alert(text || "Export failed. Please check plan permissions.");
+        setExporting(false);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `fitment-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Failed to export CSV: " + err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div style={{ padding: "28px 24px", maxWidth: "1240px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>
@@ -82,11 +110,20 @@ export default function FitmentIndex() {
             + Add Fitment Record
           </Link>
           <Link to="/app/fitment/import" style={secondaryBtn}>
-            ↑ Import CSV
+            Import CSV
           </Link>
-          <a href="/app/fitment/export" style={outlineBtn}>
-            ↓ Export CSV
-          </a>
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            disabled={exporting}
+            style={{
+              ...outlineBtn,
+              cursor: exporting ? "wait" : "pointer",
+              opacity: exporting ? 0.7 : 1,
+            }}
+          >
+            {exporting ? "Downloading CSV…" : "Export CSV"}
+          </button>
         </div>
       </div>
 
@@ -196,6 +233,21 @@ export default function FitmentIndex() {
                         }}
                       >
                         {r._count.tags} Tag{r._count.tags === 1 ? "" : "s"}
+                      </span>
+                    )}
+                    {r._count.skus > 0 && (
+                      <span
+                        style={{
+                          background: "#fff1f2",
+                          border: "1px solid #fecdd3",
+                          color: "#e11d48",
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          fontWeight: "700",
+                          fontSize: "12px",
+                        }}
+                      >
+                        {r._count.skus} SKU{r._count.skus === 1 ? "" : "s"}
                       </span>
                     )}
                   </Link>

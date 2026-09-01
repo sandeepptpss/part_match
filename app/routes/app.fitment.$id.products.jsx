@@ -16,6 +16,7 @@ export const loader = async ({ request, params }) => {
       products: true,
       collections: true,
       tags: true,
+      skus: true,
     },
   });
 
@@ -37,6 +38,13 @@ export const loader = async ({ request, params }) => {
             handle
             featuredImage { url altText }
             status
+            variants(first: 10) {
+              nodes {
+                id
+                sku
+                title
+              }
+            }
           }
         }
         collections(first: 50) {
@@ -76,7 +84,7 @@ export const action = async ({ request, params }) => {
   // Verify ownership
   const fitment = await prisma.fitmentRecord?.findFirst({
     where: { id: fitmentId, shop: session.shop },
-    include: { products: true, collections: true, tags: true },
+    include: { products: true, collections: true, tags: true, skus: true },
   });
   if (!fitment) throw new Response("Not found", { status: 404 });
 
@@ -192,11 +200,36 @@ export const action = async ({ request, params }) => {
 
   if (intent === "removeTag") {
     const id = parseInt(formData.get("id"), 10);
-    const tag = formData.get("tag")?.toString() || "";
 
     await prisma.fitmentTag?.deleteMany({ where: { id, fitmentId } });
-    return json({ ok: true, actionType: "remove", message: `Tag "#${tag}" removed from fitment.` });
+    return json({ ok: true, actionType: "remove", message: "Product Tag removed from fitment." });
   }
+
+  // SKU-Based Mapping Actions
+  if (intent === "addSku") {
+    let sku = formData.get("sku")?.toString() || "";
+    sku = sku.trim();
+
+    if (!sku) return json({ error: "Please enter or select a product SKU" }, { status: 400 });
+
+    await prisma.fitmentSku?.upsert({
+      where: { fitmentId_sku: { fitmentId, sku } },
+      create: { fitmentId, sku },
+      update: {},
+    });
+
+    return json({ ok: true, actionType: "add", message: `Product SKU "${sku}" assigned successfully!` });
+  }
+
+  if (intent === "removeSku") {
+    const id = parseInt(formData.get("id"), 10);
+    const sku = formData.get("sku")?.toString() || "SKU";
+
+    await prisma.fitmentSku?.deleteMany({ where: { id, fitmentId } });
+    return json({ ok: true, actionType: "remove", message: `SKU "${sku}" removed from fitment.` });
+  }
+
+  return json({ ok: true });
 
   return json({ ok: true });
 };
@@ -211,12 +244,30 @@ export default function FitmentProducts() {
   const [activeTab, setActiveTab] = useState("products");
   const [customTagInput, setCustomTagInput] = useState("");
   const [customCollectionInput, setCustomCollectionInput] = useState("");
+  const [customSkuInput, setCustomSkuInput] = useState("");
 
   const assignedProductIds = new Set(fitment.products.map((p) => p.shopifyProductId));
   const availableProducts = shopifyProducts.filter((p) => !assignedProductIds.has(p.id));
 
   const assignedCollectionIds = new Set(fitment.collections.map((c) => c.shopifyCollectionId));
   const availableCollections = shopifyCollections.filter((c) => !assignedCollectionIds.has(c.id));
+
+  const assignedSkus = new Set(fitment.skus.map((s) => s.sku));
+
+  // Extract all variant SKUs from shopify products for picker
+  const availableVariantSkus = [];
+  shopifyProducts.forEach((p) => {
+    (p.variants?.nodes || []).forEach((v) => {
+      if (v.sku && !assignedSkus.has(v.sku)) {
+        availableVariantSkus.push({
+          sku: v.sku,
+          variantTitle: v.title,
+          productTitle: p.title,
+          productId: p.id,
+        });
+      }
+    });
+  });
 
   const aiResult = actionData?.intent === "aiSuggest" ? actionData : null;
   const suggestionMap = new Map((aiResult?.suggestions ?? []).map((s) => [s.shopifyProductId, s]));
@@ -239,10 +290,10 @@ export default function FitmentProducts() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "16px" }}>
         <div>
           <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 6px", color: "#0f172a", letterSpacing: "-0.5px" }}>
-            {fitment.year} {fitment.make} {fitment.model}
+            {fitment.year} {fitment.make} {fitment.model} {fitment.trim}
           </h1>
           <p style={{ color: "#64748b", margin: 0, fontSize: "14px" }}>
-            Manage compatible search result rules (Products, Collections, and Tags) for this vehicle fitment.
+            Manage compatible search result rules (Products, Collections, Tags, and SKUs) for this vehicle fitment.
           </p>
         </div>
 
@@ -251,6 +302,7 @@ export default function FitmentProducts() {
           <span style={badgeStyle("#2563eb", "#eff6ff")}>{fitment.products.length} Products</span>
           <span style={badgeStyle("#7c3aed", "#f3e8ff")}>{fitment.collections.length} Collections</span>
           <span style={badgeStyle("#059669", "#ecfdf5")}>{fitment.tags.length} Tags</span>
+          <span style={badgeStyle("#e11d48", "#fff1f2")}>{fitment.skus.length} SKUs</span>
         </div>
       </div>
 
@@ -305,21 +357,28 @@ export default function FitmentProducts() {
           onClick={() => setActiveTab("products")}
           style={tabButtonStyle(activeTab === "products")}
         >
-          🔄 Products List ({fitment.products.length})
+          Products List ({fitment.products.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("collections")}
           style={tabButtonStyle(activeTab === "collections")}
         >
-          📁 Collection ({fitment.collections.length})
+          Collection ({fitment.collections.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("tags")}
           style={tabButtonStyle(activeTab === "tags")}
         >
-          # Tags ({fitment.tags.length})
+          Tags ({fitment.tags.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("skus")}
+          style={tabButtonStyle(activeTab === "skus")}
+        >
+          SKU ({fitment.skus.length})
         </button>
       </div>
 
@@ -639,6 +698,104 @@ export default function FitmentProducts() {
                 Using tags allows you to bulk-associate products in Shopify without manually picking every product inside the app. Simply tag your products in Shopify Admin and add the tag here.
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── TAB 4: SKU-BASED MAPPING ────────────────────────────────────── */}
+      {activeTab === "skus" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+          {/* Assigned SKUs */}
+          <div style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+              <h3 style={cardHead}>Assigned Product SKUs ({fitment.skus.length})</h3>
+              <span style={{ fontSize: "12px", color: "#e11d48", fontWeight: "700", background: "#fff1f2", padding: "2px 8px", borderRadius: "10px" }}>SKU-Based</span>
+            </div>
+            <p style={{ fontSize: "13px", color: "#64748b", marginTop: 0, marginBottom: "16px" }}>
+              Any product variant matching these SKUs will automatically fit <strong>{fitment.year} {fitment.make} {fitment.model} {fitment.trim}</strong>.
+            </p>
+
+            {fitment.skus.length === 0 ? (
+              <p style={{ color: "#64748b", fontSize: "14px", fontStyle: "italic", padding: "20px 0", textAlign: "center" }}>
+                No product SKUs assigned to this fitment yet.
+              </p>
+            ) : (
+              <div style={{ maxHeight: "420px", overflowY: "auto" }}>
+                {fitment.skus.map((s) => (
+                  <div key={s.id} style={productRow}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a", fontFamily: "monospace" }}>
+                        {s.sku}
+                      </div>
+                    </div>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="removeSku" />
+                      <input type="hidden" name="id" value={s.id} />
+                      <input type="hidden" name="sku" value={s.sku} />
+                      <button type="submit" style={removeBtn} disabled={saving}>✕ Remove</button>
+                    </Form>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add SKU Picker / Form */}
+          <div style={card}>
+            <h3 style={cardHead}>Add Product SKU</h3>
+            <p style={{ fontSize: "13px", color: "#64748b", marginTop: 0, marginBottom: "16px" }}>
+              Enter a product SKU manually or pick from your store variants below.
+            </p>
+
+            <Form method="post" style={{ marginBottom: "20px", background: "#f8fafc", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+              <input type="hidden" name="intent" value="addSku" />
+              <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                Product SKU Number
+              </label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  name="sku"
+                  value={customSkuInput}
+                  onChange={(e) => setCustomSkuInput(e.target.value)}
+                  placeholder="e.g. BRAKE-PAD-2025-FRONT"
+                  style={{ flex: 1, padding: "8px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "13px" }}
+                />
+                <button
+                  type="submit"
+                  style={addBtn}
+                  disabled={saving || !customSkuInput.trim()}
+                  onClick={() => setTimeout(() => setCustomSkuInput(""), 100)}
+                >
+                  + Add SKU
+                </button>
+              </div>
+            </Form>
+
+            <h4 style={{ fontSize: "13px", fontWeight: "700", color: "#475569", marginBottom: "10px" }}>
+              Store Product SKUs ({availableVariantSkus.length})
+            </h4>
+
+            {availableVariantSkus.length === 0 ? (
+              <p style={{ color: "#64748b", fontSize: "13px", fontStyle: "italic" }}>
+                No unassigned product SKUs found in store catalog.
+              </p>
+            ) : (
+              <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                {availableVariantSkus.map((item, idx) => (
+                  <div key={idx} style={productRow}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "700", fontSize: "13px", color: "#0f172a", fontFamily: "monospace" }}>{item.sku}</div>
+                      <div style={{ color: "#64748b", fontSize: "12px" }}>{item.productTitle} {item.variantTitle !== "Default Title" ? `(${item.variantTitle})` : ""}</div>
+                    </div>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="addSku" />
+                      <input type="hidden" name="sku" value={item.sku} />
+                      <button type="submit" style={addBtn} disabled={saving}>+ Add</button>
+                    </Form>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

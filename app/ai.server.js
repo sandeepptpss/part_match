@@ -96,3 +96,87 @@ Return ONLY a JSON array (no prose, no markdown fences) of the products likely c
 
   return { suggestions, mock: false };
 }
+
+// Scans an entire list of products and extracts vehicle fitment rules directly from titles & descriptions
+export async function extractFitmentFromProductCatalog(products) {
+  const anthropic = getClient();
+  if (!products?.length) return { extracted: [], mock: !anthropic };
+
+  // Fallback pattern matching if no API key is set
+  if (!anthropic) {
+    const extracted = [];
+    const yearPattern = /\b(19\d{2}|20\d{2})\b/g;
+    const commonMakes = ["honda", "toyota", "ford", "chevrolet", "bmw", "audi", "mercedes", "nissan", "dodge", "jeep", "hyundai", "kia"];
+
+    products.forEach((p) => {
+      const text = `${p.title} ${p.description || ""}`.toLowerCase();
+      const years = text.match(yearPattern) || ["2022"];
+      const makeMatch = commonMakes.find((m) => text.includes(m));
+
+      if (makeMatch) {
+        const make = makeMatch.charAt(0).toUpperCase() + makeMatch.slice(1);
+        const words = text.split(/\s+/);
+        const makeIdx = words.indexOf(makeMatch);
+        const modelCandidate = words[makeIdx + 1] ? words[makeIdx + 1].toUpperCase() : "GENERAL";
+
+        years.slice(0, 3).forEach((yr) => {
+          extracted.push({
+            shopifyProductId: p.id,
+            shopifyHandle: p.handle || "",
+            productTitle: p.title,
+            year: yr,
+            make: make,
+            model: modelCandidate,
+            trim: "",
+            confidence: 80,
+            reason: `[DEMO] Matched ${make} ${modelCandidate} in product title`,
+          });
+        });
+      }
+    });
+    return { extracted, mock: true };
+  }
+
+  const productList = products
+    .slice(0, 25)
+    .map((p) => `- id="${p.id}" handle="${p.handle}" title="${p.title}" desc="${(p.description || "").slice(0, 150).replace(/"/g, "'")}"`)
+    .join("\n");
+
+  const prompt = `Analyze these auto parts products and extract vehicle compatibility (Year, Make, Model, Trim).
+Products:
+${productList}
+
+Return ONLY a JSON array of mappings:
+[{"productId": "<id>", "handle": "<handle>", "productTitle": "<title>", "year": "<YYYY>", "make": "<Make>", "model": "<Model>", "trim": "<Trim or empty>", "confidence": <80-100>, "reason": "<short explanation>"}]
+If no specific vehicle is mentioned, return [].`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const text = response.content?.[0]?.type === "text" ? response.content[0].text : "[]";
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
+
+    const validExtracted = (Array.isArray(parsed) ? parsed : []).map((item) => ({
+      shopifyProductId: item.productId || item.id,
+      shopifyHandle: item.handle || "",
+      productTitle: item.productTitle || "",
+      year: String(item.year || ""),
+      make: String(item.make || ""),
+      model: String(item.model || ""),
+      trim: String(item.trim || ""),
+      confidence: Math.min(100, Math.max(0, parseInt(item.confidence, 10) || 85)),
+      reason: String(item.reason || "AI Extracted Fitment").slice(0, 150),
+    })).filter((item) => item.year && item.make && item.model);
+
+    return { extracted: validExtracted, mock: false };
+  } catch (err) {
+    console.error("[ai.server] Catalog extraction error:", err);
+    return { extracted: [], mock: false };
+  }
+}
+

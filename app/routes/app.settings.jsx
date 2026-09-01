@@ -66,13 +66,16 @@ export const action = async ({ request }) => {
   const { plan } = await getShopPlan(shop);
   const limits = planLimits(plan);
 
+  const redirectOnSearch = formData.get("redirect_on_search") === "true";
+  const resultsUrl = formData.get("results_url")?.toString() || "/collections/all";
+
   const data = {
     requireYear: formData.get("require_year") === "true",
     requireAllFields: formData.get("require_all_fields") === "true",
     logNoResults: formData.get("log_no_results") === "true",
     includeUniversal: formData.get("include_universal") === "true",
-    redirectOnSearch: formData.get("redirect_on_search") === "true",
-    resultsUrl: formData.get("results_url")?.toString() || "/collections/all",
+    redirectOnSearch,
+    resultsUrl,
     persistSelection: formData.get("persist_selection") === "true",
     enableGarage: formData.get("enable_garage") === "true",
     showFitmentChecker: formData.get("show_fitment_checker") === "true" && limits.fitmentChecker,
@@ -93,7 +96,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Settings() {
-  const { shop, settings, planAllowsFitmentChecker, planLabel, isAdmin } = useLoaderData();
+  const { shop, settings, planAllowsFitmentChecker, planLabel } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
 
@@ -105,7 +108,7 @@ export default function Settings() {
     requireAllFields: initial.requireAllFields ?? true,
     logNoResults: initial.logNoResults ?? true,
     includeUniversal: initial.includeUniversal ?? true,
-    redirectOnSearch: initial.redirectOnSearch ?? false,
+    redirectOnSearch: initial.redirectOnSearch ?? true,
     resultsUrl: initial.resultsUrl ?? "/collections/all",
     persistSelection: initial.persistSelection ?? true,
     enableGarage: initial.enableGarage ?? true,
@@ -192,7 +195,9 @@ export default function Settings() {
       )}
 
       <Form method="post">
-        
+        <input type="hidden" name="redirect_on_search" value={formState.redirectOnSearch ? "true" : "false"} />
+        <input type="hidden" name="results_url" value={formState.resultsUrl} />
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(480px, 1fr))", gap: "24px", marginBottom: "28px" }}>
           
           {/* Card 1: Search & Lookup Behavior */}
@@ -232,7 +237,7 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Card 2: Product Matching & Redirection */}
+          {/* Card 2: Product Matching & Results */}
           <div style={cardStyle}>
             <div style={cardHeaderStyle}>
               <div style={badgeStyle("#ecfdf5", "#047857")}>02</div>
@@ -251,31 +256,137 @@ export default function Settings() {
                 desc="Display items marked as 'Universal' alongside specific vehicle fitment matches."
               />
 
-              <ToggleRow
-                name="redirect_on_search"
-                checked={formState.redirectOnSearch}
-                onChange={(val) => handleChange("redirectOnSearch", val)}
-                title="Redirect to Dedicated Results Page"
-                desc="Redirect the browser to a dedicated page instead of rendering inline widget results."
-              />
+              {/* Results Display Options */}
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "18px" }}>
+                <label style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a", display: "block", marginBottom: "4px" }}>
+                  Results Display Options
+                </label>
+                <span style={{ fontSize: "12px", color: "#64748b", display: "block", marginBottom: "14px" }}>
+                  Choose where and how search results appear when a customer submits a search query.
+                </span>
 
-              {formState.redirectOnSearch && (
-                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginTop: "4px" }}>
-                  <label style={{ fontSize: "13px", fontWeight: "700", color: "#334155", display: "block", marginBottom: "6px" }}>
-                    Dedicated Results Page URL Path
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {/* Option 1: /collections/all */}
+                  <label
+                    onClick={() => {
+                      handleChange("redirectOnSearch", true);
+                      handleChange("resultsUrl", "/collections/all");
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      padding: "12px 14px",
+                      borderRadius: "8px",
+                      background: formState.redirectOnSearch && formState.resultsUrl === "/collections/all" ? "#ffffff" : "#f1f5f9",
+                      border: `1px solid ${formState.redirectOnSearch && formState.resultsUrl === "/collections/all" ? "#008060" : "#cbd5e1"}`,
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="display_option_radio"
+                      checked={formState.redirectOnSearch && formState.resultsUrl === "/collections/all"}
+                      onChange={() => {
+                        handleChange("redirectOnSearch", true);
+                        handleChange("resultsUrl", "/collections/all");
+                      }}
+                      style={{ accentColor: "#008060" }}
+                    />
+                    <div>
+                      <strong style={{ fontSize: "13px", color: "#0f172a", display: "block" }}>/collections/all</strong>
+                      <span style={{ fontSize: "12px", color: "#64748b" }}>Redirects search queries to the main store collection page.</span>
+                    </div>
                   </label>
-                  <input
-                    name="results_url"
-                    value={formState.resultsUrl}
-                    onChange={(e) => handleChange("resultsUrl", e.target.value)}
-                    style={inputStyle}
-                    placeholder="/collections/all"
-                  />
-                  <span style={{ fontSize: "12px", color: "#64748b", marginTop: "6px", display: "block" }}>
-                    Default path for search results (e.g. <code style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px" }}>/collections/all</code> or <code style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px" }}>/pages/find-your-part</code>).
-                  </span>
+
+                  {/* Option 2: Dedicated Results Page */}
+                  <label
+                    onClick={() => {
+                      handleChange("redirectOnSearch", true);
+                      if (formState.resultsUrl === "/collections/all" || !formState.resultsUrl) {
+                        handleChange("resultsUrl", "/pages/find-your-part");
+                      }
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      padding: "12px 14px",
+                      borderRadius: "8px",
+                      background: formState.redirectOnSearch && formState.resultsUrl !== "/collections/all" ? "#ffffff" : "#f1f5f9",
+                      border: `1px solid ${formState.redirectOnSearch && formState.resultsUrl !== "/collections/all" ? "#008060" : "#cbd5e1"}`,
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="display_option_radio"
+                      checked={formState.redirectOnSearch && formState.resultsUrl !== "/collections/all"}
+                      onChange={() => {
+                        handleChange("redirectOnSearch", true);
+                        if (formState.resultsUrl === "/collections/all" || !formState.resultsUrl) {
+                          handleChange("resultsUrl", "/pages/find-your-part");
+                        }
+                      }}
+                      style={{ accentColor: "#008060" }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ fontSize: "13px", color: "#0f172a", display: "block" }}>Dedicated Results Page</strong>
+                      <span style={{ fontSize: "12px", color: "#64748b" }}>Redirects to a custom store URL or dedicated page template.</span>
+                    </div>
+                  </label>
+
+                  {/* Custom URL Input for Dedicated Page */}
+                  {formState.redirectOnSearch && formState.resultsUrl !== "/collections/all" && (
+                    <div style={{ marginLeft: "28px", marginTop: "2px" }}>
+                      <input
+                        value={formState.resultsUrl}
+                        onChange={(e) => handleChange("resultsUrl", e.target.value)}
+                        style={inputStyle}
+                        placeholder="/pages/find-your-part"
+                      />
+                      <span style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", display: "block" }}>
+                        Enter dedicated page path (e.g. <code style={{ background: "#e2e8f0", padding: "1px 4px", borderRadius: "3px" }}>/pages/find-your-part</code>).
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Option 3: Same Page (Inline Results) */}
+                  <label
+                    onClick={() => {
+                      handleChange("redirectOnSearch", false);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      padding: "12px 14px",
+                      borderRadius: "8px",
+                      background: !formState.redirectOnSearch ? "#ffffff" : "#f1f5f9",
+                      border: `1px solid ${!formState.redirectOnSearch ? "#008060" : "#cbd5e1"}`,
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="display_option_radio"
+                      checked={!formState.redirectOnSearch}
+                      onChange={() => {
+                        handleChange("redirectOnSearch", false);
+                      }}
+                      style={{ accentColor: "#008060" }}
+                    />
+                    <div>
+                      <strong style={{ fontSize: "13px", color: "#0f172a", display: "block" }}>Same Page (Inline Results)</strong>
+                      <span style={{ fontSize: "12px", color: "#64748b" }}>Renders matching product grid directly under the widget without redirection.</span>
+                    </div>
+                  </label>
                 </div>
-              )}
+              </div>
+
             </div>
           </div>
 
@@ -407,7 +518,7 @@ function ToggleRow({ name, checked, onChange, title, desc, disabled, planBadge }
       style={{
         display: "flex",
         alignItems: "flex-start",
-        justify: "space-between",
+        justifyContent: "space-between",
         gap: "16px",
         padding: "14px 16px",
         borderRadius: "12px",
