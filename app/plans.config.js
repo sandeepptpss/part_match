@@ -64,8 +64,8 @@ export const PLAN_TIERS = {
     analyticsDetail: "detailed",
     aiFitmentSuggestions: true,
     vinLookup: true,
-    vinMonthlyLimit: Infinity,
-    vinOverageRate: 0,
+    vinMonthlyLimit: 1000,
+    vinOverageRate: 0.03,
     acesPiesSupport: true,
   },
 };

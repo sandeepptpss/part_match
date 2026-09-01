@@ -150,7 +150,7 @@ export const action = async ({ request }) => {
         : 0;
     const totalAnnualDiscount = globalAnnualDiscount + merchantDiscount;
 
-    const baseMonthlyPrice = selectedPlan === "growth" ? 19.99 : 49.99;
+    const baseMonthlyPrice = selectedPlan === "growth" ? 24.99 : 69.99;
     let dynamicLineItem;
 
     if (billingCycle === "annual") {
@@ -289,8 +289,8 @@ export default function PlansPage() {
     {
       id: "growth",
       name: "Growth Professional",
-      priceMonthly: calcMonthly(19.99),
-      priceAnnual: calcAnnual(19.99),
+      priceMonthly: calcMonthly(24.99),
+      priceAnnual: calcAnnual(24.99),
       period: "per month",
       description: "Complete fitment solution for growing auto parts retailers.",
       recordsLimit: "5,000 Fitment Records",
@@ -314,8 +314,8 @@ export default function PlansPage() {
     {
       id: "enterprise",
       name: "Enterprise Unlimited",
-      priceMonthly: calcMonthly(49.99),
-      priceAnnual: calcAnnual(49.99),
+      priceMonthly: calcMonthly(69.99),
+      priceAnnual: calcAnnual(69.99),
       period: "per month",
       description: "Maximum scale & dedicated performance for large automotive catalogs.",
       recordsLimit: "Unlimited Fitment Records",
@@ -323,7 +323,7 @@ export default function PlansPage() {
       highlight: false,
       features: [
         "Unlimited Fitment Records",
-        "Unlimited VIN Lookup Searches (No Cap)",
+        "1,000 VIN Lookups Included/mo ($0.03 extra)",
         "Enterprise ACES / PIES Standard Engine",
         "Advanced Sub-Model & Trim Specs",
         "Unlimited Universal Products",
@@ -580,7 +580,7 @@ export default function PlansPage() {
                 <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>VIN Lookup Quota & Overage</td>
                 <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕ Disabled</td>
                 <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>100 / mo ($0.05/extra)</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Unlimited (No Cap)</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>1,000 / mo ($0.03/extra)</td>
               </tr>
               <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
                 <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>ACES / PIES Data Standards (XML & CSV)</td>
