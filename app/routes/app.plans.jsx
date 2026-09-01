@@ -31,8 +31,13 @@ export const loader = async ({ request }) => {
   let productMappingCount = 0;
   let universalCount = 0;
   let searchLogCount = 0;
+  let vinLookupCount = 0;
   let appSettings = null;
   let globalSettings = null;
+
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
 
   try {
     const res = await Promise.all([
@@ -40,6 +45,7 @@ export const loader = async ({ request }) => {
       prisma.fitmentProduct?.count({ where: { fitment: { shop } } }) ?? 0,
       prisma.universalProduct?.count({ where: { shop } }) ?? 0,
       prisma.searchLog?.count({ where: { shop } }) ?? 0,
+      prisma.vinLookupLog?.count({ where: { shop, createdAt: { gte: startOfMonth } } }) ?? 0,
       prisma.appSettings?.findFirst({ where: { shop } }),
       prisma.appSettings?.findFirst({ where: { shop: "__GLOBAL__" } }),
     ]);
@@ -47,8 +53,9 @@ export const loader = async ({ request }) => {
     productMappingCount = res[1];
     universalCount = res[2];
     searchLogCount = res[3];
-    appSettings = res[4];
-    globalSettings = res[5];
+    vinLookupCount = res[4];
+    appSettings = res[5];
+    globalSettings = res[6];
   } catch (err) {
     console.error("[plans loader] Error fetching stats:", err);
   }
@@ -73,6 +80,7 @@ export const loader = async ({ request }) => {
     productMappingCount,
     universalCount,
     searchLogCount,
+    vinLookupCount,
     sessionEmail,
     isAdmin,
     globalAnnualDiscount,
@@ -82,6 +90,8 @@ export const loader = async ({ request }) => {
     activePlan: shopPlan.plan,
     billingCycle: shopPlan.billingCycle,
     recordsLimit: Number.isFinite(limits.fitmentLimit) ? limits.fitmentLimit : null,
+    vinLimit: limits.vinMonthlyLimit,
+    vinOverageRate: limits.vinOverageRate,
   };
 };
 
@@ -214,6 +224,7 @@ export default function PlansPage() {
     productMappingCount,
     universalCount,
     searchLogCount,
+    vinLookupCount,
     sessionEmail,
     isAdmin,
     globalAnnualDiscount,
@@ -222,6 +233,8 @@ export default function PlansPage() {
     isCustomMerchantDiscount,
     activePlan,
     recordsLimit,
+    vinLimit,
+    vinOverageRate,
   } = useLoaderData();
 
   const actionData = useActionData();
@@ -264,6 +277,7 @@ export default function PlansPage() {
       ],
       disabledFeatures: [
         "VIN Lookup & Auto-Decoder",
+        "ACES / PIES Export & Import",
         "Sub-Model & Trim Level Filtering",
         "Universal Products Support",
         "Product Page Compatibility Badge",
@@ -284,7 +298,8 @@ export default function PlansPage() {
       highlight: true,
       features: [
         "Up to 5,000 Fitment Records",
-        "VIN Lookup Search & Auto-Select",
+        "100 VIN Lookups Included/mo ($0.05 extra)",
+        "ACES / PIES XML & CSV Import/Export",
         "Sub-Model & Trim Level Filtering",
         "Unlimited Universal Products",
         "Native Collection & Custom Results Grid",
@@ -308,7 +323,8 @@ export default function PlansPage() {
       highlight: false,
       features: [
         "Unlimited Fitment Records",
-        "Unlimited VIN Lookup Searches",
+        "Unlimited VIN Lookup Searches (No Cap)",
+        "Enterprise ACES / PIES Standard Engine",
         "Advanced Sub-Model & Trim Specs",
         "Unlimited Universal Products",
         "All Growth Professional Features",
@@ -385,8 +401,13 @@ export default function PlansPage() {
               Choose the right tier to scale vehicle fitment lookups and catalog capacity.
             </p>
           </div>
-          <div style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.2)", color: "#ffffff", padding: "10px 20px", borderRadius: "20px", fontSize: "14px", fontWeight: "700", backdropFilter: "blur(4px)" }}>
-            Current Usage: <strong style={{ color: "#34d399" }}>{fitmentCount.toLocaleString()}</strong> / {recordsLimit === null ? "Unlimited" : recordsLimit.toLocaleString()} Records
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.2)", color: "#ffffff", padding: "10px 18px", borderRadius: "14px", fontSize: "13px", fontWeight: "700", backdropFilter: "blur(4px)" }}>
+              Catalog Usage: <strong style={{ color: "#34d399" }}>{fitmentCount.toLocaleString()}</strong> / {recordsLimit === null ? "Unlimited" : recordsLimit.toLocaleString()} Records
+            </div>
+            <div style={{ background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.2)", color: "#ffffff", padding: "10px 18px", borderRadius: "14px", fontSize: "13px", fontWeight: "700", backdropFilter: "blur(4px)" }}>
+              VIN Lookups (Month): <strong style={{ color: "#60a5fa" }}>{vinLookupCount.toLocaleString()}</strong> / {vinLimit === Infinity || vinLimit === null ? "Unlimited" : vinLimit.toLocaleString()} {vinOverageRate > 0 ? `($${vinOverageRate}/extra)` : ""}
+            </div>
           </div>
         </div>
 
@@ -556,10 +577,16 @@ export default function PlansPage() {
                 <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Unlimited</td>
               </tr>
               <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>VIN Lookup & Decoder</td>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>VIN Lookup Quota & Overage</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕ Disabled</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>100 / mo ($0.05/extra)</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Unlimited (No Cap)</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>ACES / PIES Data Standards (XML & CSV)</td>
                 <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Included</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Unlimited & Auto-Fill</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Import & Export</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "800", color: "#047857" }}>✓ Full Enterprise Engine</td>
               </tr>
               <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
                 <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Sub-Model & Trim Filtering</td>

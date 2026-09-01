@@ -1,6 +1,7 @@
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import { getShopPlan, planLimits } from "../plans.server";
+import prisma from "../db.server";
 
 // POST or GET /apps/partmatch/api/vin-lookup?vin= (proxied storefront request)
 export async function action({ request }) {
@@ -17,6 +18,24 @@ export async function action({ request }) {
       { error: "VIN Lookup requires a Growth Professional or Enterprise plan subscription." },
       { status: 403 }
     );
+  }
+
+  // Calculate current month VIN lookup count
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const monthVinCount = await prisma.vinLookupLog.count({
+    where: {
+      shop: session.shop,
+      createdAt: { gte: startOfMonth },
+    },
+  });
+
+  // Check if monthly limit reached for non-unlimited plans
+  if (limits.vinMonthlyLimit && Number.isFinite(limits.vinMonthlyLimit) && monthVinCount >= limits.vinMonthlyLimit) {
+    // Note: In live Shopify Billing usage charges, extra lookups can be billed at limits.vinOverageRate ($0.05)
+    console.log(`[VIN Lookup] Store ${session.shop} reached monthly limit of ${limits.vinMonthlyLimit} lookups. Overage rate: $${limits.vinOverageRate}/lookup.`);
   }
 
   let vin = "";
@@ -56,6 +75,20 @@ export async function action({ request }) {
     const make = result.Make || "";
     const model = result.Model || "";
     const trim = result.Trim || result.DisplacementL ? `${result.Trim || ""} ${result.DisplacementL ? result.DisplacementL + "L" : ""}`.trim() : "";
+    const vehicleTitle = `${year} ${make} ${model} ${trim}`.trim();
+
+    // Log successful VIN lookup for usage tracking
+    try {
+      await prisma.vinLookupLog.create({
+        data: {
+          shop: session.shop,
+          vin,
+          vehicle: vehicleTitle,
+        },
+      });
+    } catch (logErr) {
+      console.error("[api/vin-lookup] Error logging lookup:", logErr);
+    }
 
     return json({
       success: true,
@@ -64,7 +97,12 @@ export async function action({ request }) {
       make,
       model,
       trim,
-      vehicleTitle: `${year} ${make} ${model} ${trim}`.trim(),
+      vehicleTitle,
+      usage: {
+        usedThisMonth: monthVinCount + 1,
+        monthlyLimit: limits.vinMonthlyLimit,
+        overageRate: limits.vinOverageRate,
+      },
     });
   } catch (err) {
     console.error("[api/vin-lookup]", err);
@@ -75,3 +113,4 @@ export async function action({ request }) {
 export async function loader(args) {
   return action(args);
 }
+

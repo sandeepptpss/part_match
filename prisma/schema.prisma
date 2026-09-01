@@ -225,3 +225,17 @@ model ShopPlan {
   subscriptionId String?
   updatedAt      DateTime @updatedAt
 }
+
+// ─── VIN Lookup Usage Logs ──────────────────────────────────────────────────
+// Tracks VIN lookups per shop for usage-based billing / limit monitoring.
+model VinLookupLog {
+  id        Int      @id @default(autoincrement())
+  shop      String   @db.VarChar(100)
+  vin       String   @db.VarChar(17)
+  vehicle   String   @default("") @db.VarChar(255)
+  createdAt DateTime @default(now())
+
+  @@index([shop])
+  @@index([shop, createdAt])
+}
+

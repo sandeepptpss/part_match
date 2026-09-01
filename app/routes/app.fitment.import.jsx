@@ -20,46 +20,16 @@ export const action = async ({ request }) => {
   const limits = planLimits(plan);
   if (!limits.csvImportExport) {
     return json({
-      error: `CSV Bulk Import is available on the Growth Professional plan and above. Upgrade your plan to import records.`,
+      error: `CSV & ACES/PIES Bulk Import is available on the Growth Professional plan and above. Upgrade your plan to import records.`,
       results: null,
     });
   }
 
   const formData = await request.formData();
-  const csvText = formData.get("csv")?.toString() || "";
+  const rawInput = formData.get("csv")?.toString() || "";
 
-  if (!csvText.trim()) {
-    return json({ error: "No CSV data provided", results: null });
-  }
-
-  const lines = csvText.trim().split("\n").filter((l) => l.trim());
-  if (lines.length < 2) {
-    return json({ error: "CSV must have a header row and at least one data row", results: null });
-  }
-
-  // Parse header
-  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/["']/g, ""));
-  let yearIdx = headers.indexOf("year");
-  let makeIdx = headers.indexOf("make");
-  let modelIdx = headers.indexOf("model");
-  let trimIdx = headers.indexOf("trim");
-  let handleIdx = headers.indexOf("product_handle");
-  const collectionIdx = headers.indexOf("collection_handle");
-  const tagIdx = headers.indexOf("tag");
-  const skuIdx = headers.indexOf("sku");
-
-  // ACES / PIES Auto-Detection
-  if (yearIdx === -1) yearIdx = headers.indexOf("yearid") !== -1 ? headers.indexOf("yearid") : headers.indexOf("modelyear");
-  if (makeIdx === -1) makeIdx = headers.indexOf("makename") !== -1 ? headers.indexOf("makename") : headers.indexOf("make_name");
-  if (modelIdx === -1) modelIdx = headers.indexOf("modelname") !== -1 ? headers.indexOf("modelname") : headers.indexOf("model_name");
-  if (trimIdx === -1) trimIdx = headers.indexOf("enginebase") !== -1 ? headers.indexOf("enginebase") : headers.indexOf("submodelname");
-  if (handleIdx === -1) handleIdx = headers.indexOf("partnumber") !== -1 ? headers.indexOf("partnumber") : headers.indexOf("product_handle");
-
-  if (yearIdx === -1 || makeIdx === -1 || modelIdx === -1) {
-    return json({
-      error: `Missing required columns. Found: ${headers.join(", ")}. Required: year, make, model (or ACES columns: YearID, MakeName, ModelName, PartNumber)`,
-      results: null,
-    });
+  if (!rawInput.trim()) {
+    return json({ error: "No CSV or ACES/PIES XML data provided", results: null });
   }
 
   const results = { created: 0, skipped: 0, errors: [] };
@@ -79,6 +49,121 @@ export const action = async ({ request }) => {
     const product = data.data?.productByHandle ?? null;
     handleCache.set(handle, product);
     return product;
+  }
+
+  // Auto-detect XML format (ACES XML or PIES XML)
+  if (rawInput.trim().startsWith("<")) {
+    const appRegex = /<App[\s\S]*?<\/App>/gi;
+    const matches = rawInput.match(appRegex) || [];
+
+    if (matches.length === 0) {
+      return json({
+        error: "Invalid ACES XML format. No <App> fitment records found.",
+        results: null,
+      });
+    }
+
+    for (let i = 0; i < matches.length; i++) {
+      const appBlock = matches[i];
+      const getXmlTag = (tag) => {
+        const match = appBlock.match(new RegExp(`<${tag}[^>]*>([^<]+)<\/${tag}>`, "i"));
+        return match ? match[1].trim() : "";
+      };
+
+      const year = getXmlTag("Year") || getXmlTag("BaseVehicleYear") || getXmlTag("ModelYear");
+      const make = getXmlTag("Make") || getXmlTag("MakeName");
+      const model = getXmlTag("Model") || getXmlTag("ModelName");
+      const trim = getXmlTag("SubModel") || getXmlTag("SubModelName") || getXmlTag("EngineBase") || getXmlTag("Trim");
+      const partNumber = getXmlTag("Part") || getXmlTag("PartNumber") || getXmlTag("ItemNumber");
+
+      if (!year || !make || !model) {
+        results.errors.push(`XML Record ${i + 1}: Missing Year, Make, or Model`);
+        results.skipped++;
+        continue;
+      }
+
+      if (limitReached) {
+        results.errors.push(`XML Record ${i + 1}: skipped — ${limits.fitmentLimit.toLocaleString()} fitment record limit reached`);
+        results.skipped++;
+        continue;
+      }
+
+      try {
+        const existingRecord = Number.isFinite(limits.fitmentLimit)
+          ? await prisma.fitmentRecord.findUnique({
+              where: { shop_year_make_model_trim: { shop, year, make, model, trim: trim || "" } },
+            })
+          : null;
+
+        if (!existingRecord && Number.isFinite(limits.fitmentLimit) && recordCount >= limits.fitmentLimit) {
+          limitReached = true;
+          results.errors.push(`XML Record ${i + 1}: skipped — ${limits.fitmentLimit.toLocaleString()} fitment limit reached`);
+          results.skipped++;
+          continue;
+        }
+
+        const fitment = await prisma.fitmentRecord.upsert({
+          where: { shop_year_make_model_trim: { shop, year, make, model, trim: trim || "" } },
+          create: { shop, year, make, model, trim: trim || "" },
+          update: {},
+        });
+        if (!existingRecord) recordCount++;
+
+        if (partNumber) {
+          const product = await resolveHandle(partNumber.toLowerCase());
+          if (product) {
+            await prisma.fitmentProduct.upsert({
+              where: { fitmentId_shopifyProductId: { fitmentId: fitment.id, shopifyProductId: product.id } },
+              create: { fitmentId: fitment.id, shopifyProductId: product.id, shopifyHandle: product.handle, productTitle: product.title },
+              update: { shopifyHandle: product.handle, productTitle: product.title },
+            });
+          } else {
+            await prisma.fitmentSku.upsert({
+              where: { fitmentId_sku: { fitmentId: fitment.id, sku: partNumber } },
+              create: { fitmentId: fitment.id, sku: partNumber },
+              update: {},
+            });
+          }
+        }
+        results.created++;
+      } catch (err) {
+        results.errors.push(`XML Record ${i + 1}: ${err.message}`);
+        results.skipped++;
+      }
+    }
+
+    return json({ error: null, results });
+  }
+
+  // Parse CSV format
+  const lines = rawInput.trim().split("\n").filter((l) => l.trim());
+  if (lines.length < 2) {
+    return json({ error: "CSV must have a header row and at least one data row", results: null });
+  }
+
+  // Parse header
+  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/["']/g, ""));
+  let yearIdx = headers.indexOf("year");
+  let makeIdx = headers.indexOf("make");
+  let modelIdx = headers.indexOf("model");
+  let trimIdx = headers.indexOf("trim");
+  let handleIdx = headers.indexOf("product_handle");
+  const collectionIdx = headers.indexOf("collection_handle");
+  const tagIdx = headers.indexOf("tag");
+  const skuIdx = headers.indexOf("sku");
+
+  // ACES / PIES Auto-Detection
+  if (yearIdx === -1) yearIdx = headers.indexOf("yearid") !== -1 ? headers.indexOf("yearid") : headers.indexOf("modelyear");
+  if (makeIdx === -1) makeIdx = headers.indexOf("makename") !== -1 ? headers.indexOf("makename") : headers.indexOf("make_name");
+  if (modelIdx === -1) modelIdx = headers.indexOf("modelname") !== -1 ? headers.indexOf("modelname") : headers.indexOf("model_name");
+  if (trimIdx === -1) trimIdx = headers.indexOf("enginebase") !== -1 ? headers.indexOf("enginebase") : (headers.indexOf("submodelname") !== -1 ? headers.indexOf("submodelname") : headers.indexOf("submodel"));
+  if (handleIdx === -1) handleIdx = headers.indexOf("partnumber") !== -1 ? headers.indexOf("partnumber") : (headers.indexOf("partno") !== -1 ? headers.indexOf("partno") : headers.indexOf("itemnumber"));
+
+  if (yearIdx === -1 || makeIdx === -1 || modelIdx === -1) {
+    return json({
+      error: `Missing required columns. Found: ${headers.join(", ")}. Required: year, make, model (or ACES columns: YearID/ModelYear, MakeName, ModelName, PartNumber)`,
+      results: null,
+    });
   }
 
   for (let i = 1; i < lines.length; i++) {
@@ -129,7 +214,12 @@ export const action = async ({ request }) => {
         const product = await resolveHandle(handle);
 
         if (!product) {
-          results.errors.push(`Row ${i + 1}: product handle "${handle}" not found in store — fitment record was still created`);
+          // If handle isn't a direct handle match, attach it as SKU
+          await prisma.fitmentSku.upsert({
+            where: { fitmentId_sku: { fitmentId: fitment.id, sku: handle } },
+            create: { fitmentId: fitment.id, sku: handle },
+            update: {},
+          });
         } else {
           await prisma.fitmentProduct.upsert({
             where: {
@@ -203,12 +293,35 @@ export default function FitmentImport() {
 2024,Polaris,Sportsman 850,SP,,,polaris-sportsman-2024,
 2026,BMW,M3,Base,,,,SKU-BMW-M3-2026`;
 
+  const sampleACES = `YearID,MakeName,ModelName,SubModelName,PartNumber,BrandID
+2025,Ford,F-150,XL,BP-FORD-F150-2025,MOTORCRAFT
+2024,Chevrolet,Silverado 1500,LT,BRK-CHEVY-2024,ACDELCO
+2026,Toyota,Camry,SE,OIL-TOY-CAMRY-2026,DENSO`;
+
+  const sampleACESXML = `<?xml version="1.0" encoding="utf-8"?>
+<ACES version="3.2">
+  <Header>
+    <Company>AutoParts Enterprise</Company>
+    <SenderName>PartMatch Export</SenderName>
+  </Header>
+  <App action="A" id="1">
+    <BaseVehicleYear>2025</BaseVehicleYear>
+    <MakeName>Ford</MakeName>
+    <ModelName>F-150</ModelName>
+    <SubModelName>XL 3.5L V6</SubModelName>
+    <PartNumber>BP-FORD-F150-2025</PartNumber>
+  </App>
+  <App action="A" id="2">
+    <BaseVehicleYear>2024</BaseVehicleYear>
+    <MakeName>BMW</MakeName>
+    <ModelName>M3</ModelName>
+    <SubModelName>Competition 3.0L</SubModelName>
+    <PartNumber>bmw-m3-brake-rotors</PartNumber>
+  </App>
+</ACES>`;
+
   const handleFileUpload = (file) => {
     if (!file) return;
-    if (!file.name.endsWith(".csv") && file.type !== "text/csv") {
-      alert("Please upload a valid .csv file.");
-      return;
-    }
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -225,12 +338,12 @@ export default function FitmentImport() {
     }
   };
 
-  const handleDownloadSample = () => {
-    const blob = new Blob([sampleCSV], { type: "text/csv;charset=utf-8;" });
+  const downloadFile = (content, filename, type) => {
+    const blob = new Blob([content], { type: `${type};charset=utf-8;` });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "partmatch_sample_fitments.csv");
+    link.setAttribute("download", filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -243,13 +356,16 @@ export default function FitmentImport() {
       </Link>
 
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)" }}>
-        <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "20px", marginBottom: "24px" }}>
-          <div style={{ display: "flex", alignItems: "center", justify: "space-between" }}>
-            <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>Bulk Import Fitments via CSV</h1>
+        <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "20px", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>Bulk Import Fitments (CSV & ACES / PIES)</h1>
+            <p style={{ color: "#64748b", margin: "4px 0 0", fontSize: "14px" }}>
+              Upload standard PartMatch CSV files or North American Enterprise <strong>ACES / PIES (XML & CSV)</strong> industry data.
+            </p>
           </div>
-          <p style={{ color: "#64748b", margin: "4px 0 0", fontSize: "14px" }}>
-            Upload a CSV file or paste raw CSV formatted fitments to bulk update your product compatibility.
-          </p>
+          <span style={{ background: "linear-gradient(135deg, #059669 0%, #10b981 100%)", color: "#ffffff", padding: "6px 14px", borderRadius: "12px", fontSize: "12px", fontWeight: "800" }}>
+            ACES / PIES READY
+          </span>
         </div>
 
         {actionData?.error && (
@@ -280,41 +396,34 @@ export default function FitmentImport() {
           </div>
         )}
 
-        {/* Sample & Download */}
-        <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "24px" }}>
-          <details style={{ flex: 1, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px 16px" }}>
-            <summary style={{ cursor: "pointer", color: "#2563eb", fontSize: "14px", fontWeight: "700" }}>
-              View Standard CSV Header & Rows Format
-            </summary>
-            <pre style={{ background: "#0f172a", color: "#e2e8f0", padding: "16px", borderRadius: "8px", fontSize: "13px", marginTop: "12px", overflowX: "auto", fontFamily: "monospace" }}>
-              {sampleCSV}
-            </pre>
-          </details>
-          <button
-            type="button"
-            onClick={handleDownloadSample}
-            style={{
-              background: "#f1f5f9",
-              color: "#0f172a",
-              border: "1px solid #cbd5e1",
-              padding: "12px 18px",
-              borderRadius: "10px",
-              fontSize: "13px",
-              fontWeight: "700",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            Download Sample CSV
-          </button>
+        {/* Sample Templates Section */}
+        <div style={{ marginBottom: "24px" }}>
+          <label style={{ display: "block", fontWeight: "700", color: "#1e293b", marginBottom: "10px", fontSize: "14px" }}>
+            Download Format Samples & Templates:
+          </label>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => downloadFile(sampleCSV, "partmatch_sample.csv", "text/csv")}
+              style={{ background: "#f8fafc", color: "#0f172a", border: "1px solid #cbd5e1", padding: "10px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
+            >
+              📄 Download Standard CSV Sample
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadFile(sampleACES, "aces_fitment_sample.csv", "text/csv")}
+              style={{ background: "#f8fafc", color: "#059669", border: "1px solid #a7f3d0", padding: "10px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
+            >
+              🚗 Download ACES CSV Sample
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadFile(sampleACESXML, "aces_catalog_sample.xml", "application/xml")}
+              style={{ background: "#f8fafc", color: "#2563eb", border: "1px solid #bfdbfe", padding: "10px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
+            >
+              ⚡ Download ACES XML Enterprise Sample
+            </button>
+          </div>
         </div>
 
         {!planAllowsImport && (

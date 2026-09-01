@@ -36,6 +36,9 @@ export const PLAN_TIERS = {
     analyticsDetail: "basic",
     aiFitmentSuggestions: false,
     vinLookup: false,
+    vinMonthlyLimit: 0,
+    vinOverageRate: 0,
+    acesPiesSupport: false,
   },
   growth: {
     label: "Growth Professional",
@@ -47,6 +50,9 @@ export const PLAN_TIERS = {
     analyticsDetail: "detailed",
     aiFitmentSuggestions: false,
     vinLookup: true,
+    vinMonthlyLimit: 100,
+    vinOverageRate: 0.05,
+    acesPiesSupport: true,
   },
   enterprise: {
     label: "Enterprise Unlimited",
@@ -58,6 +64,9 @@ export const PLAN_TIERS = {
     analyticsDetail: "detailed",
     aiFitmentSuggestions: true,
     vinLookup: true,
+    vinMonthlyLimit: Infinity,
+    vinOverageRate: 0,
+    acesPiesSupport: true,
   },
 };
 
