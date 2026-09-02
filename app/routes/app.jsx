@@ -3,6 +3,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import GlobalSupportWidget from "../components/GlobalSupportWidget";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -30,11 +31,11 @@ export const loader = async ({ request }) => {
     console.error("[app loader] fitment count error:", err);
   }
 
-  return { apiKey, fitmentCount, isAdmin };
+  return { apiKey, fitmentCount, isAdmin, shop, sessionEmail };
 };
 
 export default function App() {
-  const { apiKey, fitmentCount, isAdmin } = useLoaderData();
+  const { apiKey, fitmentCount, isAdmin, shop, sessionEmail } = useLoaderData();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -47,9 +48,11 @@ export default function App() {
         <s-link href="/app/analytics">Analytics</s-link>
         <s-link href="/app/plans">Plans & Pricing</s-link>
         <s-link href="/app/settings">Settings</s-link>
+        <s-link href="/app/support">Help & Support</s-link>
         {isAdmin && <s-link href="/app/admin">App Admin</s-link>}
       </s-app-nav>
       <Outlet />
+      <GlobalSupportWidget shop={shop} sessionEmail={sessionEmail} />
     </AppProvider>
   );
 }

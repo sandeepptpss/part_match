@@ -34,8 +34,18 @@ export async function loader({ request }) {
   }
 
   try {
+    // Only return Models for fitments that have at least 1 mapped product, collection, tag, or SKU
     const fitments = await prisma.fitmentRecord?.findMany({
-      where: { shop, year },
+      where: {
+        shop,
+        year,
+        OR: [
+          { products: { some: {} } },
+          { collections: { some: {} } },
+          { tags: { some: {} } },
+          { skus: { some: {} } },
+        ],
+      },
       select: { make: true, model: true },
     });
 

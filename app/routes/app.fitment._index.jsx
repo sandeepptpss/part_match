@@ -194,16 +194,18 @@ export default function FitmentIndex() {
                   >
                     <span
                       style={{
-                        background: r._count.products > 0 ? "#ecfdf5" : "#f1f5f9",
-                        border: `1px solid ${r._count.products > 0 ? "#a7f3d0" : "#cbd5e1"}`,
-                        color: r._count.products > 0 ? "#047857" : "#64748b",
+                        background: (r._count.products + r._count.collections + r._count.tags + r._count.skus) > 0 ? "#ecfdf5" : "#fff7ed",
+                        border: `1px solid ${(r._count.products + r._count.collections + r._count.tags + r._count.skus) > 0 ? "#a7f3d0" : "#fed7aa"}`,
+                        color: (r._count.products + r._count.collections + r._count.tags + r._count.skus) > 0 ? "#047857" : "#c2410c",
                         padding: "3px 10px",
                         borderRadius: "12px",
                         fontWeight: "700",
                         fontSize: "12px",
                       }}
                     >
-                      {r._count.products} Product{r._count.products === 1 ? "" : "s"}
+                      {(r._count.products + r._count.collections + r._count.tags + r._count.skus) > 0
+                        ? `✓ ${r._count.products} Product${r._count.products === 1 ? "" : "s"}`
+                        : "0 Products (Hidden on Storefront)"}
                     </span>
                     {r._count.collections > 0 && (
                       <span

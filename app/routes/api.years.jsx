@@ -30,14 +30,23 @@ export async function loader({ request }) {
   }
 
   try {
+    // Only return Years for fitments that have at least 1 mapped product, collection, tag, or SKU
     const years = await prisma.fitmentRecord?.findMany({
-      where: { shop },
+      where: {
+        shop,
+        OR: [
+          { products: { some: {} } },
+          { collections: { some: {} } },
+          { tags: { some: {} } },
+          { skus: { some: {} } },
+        ],
+      },
       select: { year: true },
       distinct: ["year"],
       orderBy: { year: "desc" },
     });
 
-    return json({ years: years.map((r) => r.year) });
+    return json({ years: (years || []).map((r) => r.year) });
   } catch (err) {
     console.error("[api/years]", err);
     return json({ years: [] });

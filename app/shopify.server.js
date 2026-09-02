@@ -19,15 +19,19 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   billing: {
     growth_monthly: {
+      trialDays: 14,
       lineItems: [{ amount: 19.99, currencyCode: "USD", interval: BillingInterval.Every30Days }],
     },
     growth_annual: {
+      trialDays: 14,
       lineItems: [{ amount: 191.88, currencyCode: "USD", interval: BillingInterval.Annual }],
     },
     enterprise_monthly: {
+      trialDays: 14,
       lineItems: [{ amount: 49.99, currencyCode: "USD", interval: BillingInterval.Every30Days }],
     },
     enterprise_annual: {
+      trialDays: 14,
       lineItems: [{ amount: 479.88, currencyCode: "USD", interval: BillingInterval.Annual }],
     },
   },
