@@ -1,6 +1,6 @@
 const json = (data, init) => Response.json(data, init);
 import { useState } from "react";
-import { useLoaderData, Form, useNavigation, useActionData } from "react-router";
+import { useLoaderData, useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -12,6 +12,9 @@ const DEFAULT_SETTINGS = {
   modelLabel: "MODEL",
   searchButtonText: "SEARCH",
   clearButtonText: "CLEAR",
+  voiceSearchButtonText: "ASK AI",
+  voiceSearchTabText: "AI VOICE SEARCH",
+  voiceSearchPlaceholder: "e.g. Front brake pads for 2018 Honda Civic EX...",
   primaryColor: "#0f172a",
   textColor: "#ffffff",
   backgroundColor: "#ffffff",
@@ -21,6 +24,7 @@ const DEFAULT_SETTINGS = {
   showSubheading: true,
   enableVinSearch: true,
   enableYmmSearch: true,
+  enableVoiceSearch: true,
   enableBgImage: false,
   backgroundImage: "",
   bgOverlayOpacity: 20,
@@ -97,6 +101,9 @@ export const action = async ({ request }) => {
     modelLabel: formData.get("modelLabel")?.toString() || "MODEL",
     searchButtonText: formData.get("searchButtonText")?.toString() || "SEARCH",
     clearButtonText: formData.get("clearButtonText")?.toString() || "CLEAR",
+    voiceSearchButtonText: formData.get("voiceSearchButtonText")?.toString() || "ASK AI",
+    voiceSearchTabText: formData.get("voiceSearchTabText")?.toString() || "AI VOICE SEARCH",
+    voiceSearchPlaceholder: formData.get("voiceSearchPlaceholder")?.toString() || "e.g. Front brake pads for 2018 Honda Civic EX...",
     primaryColor: formData.get("primaryColor")?.toString() || "#0f172a",
     textColor: formData.get("textColor")?.toString() || "#ffffff",
     backgroundColor: formData.get("backgroundColor")?.toString() || "#ffffff",
@@ -106,6 +113,7 @@ export const action = async ({ request }) => {
     showSubheading: formData.get("showSubheading") === "on",
     enableVinSearch: formData.get("enableVinSearch") === "on",
     enableYmmSearch: formData.get("enableYmmSearch") === "on",
+    enableVoiceSearch: formData.get("enableVoiceSearch") === "on",
   };
 
   try {
@@ -116,16 +124,7 @@ export const action = async ({ request }) => {
     });
   } catch (err) {
     console.error("[app.widget action error]", err);
-    try {
-      const { enableYmmSearch, ...safeData } = data;
-      await prisma.widgetSettings.upsert({
-        where: { shop },
-        create: { shop, ...safeData },
-        update: safeData,
-      });
-    } catch (fallbackErr) {
-      return json({ error: `Failed to save widget settings: ${err?.message || "Database error"}` }, { status: 500 });
-    }
+    return json({ error: `Failed to save widget settings: ${err?.message || "Database error"}` }, { status: 500 });
   }
 
   return json({ saved: true });
@@ -133,9 +132,9 @@ export const action = async ({ request }) => {
 
 export default function WidgetSettings() {
   const { shop, settings } = useLoaderData();
-  const actionData = useActionData();
-  const navigation = useNavigation();
-  const saving = navigation.state !== "idle";
+  const fetcher = useFetcher();
+  const actionData = fetcher.data;
+  const saving = fetcher.state !== "idle";
 
   const [previewDevice, setPreviewDevice] = useState("desktop");
   const [copiedSnippet, setCopiedSnippet] = useState(false);
@@ -148,6 +147,9 @@ export default function WidgetSettings() {
     modelLabel: settings.modelLabel || DEFAULT_SETTINGS.modelLabel,
     searchButtonText: settings.searchButtonText || DEFAULT_SETTINGS.searchButtonText,
     clearButtonText: settings.clearButtonText || DEFAULT_SETTINGS.clearButtonText,
+    voiceSearchButtonText: settings.voiceSearchButtonText || DEFAULT_SETTINGS.voiceSearchButtonText,
+    voiceSearchTabText: settings.voiceSearchTabText || DEFAULT_SETTINGS.voiceSearchTabText,
+    voiceSearchPlaceholder: settings.voiceSearchPlaceholder || DEFAULT_SETTINGS.voiceSearchPlaceholder,
     primaryColor: settings.primaryColor || DEFAULT_SETTINGS.primaryColor,
     textColor: settings.textColor || DEFAULT_SETTINGS.textColor,
     backgroundColor: settings.backgroundColor || DEFAULT_SETTINGS.backgroundColor,
@@ -157,6 +159,7 @@ export default function WidgetSettings() {
     showSubheading: settings.showSubheading ?? DEFAULT_SETTINGS.showSubheading,
     enableVinSearch: settings.enableVinSearch ?? DEFAULT_SETTINGS.enableVinSearch,
     enableYmmSearch: settings.enableYmmSearch ?? DEFAULT_SETTINGS.enableYmmSearch,
+    enableVoiceSearch: settings.enableVoiceSearch ?? DEFAULT_SETTINGS.enableVoiceSearch,
     enableBgImage: settings.enableBgImage ?? DEFAULT_SETTINGS.enableBgImage,
     backgroundImage: settings.backgroundImage || "",
     bgOverlayOpacity: typeof settings.bgOverlayOpacity === "number" ? settings.bgOverlayOpacity : DEFAULT_SETTINGS.bgOverlayOpacity,
@@ -242,7 +245,7 @@ export default function WidgetSettings() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 480px", gap: "28px", alignItems: "start" }}>
         
         {/* Left Column: Complete Controls Form */}
-        <Form method="post">
+        <fetcher.Form method="post">
           
           {/* Section 1: Text Labels & Custom Copy */}
           <div style={sectionCard}>
@@ -290,6 +293,21 @@ export default function WidgetSettings() {
                 <input type="text" name="clearButtonText" value={s.clearButtonText} onChange={handleChange} style={inputStyle} />
               </div>
             </div>
+
+            <div style={{ ...fieldGridTriple, marginTop: "14px" }}>
+              <div>
+                <label style={labelStyle}>AI Voice Search Button Text</label>
+                <input type="text" name="voiceSearchButtonText" value={s.voiceSearchButtonText ?? "ASK AI"} onChange={handleChange} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>AI Voice Search Tab Text</label>
+                <input type="text" name="voiceSearchTabText" value={s.voiceSearchTabText ?? "AI VOICE SEARCH"} onChange={handleChange} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>AI Voice Search Placeholder</label>
+                <input type="text" name="voiceSearchPlaceholder" value={s.voiceSearchPlaceholder ?? "e.g. Front brake pads for 2018 Honda Civic EX..."} onChange={handleChange} style={inputStyle} />
+              </div>
+            </div>
           </div>
 
           {/* Section 2: Colors & Presets */}
@@ -327,7 +345,7 @@ export default function WidgetSettings() {
                       <span style={{ width: "12px", height: "12px", borderRadius: "50%", background: preset.btn }} />
                       <span style={{ width: "12px", height: "12px", borderRadius: "50%", background: preset.text, border: "1px solid #cbd5e1" }} />
                     </div>
-                    <span style={{ fontSize: "11px", fontWeight: "700", color: "#1e293b", display: "block" }}>
+                    <span style={{ fontSize: "11px", fontWeight: "700", color: preset.bg === "#18181b" || preset.bg === "#0f172a" ? "#ffffff" : "#1e293b", display: "block" }}>
                       {preset.name}
                     </span>
                   </button>
@@ -394,6 +412,13 @@ export default function WidgetSettings() {
               <span style={{ fontSize: "14px", fontWeight: "600", color: "#1e293b" }}>Enable VIN Lookup Search Tab</span>
             </label>
             <label style={checkboxLabelStyle}>
+              <input type="checkbox" name="enableVoiceSearch" checked={s.enableVoiceSearch ?? true} onChange={handleChange} style={{ width: "18px", height: "18px", accentColor: "#008060" }} />
+              <span style={{ fontSize: "14px", fontWeight: "600", color: "#1e293b", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <span>Enable AI Voice & Conversational Search Assistant</span>
+                <span style={{ background: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: "800" }}>NEW</span>
+              </span>
+            </label>
+            <label style={checkboxLabelStyle}>
               <input type="checkbox" name="showHeading" checked={s.showHeading} onChange={handleChange} style={{ width: "18px", height: "18px", accentColor: "#008060" }} />
               <span style={{ fontSize: "14px", fontWeight: "600", color: "#1e293b" }}>Display Heading Title on Storefront</span>
             </label>
@@ -412,7 +437,7 @@ export default function WidgetSettings() {
               </button>
             </div>
           </div>
-        </Form>
+        </fetcher.Form>
 
         {/* Right Column: Sticky Device Live Preview */}
         <div style={{ position: "sticky", top: "24px" }}>
@@ -521,10 +546,11 @@ export default function WidgetSettings() {
                 )}
 
                 {/* Tabs Preview */}
-                {s.enableYmmSearch && s.enableVinSearch && (
+                {(s.enableYmmSearch || s.enableVinSearch || s.enableVoiceSearch) && (
                   <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
-                    <span style={{ padding: "4px 12px", borderRadius: "14px", background: s.primaryColor, color: s.textColor, fontSize: "11px", fontWeight: "700" }}>BY VEHICLE (YMM)</span>
-                    <span style={{ padding: "4px 12px", borderRadius: "14px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", fontSize: "11px", fontWeight: "700" }}>BY VIN LOOKUP</span>
+                    {s.enableYmmSearch && <span style={{ padding: "4px 12px", borderRadius: "14px", background: s.primaryColor, color: s.textColor, fontSize: "11px", fontWeight: "700" }}>BY VEHICLE (YMM)</span>}
+                    {s.enableVinSearch && <span style={{ padding: "4px 12px", borderRadius: "14px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", fontSize: "11px", fontWeight: "700" }}>BY VIN LOOKUP</span>}
+                    {s.enableVoiceSearch && <span style={{ padding: "4px 12px", borderRadius: "14px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", fontSize: "11px", fontWeight: "700" }}>{s.voiceSearchTabText || "AI VOICE SEARCH"}</span>}
                   </div>
                 )}
 

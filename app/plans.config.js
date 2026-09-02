@@ -40,6 +40,8 @@ export const PLAN_TIERS = {
     vinMonthlyLimit: 0,
     vinOverageRate: 0,
     acesPiesSupport: false,
+    competitorMigration: false,
+    voiceSearchAssistant: false,
   },
   growth: {
     label: "Growth Professional",
@@ -54,6 +56,8 @@ export const PLAN_TIERS = {
     vinMonthlyLimit: 100,
     vinOverageRate: 0.05,
     acesPiesSupport: true,
+    competitorMigration: true,
+    voiceSearchAssistant: true,
   },
   enterprise: {
     label: "Enterprise Unlimited",
@@ -68,6 +72,8 @@ export const PLAN_TIERS = {
     vinMonthlyLimit: 1000,
     vinOverageRate: 0.03,
     acesPiesSupport: true,
+    competitorMigration: true,
+    voiceSearchAssistant: true,
   },
 };
 

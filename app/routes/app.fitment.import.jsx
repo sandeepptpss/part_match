@@ -26,11 +26,22 @@ export const action = async ({ request }) => {
   }
 
   const formData = await request.formData();
-  const rawInput = formData.get("csv")?.toString() || "";
+  let rawInput = formData.get("csv")?.toString() || "";
 
   if (!rawInput.trim()) {
     return json({ error: "No CSV or ACES/PIES XML data provided", results: null });
   }
+
+  let cleanInput = rawInput.trim();
+  if (cleanInput.startsWith("{") && cleanInput.includes('"csv"')) {
+    try {
+      const parsedJson = JSON.parse(cleanInput);
+      if (parsedJson.csv) {
+        cleanInput = parsedJson.csv.trim();
+      }
+    } catch (_) {}
+  }
+  rawInput = cleanInput;
 
   const results = { created: 0, skipped: 0, errors: [] };
   const handleCache = new Map();
@@ -138,30 +149,26 @@ export const action = async ({ request }) => {
   // Parse CSV format
   const lines = rawInput.trim().split("\n").filter((l) => l.trim());
   if (lines.length < 2) {
-    return json({ error: "CSV must have a header row and at least one data row", results: null });
+    return json({
+      error: "The uploaded CSV file contains only a header row without any fitment data rows. Please add fitment data rows below the header line.",
+      results: null,
+    });
   }
 
-  // Parse header
+  // Parse header - 1-Click Competitor Auto-Detection (Easy YMM, Fitment Group, Smart Search, Simple YMM, ACES)
   const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/["']/g, ""));
-  let yearIdx = headers.indexOf("year");
-  let makeIdx = headers.indexOf("make");
-  let modelIdx = headers.indexOf("model");
-  let trimIdx = headers.indexOf("trim");
-  let handleIdx = headers.indexOf("product_handle");
-  const collectionIdx = headers.indexOf("collection_handle");
-  const tagIdx = headers.indexOf("tag");
-  const skuIdx = headers.indexOf("sku");
-
-  // ACES / PIES Auto-Detection
-  if (yearIdx === -1) yearIdx = headers.indexOf("yearid") !== -1 ? headers.indexOf("yearid") : headers.indexOf("modelyear");
-  if (makeIdx === -1) makeIdx = headers.indexOf("makename") !== -1 ? headers.indexOf("makename") : headers.indexOf("make_name");
-  if (modelIdx === -1) modelIdx = headers.indexOf("modelname") !== -1 ? headers.indexOf("modelname") : headers.indexOf("model_name");
-  if (trimIdx === -1) trimIdx = headers.indexOf("enginebase") !== -1 ? headers.indexOf("enginebase") : (headers.indexOf("submodelname") !== -1 ? headers.indexOf("submodelname") : headers.indexOf("submodel"));
-  if (handleIdx === -1) handleIdx = headers.indexOf("partnumber") !== -1 ? headers.indexOf("partnumber") : (headers.indexOf("partno") !== -1 ? headers.indexOf("partno") : headers.indexOf("itemnumber"));
+  let yearIdx = headers.findIndex((h) => ["year", "yearid", "modelyear", "model_year", "yyyy"].includes(h));
+  let makeIdx = headers.findIndex((h) => ["make", "makename", "make_name", "manufacturer", "brand"].includes(h));
+  let modelIdx = headers.findIndex((h) => ["model", "modelname", "model_name", "vehicle_model"].includes(h));
+  let trimIdx = headers.findIndex((h) => ["trim", "submodel", "submodelname", "enginebase", "sub_model", "engine", "trim_level"].includes(h));
+  let handleIdx = headers.findIndex((h) => ["product_handle", "handle", "product handle", "partnumber", "partno", "part_number", "itemnumber", "product_sku", "shopify_handle"].includes(h));
+  const collectionIdx = headers.findIndex((h) => ["collection_handle", "collection", "collection_slug"].includes(h));
+  const tagIdx = headers.findIndex((h) => ["tag", "tags", "fitment_tag"].includes(h));
+  const skuIdx = headers.findIndex((h) => ["sku", "variant_sku", "part_sku", "variant sku"].includes(h));
 
   if (yearIdx === -1 || makeIdx === -1 || modelIdx === -1) {
     return json({
-      error: `Missing required columns. Found: ${headers.join(", ")}. Required: year, make, model (or ACES columns: YearID/ModelYear, MakeName, ModelName, PartNumber)`,
+      error: `Missing required columns. Found: ${headers.join(", ")}. Supported headers: Year (or ModelYear/YearID), Make (or MakeName), Model (or ModelName), PartNumber/Handle/SKU (Supports Easy YMM, Fitment Group & Smart Search exports)`,
       results: null,
     });
   }
@@ -214,7 +221,6 @@ export const action = async ({ request }) => {
         const product = await resolveHandle(handle);
 
         if (!product) {
-          // If handle isn't a direct handle match, attach it as SKU
           await prisma.fitmentSku.upsert({
             where: { fitmentId_sku: { fitmentId: fitment.id, sku: handle } },
             create: { fitmentId: fitment.id, sku: handle },
@@ -287,8 +293,8 @@ export default function FitmentImport() {
   const [fileName, setFileName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
 
-  const sampleCSV = `year,make,model,trim,product_handle,collection_handle,tag,sku
-2025,Arctic Cat,Norseman 400,Base,brake-pad-arctic-cat,,,
+  const sampleCSV = `year,make,model,trim,product_handle,product_title,collection_handle,tag,sku
+2025,Arctic Cat,Norseman 400,Base,brake-pad-arctic-cat,Brake Pad Arctic Cat,,,
 2025,Arctic Cat,Norseman 400,LX,,arctic-cat-parts,,
 2024,Polaris,Sportsman 850,SP,,,polaris-sportsman-2024,
 2026,BMW,M3,Base,,,,SKU-BMW-M3-2026`;
@@ -325,7 +331,15 @@ export default function FitmentImport() {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (e) => {
-      setCsvContent(e.target?.result || "");
+      let content = e.target?.result || "";
+      let trimmed = content.trim();
+      if (trimmed.startsWith("{") && trimmed.includes('"csv"')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed.csv) content = parsed.csv;
+        } catch (_) {}
+      }
+      setCsvContent(content);
     };
     reader.readAsText(file);
   };
@@ -350,84 +364,142 @@ export default function FitmentImport() {
   };
 
   return (
-    <div style={{ padding: "32px 24px", maxWidth: "860px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>
-      <Link to="/app/fitment" style={{ color: "#2563eb", fontSize: "14px", fontWeight: "600", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px", marginBottom: "20px" }}>
-        ← Back to Fitment Catalog
-      </Link>
+    <div style={{ padding: "32px 24px 60px", maxWidth: "920px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+      {/* Top Breadcrumb Navigation */}
+      <div style={{ marginBottom: "20px" }}>
+        <Link to="/app/fitment" style={{ color: "#475569", fontSize: "14px", fontWeight: "600", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Back to Fitment Catalog
+        </Link>
+      </div>
 
-      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)" }}>
-        <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "20px", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>Bulk Import Fitments (CSV & ACES / PIES)</h1>
-            <p style={{ color: "#64748b", margin: "4px 0 0", fontSize: "14px" }}>
-              Upload standard PartMatch CSV files or North American Enterprise <strong>ACES / PIES (XML & CSV)</strong> industry data.
-            </p>
+      {/* Executive Hero Banner */}
+      <div style={{
+        background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+        borderRadius: "16px",
+        padding: "28px 32px",
+        color: "#ffffff",
+        marginBottom: "24px",
+        boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.15)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: "16px"
+      }}>
+        <div style={{ maxWidth: "600px" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "rgba(255, 255, 255, 0.1)", padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px", color: "#cbd5e1" }}>
+            Bulk Management Engine
           </div>
-          <span style={{ background: "linear-gradient(135deg, #059669 0%, #10b981 100%)", color: "#ffffff", padding: "6px 14px", borderRadius: "12px", fontSize: "12px", fontWeight: "800" }}>
-            ACES / PIES READY
-          </span>
+          <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 6px", color: "#ffffff", letterSpacing: "-0.5px" }}>
+            Bulk Import Fitments
+          </h1>
+          <p style={{ color: "#94a3b8", margin: 0, fontSize: "14px", lineHeight: "1.5" }}>
+            Upload standard PartMatch CSV files or North American Enterprise <strong>ACES / PIES (XML & CSV)</strong> automotive catalog records.
+          </p>
         </div>
 
+        <div style={{ background: "rgba(16, 185, 129, 0.15)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "12px", padding: "10px 16px", textAlign: "right" }}>
+          <div style={{ color: "#34d399", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px" }}>Auto-Detection Active</div>
+          <div style={{ color: "#ffffff", fontSize: "13px", fontWeight: "700", marginTop: "2px" }}>ACES / PIES Ready</div>
+        </div>
+      </div>
+
+      {/* Main Container */}
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.03)" }}>
+        
         {actionData?.error && (
-          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "14px 18px", borderRadius: "10px", marginBottom: "24px", fontSize: "14px", fontWeight: "500" }}>
-            {actionData.error}
+          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "16px 20px", borderRadius: "12px", marginBottom: "24px", fontSize: "14px", fontWeight: "500", display: "flex", alignItems: "flex-start", gap: "10px" }}>
+            <span style={{ fontWeight: "700" }}>Error:</span> {actionData.error}
           </div>
         )}
 
         {actionData?.results && (
-          <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "20px", borderRadius: "12px", marginBottom: "24px" }}>
-            <strong style={{ fontSize: "16px", display: "block", marginBottom: "8px" }}>Import Operation Complete</strong>
-            <div style={{ display: "flex", gap: "16px", margin: "12px 0 0" }}>
-              <span style={{ background: "#ffffff", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", border: "1px solid #a7f3d0", fontSize: "13px" }}>
-                ✓ Created / Updated: {actionData.results.created}
+          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#166534", padding: "20px 24px", borderRadius: "14px", marginBottom: "28px" }}>
+            <div style={{ fontSize: "16px", fontWeight: "800", color: "#15803d", marginBottom: "8px" }}>
+              Import Operation Complete
+            </div>
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", margin: "10px 0 0" }}>
+              <span style={{ background: "#ffffff", color: "#15803d", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", border: "1px solid #86efac", fontSize: "13px" }}>
+                Created / Updated: {actionData.results.created}
               </span>
-              <span style={{ background: "#ffffff", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", border: "1px solid #a7f3d0", fontSize: "13px", color: "#b45309" }}>
+              <span style={{ background: "#ffffff", color: "#b45309", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", border: "1px solid #fde68a", fontSize: "13px" }}>
                 Skipped: {actionData.results.skipped}
               </span>
             </div>
             {actionData.results.errors.length > 0 && (
-              <details style={{ marginTop: "12px" }}>
-                <summary style={{ cursor: "pointer", fontWeight: "600" }}>View {actionData.results.errors.length} warning / error details</summary>
-                <ul style={{ marginTop: "8px", color: "#b45309", fontSize: "13px" }}>
-                  {actionData.results.errors.map((e, i) => <li key={i}>{e}</li>)}
+              <details style={{ marginTop: "14px" }}>
+                <summary style={{ cursor: "pointer", fontWeight: "700", fontSize: "13px", color: "#92400e" }}>
+                  View {actionData.results.errors.length} warning / error details
+                </summary>
+                <ul style={{ marginTop: "10px", color: "#b45309", fontSize: "13px", paddingLeft: "20px" }}>
+                  {actionData.results.errors.map((e, i) => <li key={i} style={{ marginBottom: "4px" }}>{e}</li>)}
                 </ul>
               </details>
             )}
           </div>
         )}
 
-        {/* Sample Templates Section */}
-        <div style={{ marginBottom: "24px" }}>
-          <label style={{ display: "block", fontWeight: "700", color: "#1e293b", marginBottom: "10px", fontSize: "14px" }}>
-            Download Format Samples & Templates:
-          </label>
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => downloadFile(sampleCSV, "partmatch_sample.csv", "text/csv")}
-              style={{ background: "#f8fafc", color: "#0f172a", border: "1px solid #cbd5e1", padding: "10px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
-            >
-              📄 Download Standard CSV Sample
-            </button>
-            <button
-              type="button"
-              onClick={() => downloadFile(sampleACES, "aces_fitment_sample.csv", "text/csv")}
-              style={{ background: "#f8fafc", color: "#059669", border: "1px solid #a7f3d0", padding: "10px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
-            >
-              🚗 Download ACES CSV Sample
-            </button>
-            <button
-              type="button"
-              onClick={() => downloadFile(sampleACESXML, "aces_catalog_sample.xml", "application/xml")}
-              style={{ background: "#f8fafc", color: "#2563eb", border: "1px solid #bfdbfe", padding: "10px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
-            >
-              ⚡ Download ACES XML Enterprise Sample
-            </button>
+        {/* Step 1: Download Templates */}
+        <div style={{ marginBottom: "32px", paddingBottom: "28px", borderBottom: "1px solid #f1f5f9" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
+            <span style={{ background: "#e2e8f0", color: "#334155", fontSize: "12px", fontWeight: "800", padding: "4px 8px", borderRadius: "6px" }}>STEP 1</span>
+            <h2 style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", margin: 0 }}>Download Catalog Templates</h2>
+          </div>
+          
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px" }}>
+            {/* Template Card 1 */}
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>Standard PartMatch CSV</div>
+                <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "14px" }}>Default 9-column fitment catalog format</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => downloadFile(sampleCSV, "partmatch_sample.csv", "text/csv")}
+                style={{ background: "#ffffff", color: "#0f172a", border: "1px solid #cbd5e1", padding: "9px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", width: "100%", textAlign: "center" }}
+              >
+                Download Standard CSV
+              </button>
+            </div>
+
+            {/* Template Card 2 */}
+            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: "700", color: "#166534", marginBottom: "4px" }}>ACES Standard CSV</div>
+                <div style={{ fontSize: "12px", color: "#15803d", marginBottom: "14px" }}>North American ACES vehicle mappings</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => downloadFile(sampleACES, "aces_fitment_sample.csv", "text/csv")}
+                style={{ background: "#ffffff", color: "#15803d", border: "1px solid #86efac", padding: "9px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", width: "100%", textAlign: "center" }}
+              >
+                Download ACES CSV
+              </button>
+            </div>
+
+            {/* Template Card 3 */}
+            <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: "700", color: "#1e40af", marginBottom: "4px" }}>ACES Enterprise XML</div>
+                <div style={{ fontSize: "12px", color: "#1d4ed8", marginBottom: "14px" }}>Industry ACES 3.2 XML catalog specification</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => downloadFile(sampleACESXML, "aces_catalog_sample.xml", "application/xml")}
+                style={{ background: "#ffffff", color: "#1d4ed8", border: "1px solid #93c5fd", padding: "9px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", width: "100%", textAlign: "center" }}
+              >
+                Download ACES XML
+              </button>
+            </div>
           </div>
         </div>
 
         {!planAllowsImport && (
-          <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", color: "#78350f", padding: "20px", borderRadius: "12px", marginBottom: "24px" }}>
+          <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", color: "#78350f", padding: "20px", borderRadius: "12px", marginBottom: "28px" }}>
             <strong style={{ color: "#b45309", fontSize: "15px", display: "block", marginBottom: "4px" }}>Growth Professional Feature</strong>
             <p style={{ margin: "0 0 12px", fontSize: "14px" }}>
               Bulk CSV Import requires the Growth Professional plan. Upgrade to import thousands of records at once.
@@ -436,11 +508,14 @@ export default function FitmentImport() {
           </div>
         )}
 
-        {/* File Upload Dropzone */}
-        <div style={{ marginBottom: "24px" }}>
-          <label style={{ display: "block", fontWeight: "700", color: "#1e293b", marginBottom: "8px", fontSize: "14px" }}>
-            Upload CSV File
-          </label>
+        {/* Step 2: Upload File & Paste Area */}
+        <div style={{ marginBottom: "28px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
+            <span style={{ background: "#e2e8f0", color: "#334155", fontSize: "12px", fontWeight: "800", padding: "4px 8px", borderRadius: "6px" }}>STEP 2</span>
+            <h2 style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", margin: 0 }}>Upload File or Paste Data</h2>
+          </div>
+
+          {/* Upload Dropzone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -448,103 +523,124 @@ export default function FitmentImport() {
             style={{
               border: isDragging ? "2px dashed #2563eb" : "2px dashed #cbd5e1",
               background: isDragging ? "#eff6ff" : "#f8fafc",
-              borderRadius: "12px",
-              padding: "24px",
+              borderRadius: "14px",
+              padding: "28px 20px",
               textAlign: "center",
               cursor: planAllowsImport ? "pointer" : "not-allowed",
               transition: "all 0.2s ease",
+              marginBottom: "20px"
             }}
           >
             <input
               type="file"
-              accept=".csv"
+              accept=".csv,.xml"
               disabled={!planAllowsImport}
               id="csvFileInput"
               onChange={(e) => handleFileUpload(e.target.files?.[0])}
               style={{ display: "none" }}
             />
-            <label htmlFor="csvFileInput" style={{ cursor: planAllowsImport ? "pointer" : "not-allowed" }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: "8px", color: "#2563eb" }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="12" y1="18" x2="12" y2="12"></line>
-                  <line x1="9" y1="15" x2="15" y2="15"></line>
+            <label htmlFor="csvFileInput" style={{ cursor: planAllowsImport ? "pointer" : "not-allowed", display: "block" }}>
+              <div style={{ width: "48px", height: "48px", background: "#dbeafe", color: "#2563eb", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
                 </svg>
               </div>
-              <div style={{ fontSize: "14px", fontWeight: "700", color: "#2563eb" }}>
-                {fileName ? `File Selected: ${fileName}` : "Click to browse or Drag & Drop your .CSV file here"}
+              <div style={{ fontSize: "15px", fontWeight: "700", color: "#1e293b", marginBottom: "4px" }}>
+                {fileName ? `Selected File: ${fileName}` : "Click to Browse or Drag & Drop File Here"}
               </div>
-              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
-                Supports standard PartMatch CSV or ACES / PIES automotive exports (.csv)
+              <div style={{ fontSize: "13px", color: "#64748b" }}>
+                Supports CSV or ACES / PIES XML format (.csv, .xml)
               </div>
             </label>
           </div>
+
+          {/* Form and Direct Textarea */}
+          <Form method="post">
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <label style={{ fontWeight: "700", color: "#1e293b", fontSize: "13px" }}>
+                  Data Content Preview / Manual Editor
+                </label>
+                {csvContent && (
+                  <button
+                    type="button"
+                    onClick={() => { setCsvContent(""); setFileName(""); }}
+                    style={{ background: "none", border: "none", color: "#ef4444", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
+                  >
+                    Clear Content
+                  </button>
+                )}
+              </div>
+              <textarea
+                name="csv"
+                rows={9}
+                value={csvContent}
+                onChange={(e) => setCsvContent(e.target.value)}
+                placeholder={sampleCSV}
+                disabled={!planAllowsImport}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "12px",
+                  fontSize: "13px",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  boxSizing: "border-box",
+                  resize: "vertical",
+                  lineHeight: "1.5",
+                  background: planAllowsImport ? "#ffffff" : "#f1f5f9",
+                  color: "#0f172a"
+                }}
+              />
+            </div>
+
+            {/* Action Bar */}
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", paddingTop: "20px", borderTop: "1px solid #f1f5f9" }}>
+              <button
+                type="submit"
+                disabled={importing || !planAllowsImport}
+                style={{
+                  background: "#2563eb",
+                  color: "#ffffff",
+                  border: "none",
+                  padding: "12px 28px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  cursor: importing || !planAllowsImport ? "not-allowed" : "pointer",
+                  opacity: importing || !planAllowsImport ? 0.7 : 1,
+                  boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                {importing ? "Processing Catalog Data…" : "Start Bulk Import →"}
+              </button>
+
+              <Link
+                to="/app/fitment"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  background: "#ffffff",
+                  color: "#475569",
+                  border: "1px solid #cbd5e1",
+                  padding: "11px 20px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  textDecoration: "none",
+                }}
+              >
+                Cancel
+              </Link>
+            </div>
+          </Form>
         </div>
 
-        <Form method="post" aria-disabled={!planAllowsImport}>
-          <div style={{ marginBottom: "20px" }}>
-            <label style={{ display: "block", fontWeight: "700", color: "#1e293b", marginBottom: "8px", fontSize: "14px" }}>
-              CSV Content Data (Auto-filled from file or paste directly)
-            </label>
-            <textarea
-              name="csv"
-              rows={8}
-              value={csvContent}
-              onChange={(e) => setCsvContent(e.target.value)}
-              placeholder={sampleCSV}
-              disabled={!planAllowsImport}
-              style={{
-                width: "100%",
-                padding: "14px",
-                border: "1px solid #cbd5e1",
-                borderRadius: "10px",
-                fontSize: "13px",
-                fontFamily: "monospace",
-                boxSizing: "border-box",
-                resize: "vertical",
-                background: planAllowsImport ? "#ffffff" : "#f1f5f9",
-              }}
-            />
-          </div>
-
-          <div style={{ display: "flex", gap: "12px", paddingTop: "16px", borderTop: "1px solid #f1f5f9" }}>
-            <button
-              type="submit"
-              disabled={importing || !planAllowsImport}
-              style={{
-                background: "#2563eb",
-                color: "#ffffff",
-                border: "none",
-                padding: "11px 24px",
-                borderRadius: "8px",
-                fontSize: "14px",
-                fontWeight: "700",
-                cursor: "pointer",
-                boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
-              }}
-            >
-              {importing ? "Processing CSV…" : "Start Bulk Import →"}
-            </button>
-            <Link
-              to="/app/fitment"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                background: "#ffffff",
-                color: "#475569",
-                border: "1px solid #cbd5e1",
-                padding: "11px 20px",
-                borderRadius: "8px",
-                fontSize: "14px",
-                fontWeight: "600",
-                textDecoration: "none",
-              }}
-            >
-              Cancel
-            </Link>
-          </div>
-        </Form>
       </div>
     </div>
   );

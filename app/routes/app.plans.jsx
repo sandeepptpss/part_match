@@ -1,6 +1,6 @@
 const json = (data, init) => Response.json(data, init);
 import { useState } from "react";
-import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
+import { useLoaderData, useFetcher, useActionData, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { BillingInterval } from "@shopify/shopify-app-react-router/server";
@@ -276,7 +276,7 @@ export default function PlansPage() {
       priceMonthly: calcMonthly(19.99),
       priceAnnual: calcAnnual(19.99),
       period: "per month",
-      dailyCost: "~$0.66/day — 1 wrong return saved pays for entire month",
+      dailyCost: "~$0.66/day · 1 saved return pays for full month",
       description: "Complete fitment solution for growing auto parts retailers.",
       recordsLimit: "5,000 Mapped Vehicle Records",
       badge: "MOST POPULAR — BEST VALUE",
@@ -287,6 +287,8 @@ export default function PlansPage() {
         "14-Day Risk-Free Trial",
         "Up to 5,000 Fitment Records",
         "100 Free VIN Lookups/mo ($0.05 after)",
+        "1-Click Competitor Data Importer (Easy YMM/Fitment Group)",
+        "AI Voice & Conversational Search Assistant",
         "ACES / PIES XML & CSV Import/Export",
         "Sub-Model & Trim Level Filtering",
         "Unlimited Universal Products",
@@ -304,7 +306,7 @@ export default function PlansPage() {
       priceMonthly: calcMonthly(49.99),
       priceAnnual: calcAnnual(49.99),
       period: "per month",
-      dailyCost: "~$1.66 / day",
+      dailyCost: "~$1.66/day · High ROI for large auto catalogs",
       description: "Maximum scale & dedicated performance for large automotive stores.",
       recordsLimit: "Unlimited Fitment Records",
       badge: "UNLIMITED SCALE",
@@ -315,6 +317,8 @@ export default function PlansPage() {
         "14-Day Risk-Free Trial",
         "Unlimited Fitment Records",
         "1,000 Free VIN Lookups/mo ($0.03 after)",
+        "1-Click Competitor Data Importer (Unlimited)",
+        "Advanced AI Voice & Conversational Search Engine",
         "Enterprise ACES / PIES Standard Engine",
         "Advanced Sub-Model & Engine Specs",
         "Unlimited Universal Products",
@@ -364,7 +368,7 @@ export default function PlansPage() {
             gap: "12px",
           }}
         >
-          <span style={{ fontSize: "20px" }}>⭐</span>
+          <div style={{ background: "#f59e0b", color: "#ffffff", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase" }}>VIP</div>
           <div>
             <div style={{ fontWeight: "800", fontSize: "15px", color: "#78350f" }}>
               Exclusive Merchant VIP Discount Active!
@@ -483,51 +487,41 @@ export default function PlansPage() {
                     {plan.trialBadge}
                   </span>
                 </div>
-                <p style={{ margin: "0 0 18px", color: "#64748b", fontSize: "13px", lineHeight: "1.5" }}>
+                <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "13px", lineHeight: "1.5", minHeight: "38px" }}>
                   {plan.description}
                 </p>
 
                 {/* Price Display */}
-                <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "4px" }}>
-                  <span style={{ fontSize: "38px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>{displayPrice}</span>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "36px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>{displayPrice}</span>
                   <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "600" }}>{plan.period}</span>
                 </div>
 
-                {plan.dailyCost && (
-                  <div style={{ fontSize: "12px", color: "#059669", fontWeight: "700", marginBottom: "14px" }}>
-                    ⚡ {plan.dailyCost} — high return on investment
-                  </div>
-                )}
+                {/* High ROI Badge */}
+                <div style={{ minHeight: "28px", marginBottom: "14px" }}>
+                  {plan.dailyCost ? (
+                    <div style={{ fontSize: "11px", color: "#047857", fontWeight: "700", background: "#ecfdf5", border: "1px solid #a7f3d0", padding: "4px 8px", borderRadius: "6px", display: "inline-block", lineHeight: "1.3" }}>
+                      {plan.dailyCost}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: "11px", color: "#64748b", fontWeight: "600", padding: "4px 0" }}>
+                      100% Risk-Free Starter Plan
+                    </div>
+                  )}
+                </div>
 
-                <div style={{ display: "inline-block", background: "#f1f5f9", color: "#334155", padding: "4px 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "700", marginBottom: "20px" }}>
+                <div style={{ display: "inline-block", background: "#f1f5f9", color: "#334155", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "700", marginBottom: "20px" }}>
                   {plan.recordsLimit}
                 </div>
 
                 {/* Action CTA Button */}
-                <Form method="post" style={{ marginBottom: "24px" }}>
-                  <input type="hidden" name="intent" value="selectPlan" />
-                  <input type="hidden" name="plan" value={plan.id} />
-                  <input type="hidden" name="billingCycle" value={billingCycle} />
-                  <button
-                    type="submit"
-                    disabled={isCurrent || isSubmitting}
-                    style={{
-                      width: "100%",
-                      padding: "12px 18px",
-                      borderRadius: "10px",
-                      border: plan.highlight || (!isCurrent && activePlan === plan.id) ? "none" : "1px solid #cbd5e1",
-                      background: isCurrent ? "#f1f5f9" : (plan.highlight || activePlan === plan.id) ? "#008060" : "#ffffff",
-                      color: isCurrent ? "#94a3b8" : (plan.highlight || activePlan === plan.id) ? "#ffffff" : "#1e293b",
-                      fontSize: "14px",
-                      fontWeight: "700",
-                      cursor: isCurrent ? "default" : "pointer",
-                      boxShadow: !isCurrent && (plan.highlight || activePlan === plan.id) ? "0 4px 12px rgba(0, 128, 96, 0.25)" : "none",
-                      transition: "all 0.2s",
-                    }}
-                  >
-                    {buttonLabel}
-                  </button>
-                </Form>
+                <PlanCardForm
+                  plan={plan}
+                  billingCycle={billingCycle}
+                  isCurrent={isCurrent}
+                  activePlan={activePlan}
+                  buttonLabel={buttonLabel}
+                />
 
                 <div style={{ height: "1px", background: "#f1f5f9", margin: "20px 0" }} />
 
@@ -638,6 +632,18 @@ export default function PlansPage() {
                 <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Multi-Layout & Custom Theme Integration</td>
               </tr>
               <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>1-Click Competitor Data Migration Importer</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Easy YMM / Fitment Group / ACES</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "800", color: "#047857" }}>✓ Unlimited Competitor Migration</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>AI Voice & Conversational Search Assistant</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Standard Natural Voice Search</td>
+                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "800", color: "#047857" }}>✓ Advanced AI Conversational Engine</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
                 <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>AI Fitment Matcher (Beta)</td>
                 <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
                 <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", color: "#cbd5e1" }}>✕</td>
@@ -666,5 +672,38 @@ export default function PlansPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function PlanCardForm({ plan, billingCycle, isCurrent, activePlan, buttonLabel }) {
+  const fetcher = useFetcher();
+  const isCardSubmitting = fetcher.state !== "idle";
+
+  return (
+    <fetcher.Form method="post" style={{ marginBottom: "24px" }}>
+      <input type="hidden" name="intent" value="selectPlan" />
+      <input type="hidden" name="plan" value={plan.id} />
+      <input type="hidden" name="billingCycle" value={billingCycle} />
+      <button
+        type="submit"
+        disabled={isCurrent || isCardSubmitting}
+        style={{
+          width: "100%",
+          padding: "12px 18px",
+          borderRadius: "10px",
+          border: plan.highlight || (!isCurrent && activePlan === plan.id) ? "none" : "1px solid #cbd5e1",
+          background: isCurrent ? "#f1f5f9" : (plan.highlight || activePlan === plan.id) ? "#008060" : "#ffffff",
+          color: isCurrent ? "#94a3b8" : (plan.highlight || activePlan === plan.id) ? "#ffffff" : "#1e293b",
+          fontSize: "14px",
+          fontWeight: "700",
+          cursor: isCurrent || isCardSubmitting ? "default" : "pointer",
+          boxShadow: !isCurrent && (plan.highlight || activePlan === plan.id) ? "0 4px 12px rgba(0, 128, 96, 0.25)" : "none",
+          transition: "all 0.2s",
+          opacity: isCardSubmitting ? 0.7 : 1,
+        }}
+      >
+        {isCardSubmitting ? "Activating Plan..." : buttonLabel}
+      </button>
+    </fetcher.Form>
   );
 }

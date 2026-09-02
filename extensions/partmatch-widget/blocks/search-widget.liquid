@@ -133,13 +133,16 @@
   {%- assign pm_enable_vin = block.settings.enable_vin_search -%}
   {%- if pm_enable_vin == nil -%}{%- assign pm_enable_vin = true -%}{%- endif -%}
 
-  {%- if pm_enable_ymm and pm_enable_vin -%}
-    <div class="pm-tabs" style="display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;">
+  {%- if pm_enable_ymm or pm_enable_vin -%}
+    <div class="pm-tabs" style="display: none; justify-content: center; gap: 10px; margin-bottom: 20px;">
       <button type="button" class="pm-tab pm-tab--active" data-pm-tab="ymm" style="padding: 6px 16px; border-radius: 20px; border: 1px solid #0f172a; background: #0f172a; color: #ffffff; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
         BY VEHICLE (YMM)
       </button>
-      <button type="button" class="pm-tab" data-pm-tab="vin" style="padding: 6px 16px; border-radius: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+      <button type="button" class="pm-tab" data-pm-tab="vin" style="display: none; padding: 6px 16px; border-radius: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
         BY VIN LOOKUP
+      </button>
+      <button type="button" class="pm-tab" data-pm-tab="voice" style="display: none; padding: 6px 16px; border-radius: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+        AI VOICE SEARCH
       </button>
     </div>
   {%- endif -%}
@@ -155,6 +158,20 @@
       <div data-partmatch-vin-feedback style="display: none; font-size: 13px; font-weight: 600; margin-top: 10px; text-align: left; padding: 8px 12px; border-radius: 6px;"></div>
     </div>
   {%- endif -%}
+
+  <div class="pm-voice-panel" data-pm-voice-panel style="display: none; max-width: 680px; margin: 0 auto 20px; text-align: center;">
+    <div style="display: flex; gap: 8px; align-items: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: var(--pm-btn-radius, 6px); padding: 4px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+      <input type="text" data-partmatch-voice-input placeholder="e.g. Front brake pads for 2018 Honda Civic EX..." style="flex: 1; height: 42px; border: none; outline: none; padding: 0 12px; font-size: 13px; color: #0f172a;" />
+      <button type="button" data-partmatch-mic-btn aria-label="Voice Input" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #2563eb; padding: 8px 14px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <span>Voice</span>
+      </button>
+      <button type="button" class="pm-btn pm-btn--search" data-partmatch-voice-btn style="height: 42px; padding: 0 18px; background: var(--pm-primary, #0f172a); color: #ffffff;">
+        ASK AI
+      </button>
+    </div>
+    <div data-partmatch-voice-feedback style="display: none; font-size: 13px; font-weight: 600; margin-top: 10px; text-align: left; padding: 8px 12px; border-radius: 6px;"></div>
+  </div>
 
   {%- if pm_enable_ymm -%}
     <div class="pm-widget__form" data-pm-ymm-panel>

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function GlobalSupportWidget({ shop = "", sessionEmail = "" }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [supportStatus, setSupportStatus] = useState("online");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState(null); // { success: boolean, message: string }
   const [form, setForm] = useState({
@@ -10,6 +11,19 @@ export default function GlobalSupportWidget({ shop = "", sessionEmail = "" }) {
     subject: "",
     message: "",
   });
+
+  useEffect(() => {
+    fetch("/api/support-status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.isOnline === "boolean") {
+          setSupportStatus(data.isOnline ? "online" : "offline");
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const isOnline = supportStatus === "online";
 
   const handleChange = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -91,7 +105,7 @@ export default function GlobalSupportWidget({ shop = "", sessionEmail = "" }) {
             style={{
               background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
               color: "#ffffff",
-              padding: "18px 20px",
+              padding: "16px 20px",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
@@ -99,16 +113,32 @@ export default function GlobalSupportWidget({ shop = "", sessionEmail = "" }) {
           >
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <ChatSupportIcon size={18} color="#34d399" />
-                <strong style={{ fontSize: "16px", fontWeight: "800", letterSpacing: "-0.3px" }}>
+                <ChatSupportIcon size={18} color={isOnline ? "#34d399" : "#fbbf24"} />
+                <strong style={{ fontSize: "15px", fontWeight: "800", letterSpacing: "-0.3px" }}>
                   Merchant Support Desk
                 </strong>
-                <span style={{ fontSize: "10px", background: "rgba(52, 211, 153, 0.2)", border: "1px solid rgba(52, 211, 153, 0.4)", color: "#34d399", padding: "2px 6px", borderRadius: "10px", fontWeight: "700" }}>
-                  Online
+                
+                {/* Read-Only Status Badge */}
+                <span
+                  style={{
+                    background: isOnline ? "rgba(52, 211, 153, 0.2)" : "rgba(251, 191, 36, 0.2)",
+                    border: `1px solid ${isOnline ? "rgba(52, 211, 153, 0.4)" : "rgba(251, 191, 36, 0.4)"}`,
+                    color: isOnline ? "#34d399" : "#fbbf24",
+                    padding: "3px 8px",
+                    borderRadius: "12px",
+                    fontSize: "10px",
+                    fontWeight: "700",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: isOnline ? "#34d399" : "#fbbf24" }} />
+                  {isOnline ? "Online" : "Offline"}
                 </span>
               </div>
-              <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>
-                Submit a query & get assistance from our team
+              <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#94a3b8" }}>
+                {isOnline ? "Submit a query & get assistance from our team" : "Support is offline. Leave a message & we will reply soon."}
               </p>
             </div>
 
@@ -256,12 +286,12 @@ export default function GlobalSupportWidget({ shop = "", sessionEmail = "" }) {
         </div>
       )}
 
-      {/* Floating Trigger Launcher Button with Green Live Dot */}
+      {/* Floating Trigger Launcher Button with Status Indicator */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          background: "linear-gradient(135deg, #008060 0%, #005e46 100%)",
+          background: isOnline ? "linear-gradient(135deg, #008060 0%, #005e46 100%)" : "linear-gradient(135deg, #334155 0%, #1e293b 100%)",
           color: "#ffffff",
           border: "none",
           borderRadius: "30px",
@@ -269,7 +299,7 @@ export default function GlobalSupportWidget({ shop = "", sessionEmail = "" }) {
           fontSize: "14px",
           fontWeight: "700",
           cursor: "pointer",
-          boxShadow: "0 10px 25px -5px rgba(0, 128, 96, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15)",
+          boxShadow: isOnline ? "0 10px 25px -5px rgba(0, 128, 96, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15)" : "0 10px 25px -5px rgba(30, 41, 59, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15)",
           display: "flex",
           alignItems: "center",
           gap: "10px",
@@ -288,15 +318,17 @@ export default function GlobalSupportWidget({ shop = "", sessionEmail = "" }) {
               width: "10px",
               height: "10px",
               borderRadius: "50%",
-              background: "#34d399",
-              border: "2px solid #008060",
-              boxShadow: "0 0 6px #34d399",
+              background: isOnline ? "#34d399" : "#fbbf24",
+              border: `2px solid ${isOnline ? "#008060" : "#334155"}`,
+              boxShadow: `0 0 6px ${isOnline ? "#34d399" : "#fbbf24"}`,
             }}
           />
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: "1.1" }}>
-          <span>Support Available</span>
-          <span style={{ fontSize: "10px", color: "#a7f3d0", fontWeight: "600" }}>Online Now</span>
+          <span>{isOnline ? "Support Available" : "Support Desk"}</span>
+          <span style={{ fontSize: "10px", color: isOnline ? "#a7f3d0" : "#fef08a", fontWeight: "600" }}>
+            {isOnline ? "Online Now" : "Offline Mode"}
+          </span>
         </div>
       </button>
 

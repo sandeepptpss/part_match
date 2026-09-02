@@ -1,4 +1,4 @@
-import { redirect, useLoaderData, Form, useNavigation, useActionData, Link } from "react-router";
+import { redirect, useLoaderData, useFetcher, useActionData, Link } from "react-router";
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -73,9 +73,9 @@ export const action = async ({ request }) => {
 
 export default function FitmentAdd() {
   const { initialYear, initialMake, initialModel } = useLoaderData();
-  const actionData = useActionData();
-  const navigation = useNavigation();
-  const saving = navigation.state !== "idle";
+  const fetcher = useFetcher();
+  const actionData = fetcher.data;
+  const saving = fetcher.state !== "idle";
   const errors = actionData?.errors || {};
   const values = actionData?.values || {};
 
@@ -105,7 +105,7 @@ export default function FitmentAdd() {
           </div>
         )}
 
-        <Form method="post">
+        <fetcher.Form method="post">
           <div style={fieldGroup}>
             <label style={label}>Model Year <span style={{ color: "#dc2626" }}>*</span></label>
             <input
@@ -148,7 +148,7 @@ export default function FitmentAdd() {
             </button>
             <Link to="/app/fitment" style={cancelBtn}>Cancel</Link>
           </div>
-        </Form>
+        </fetcher.Form>
       </div>
     </div>
   );

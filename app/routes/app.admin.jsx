@@ -32,6 +32,7 @@ export const loader = async ({ request }) => {
   let totalSearches = 0;
   let globalDiscount = 20;
 
+  let isSupportOnline = true;
   try {
     // Fetch Global Settings
     const globalSettings = await prisma.appSettings.findFirst({
@@ -39,6 +40,9 @@ export const loader = async ({ request }) => {
     });
     if (globalSettings?.annualDiscountPercent != null) {
       globalDiscount = globalSettings.annualDiscountPercent;
+    }
+    if (globalSettings?.isSupportOnline != null) {
+      isSupportOnline = globalSettings.isSupportOnline;
     }
 
     // Get unique shops
@@ -116,6 +120,7 @@ export const loader = async ({ request }) => {
     totalProducts,
     totalSearches,
     globalDiscount,
+    isSupportOnline,
   });
 };
 
@@ -123,6 +128,24 @@ export const action = async ({ request }) => {
   await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  if (intent === "toggleSupportStatus") {
+    const currentStatus = formData.get("currentSupportStatus") === "true";
+    const nextStatus = !currentStatus;
+
+    await prisma.appSettings.upsert({
+      where: { shop: "__GLOBAL__" },
+      update: { isSupportOnline: nextStatus },
+      create: { shop: "__GLOBAL__", isSupportOnline: nextStatus },
+    });
+
+    return json({
+      success: true,
+      intent: "toggleSupportStatus",
+      isSupportOnline: nextStatus,
+      message: `Global Merchant Support Desk status set to: ${nextStatus ? "ONLINE" : "OFFLINE"}!`,
+    });
+  }
 
   if (intent === "saveGlobalDiscount") {
     const discount = parseInt(formData.get("globalDiscountPercent"), 10) || 20;
@@ -245,9 +268,31 @@ export default function AdminPage() {
     totalProducts,
     totalSearches,
     globalDiscount,
+    isSupportOnline: initialIsSupportOnline,
   } = useLoaderData();
 
-  const fetcher = useFetcher();
+  const supportFetcher = useFetcher();
+  const discountFetcher = useFetcher();
+  const logsFetcher = useFetcher();
+  const userDiscountFetcher = useFetcher();
+
+  const isSupportOnline = supportFetcher.data?.isSupportOnline ?? initialIsSupportOnline;
+  const isSupportSubmitting = supportFetcher.state !== "idle";
+  const isDiscountSubmitting = discountFetcher.state !== "idle";
+  const isLogsSubmitting = logsFetcher.state !== "idle";
+  const isUserDiscountSubmitting = userDiscountFetcher.state !== "idle";
+
+  const activeNotification =
+    supportFetcher.data?.message
+      ? supportFetcher.data
+      : discountFetcher.data?.message
+      ? discountFetcher.data
+      : logsFetcher.data?.message
+      ? logsFetcher.data
+      : userDiscountFetcher.data?.message
+      ? userDiscountFetcher.data
+      : null;
+
   const [globalDiscountInput, setGlobalDiscountInput] = useState(globalDiscount);
   const [searchQuery, setSearchQuery] = useState("");
   const [userDiscountInputs, setUserDiscountInputs] = useState(() => {
@@ -265,8 +310,6 @@ export default function AdminPage() {
     });
     setUserDiscountInputs(updatedInputs);
   }, [shopsList]);
-
-  const isSubmitting = fetcher.state !== "idle";
 
   const handleUserDiscountChange = (shop, value) => {
     setUserDiscountInputs((prev) => ({
@@ -298,14 +341,14 @@ export default function AdminPage() {
       }}
     >
       {/* Toast Notification Alert */}
-      {fetcher.data?.message && (
+      {activeNotification?.message && (
         <div
           style={{
-            background: fetcher.data?.success !== false ? "#f0fdf4" : "#fef2f2",
+            background: activeNotification?.success !== false ? "#f0fdf4" : "#fef2f2",
             border: `1px solid ${
-              fetcher.data?.success !== false ? "#bbf7d0" : "#fecaca"
+              activeNotification?.success !== false ? "#bbf7d0" : "#fecaca"
             }`,
-            color: fetcher.data?.success !== false ? "#166534" : "#991b1b",
+            color: activeNotification?.success !== false ? "#166534" : "#991b1b",
             padding: "12px 16px",
             borderRadius: "10px",
             marginBottom: "20px",
@@ -317,7 +360,7 @@ export default function AdminPage() {
           }}
         >
           <span style={{ display: "inline-flex", alignItems: "center" }}>
-            {fetcher.data?.success !== false ? (
+            {activeNotification?.success !== false ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
@@ -329,7 +372,7 @@ export default function AdminPage() {
               </svg>
             )}
           </span>
-          <div>{fetcher.data.message}</div>
+          <div>{activeNotification.message}</div>
         </div>
       )}
 
@@ -557,15 +600,82 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Global Discount & Maintenance Cards (Horizontal Matched Heights) */}
+      {/* Global Controls & Maintenance Cards */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
           gap: "18px",
           marginBottom: "24px",
         }}
       >
+        {/* Merchant Support Desk Global Status Toggle Card */}
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid #e2e8f0",
+            borderTop: `3px solid ${isSupportOnline ? "#059669" : "#d97706"}`,
+            borderRadius: "14px",
+            padding: "20px 22px",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+              <div style={{ width: "30px", height: "30px", background: isSupportOnline ? "#ecfdf5" : "#fffbe6", color: isSupportOnline ? "#047857" : "#d97706", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
+              <h2 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>
+                Merchant Support Desk Status
+              </h2>
+            </div>
+            <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "12px", lineHeight: "1.4" }}>
+              Master Admin control switch to set Merchant Support online availability across all stores.
+            </p>
+          </div>
+
+          <supportFetcher.Form method="post">
+            <input type="hidden" name="intent" value="toggleSupportStatus" />
+            <input type="hidden" name="currentSupportStatus" value={isSupportOnline ? "true" : "false"} />
+            
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
+              <div>
+                <strong style={{ fontSize: "13px", color: isSupportOnline ? "#15803d" : "#b45309", display: "block" }}>
+                  Status: {isSupportOnline ? "🟢 ONLINE" : "🟡 OFFLINE"}
+                </strong>
+                <span style={{ fontSize: "11px", color: "#64748b" }}>
+                  {isSupportOnline ? "Merchants see 'Online & Available'" : "Merchants see 'Offline - Leave Message'"}
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSupportSubmitting}
+                style={{
+                  height: "36px",
+                  background: isSupportOnline ? "#d97706" : "#047857",
+                  color: "#ffffff",
+                  border: "none",
+                  padding: "0 14px",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  fontWeight: "800",
+                  cursor: isSupportSubmitting ? "not-allowed" : "pointer",
+                  boxShadow: isSupportOnline ? "0 2px 6px rgba(217, 119, 6, 0.2)" : "0 2px 6px rgba(4, 120, 87, 0.2)",
+                  transition: "all 0.15s ease-in-out",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {isSupportSubmitting ? "Updating..." : isSupportOnline ? "SET OFFLINE" : "SET ONLINE"}
+              </button>
+            </div>
+          </supportFetcher.Form>
+        </div>
         {/* Global Annual Discount Settings Card */}
         <div
           style={{
@@ -596,7 +706,7 @@ export default function AdminPage() {
             </p>
           </div>
 
-          <fetcher.Form method="post">
+          <discountFetcher.Form method="post">
             <input type="hidden" name="intent" value="saveGlobalDiscount" />
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <div style={{ display: "flex", borderRadius: "8px", border: "1px solid #cbd5e1", overflow: "hidden", height: "38px" }}>
@@ -638,26 +748,26 @@ export default function AdminPage() {
 
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isDiscountSubmitting}
                 style={{
                   height: "38px",
-                  background: isSubmitting ? "#94a3b8" : "#047857",
+                  background: isDiscountSubmitting ? "#94a3b8" : "#047857",
                   color: "#ffffff",
                   border: "none",
                   padding: "0 18px",
                   borderRadius: "8px",
                   fontSize: "13px",
                   fontWeight: "700",
-                  cursor: isSubmitting ? "not-allowed" : "pointer",
+                  cursor: isDiscountSubmitting ? "not-allowed" : "pointer",
                   boxShadow: "0 2px 6px rgba(4, 120, 87, 0.15)",
                   transition: "all 0.15s ease-in-out",
                   whiteSpace: "nowrap",
                 }}
               >
-                {isSubmitting ? "Updating..." : "Save Discount"}
+                {isDiscountSubmitting ? "Updating..." : "Save Discount"}
               </button>
             </div>
-          </fetcher.Form>
+          </discountFetcher.Form>
         </div>
 
         {/* System Diagnostics & Operations Card */}
@@ -690,7 +800,7 @@ export default function AdminPage() {
             </p>
           </div>
 
-          <fetcher.Form method="post">
+          <logsFetcher.Form method="post">
             <input type="hidden" name="intent" value="clearLogs" />
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <div
@@ -716,26 +826,26 @@ export default function AdminPage() {
 
               <button
                 type="submit"
-                disabled={isSubmitting || totalSearches === 0}
+                disabled={isLogsSubmitting || totalSearches === 0}
                 style={{
                   height: "38px",
-                  background: isSubmitting || totalSearches === 0 ? "#cbd5e1" : "#ef4444",
+                  background: isLogsSubmitting || totalSearches === 0 ? "#cbd5e1" : "#ef4444",
                   color: "#ffffff",
                   border: "none",
                   padding: "0 18px",
                   borderRadius: "8px",
                   fontSize: "13px",
                   fontWeight: "700",
-                  cursor: isSubmitting || totalSearches === 0 ? "not-allowed" : "pointer",
+                  cursor: isLogsSubmitting || totalSearches === 0 ? "not-allowed" : "pointer",
                   boxShadow: totalSearches > 0 ? "0 2px 6px rgba(239, 68, 68, 0.15)" : "none",
                   transition: "all 0.15s ease-in-out",
                   whiteSpace: "nowrap",
                 }}
               >
-                {isSubmitting ? "Clearing..." : "Purge Search Logs"}
+                {isLogsSubmitting ? "Clearing..." : "Purge Search Logs"}
               </button>
             </div>
-          </fetcher.Form>
+          </logsFetcher.Form>
         </div>
       </div>
 
@@ -931,7 +1041,7 @@ export default function AdminPage() {
                       {/* User Specific Discount Option */}
                       <td style={{ padding: "12px 14px", verticalAlign: "middle" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <fetcher.Form method="post" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <userDiscountFetcher.Form method="post" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                             <input type="hidden" name="intent" value="saveUserDiscount" />
                             <input type="hidden" name="targetShop" value={merchant.shop} />
 
@@ -964,7 +1074,7 @@ export default function AdminPage() {
 
                             <button
                               type="submit"
-                              disabled={isSubmitting}
+                              disabled={isUserDiscountSubmitting}
                               style={{
                                 height: "32px",
                                 background: "#047857",
@@ -979,17 +1089,17 @@ export default function AdminPage() {
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {isSubmitting ? "Saving..." : "Save Discount"}
+                              {isUserDiscountSubmitting ? "Saving..." : "Save Discount"}
                             </button>
-                          </fetcher.Form>
+                          </userDiscountFetcher.Form>
 
                           {merchant.isCustomDiscount && (
-                            <fetcher.Form method="post" style={{ display: "inline" }}>
+                            <userDiscountFetcher.Form method="post" style={{ display: "inline" }}>
                               <input type="hidden" name="intent" value="resetUserDiscount" />
                               <input type="hidden" name="targetShop" value={merchant.shop} />
                               <button
                                 type="submit"
-                                disabled={isSubmitting}
+                                disabled={isUserDiscountSubmitting}
                                 title="Reset to Global Default"
                                 style={{
                                   height: "32px",
@@ -1006,7 +1116,7 @@ export default function AdminPage() {
                               >
                                 Reset
                               </button>
-                            </fetcher.Form>
+                            </userDiscountFetcher.Form>
                           )}
                         </div>
                       </td>

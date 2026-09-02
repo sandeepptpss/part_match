@@ -1,16 +1,29 @@
 const json = (data, init) => Response.json(data, init);
-import { useState } from "react";
-import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
+import { useState, useEffect } from "react";
+import { useLoaderData, useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
 import { sendSupportEmailToAdmin } from "../email.server";
+
+import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
+  let isSupportOnline = true;
+  try {
+    const globalSettings = await prisma.appSettings.findFirst({
+      where: { shop: "__GLOBAL__" },
+    });
+    if (globalSettings?.isSupportOnline != null) {
+      isSupportOnline = globalSettings.isSupportOnline;
+    }
+  } catch (e) {}
+
   return json({
     shop,
     defaultEmail: session.email || "",
+    isSupportOnline,
   });
 };
 
@@ -54,18 +67,30 @@ export const action = async ({ request }) => {
 };
 
 export default function SupportPage() {
-  const { shop, defaultEmail } = useLoaderData();
-  const actionData = useActionData();
-  const navigation = useNavigation();
+  const { shop, defaultEmail, isSupportOnline: initialIsSupportOnline } = useLoaderData();
+  const fetcher = useFetcher();
+  const actionData = fetcher.data;
+  const isSubmitting = fetcher.state !== "idle";
 
-  const isSubmitting = navigation.state !== "idle";
-
+  const [isSupportOnline, setIsSupportOnline] = useState(initialIsSupportOnline ?? true);
   const [formValues, setFormValues] = useState({
     name: "",
     email: defaultEmail || "",
     subject: "",
     message: "",
   });
+
+  useEffect(() => {
+    // Fetch live global status from endpoint
+    fetch("/api/support-status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.isOnline === "boolean") {
+          setIsSupportOnline(data.isOnline);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleChange = (field, val) => {
     setFormValues((prev) => ({ ...prev, [field]: val }));
@@ -94,22 +119,28 @@ export default function SupportPage() {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px" }}>
               <h1 style={{ margin: 0, fontSize: "26px", fontWeight: "800", letterSpacing: "-0.5px" }}>
                 Merchant Support & Help Desk
               </h1>
+              
+              {/* Read-only Live Support Status Badge */}
               <span
                 style={{
-                  background: "rgba(16, 185, 129, 0.2)",
-                  border: "1px solid rgba(16, 185, 129, 0.4)",
-                  color: "#34d399",
-                  padding: "4px 12px",
+                  background: isSupportOnline ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)",
+                  border: `1px solid ${isSupportOnline ? "rgba(16, 185, 129, 0.4)" : "rgba(245, 158, 11, 0.4)"}`,
+                  color: isSupportOnline ? "#34d399" : "#fbbf24",
+                  padding: "5px 14px",
                   borderRadius: "20px",
                   fontSize: "12px",
                   fontWeight: "700",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
                 }}
               >
-                Live Assistance
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: isSupportOnline ? "#34d399" : "#fbbf24" }} />
+                <span>Status: <strong>{isSupportOnline ? "Online & Available" : "Offline (Leave Message)"}</strong></span>
               </span>
             </div>
             <p style={{ margin: 0, color: "#94a3b8", fontSize: "14px" }}>
@@ -218,7 +249,7 @@ export default function SupportPage() {
             </div>
           </div>
 
-          <Form method="post" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <fetcher.Form method="post" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             {/* Merchant Name Field */}
             <div>
               <label style={labelStyle}>
@@ -310,7 +341,7 @@ export default function SupportPage() {
             >
               {isSubmitting ? "Submitting Query..." : "Submit Support Query →"}
             </button>
-          </Form>
+          </fetcher.Form>
         </div>
 
         {/* Support Direct Contact & Information Card */}
@@ -330,10 +361,10 @@ export default function SupportPage() {
 
             <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
-                <span style={{ fontSize: "13px", fontWeight: "700", color: "#475569" }}>Support Status</span>
-                <span style={{ fontSize: "12px", background: "#dcfce7", color: "#15803d", border: "1px solid #a7f3d0", padding: "3px 10px", borderRadius: "12px", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#16a34a" }} />
-                  Online & Available Now
+                <span style={{ fontSize: "13px", fontWeight: "700", color: "#475569" }}>Support Desk Availability</span>
+                <span style={{ fontSize: "12px", background: isSupportOnline ? "#dcfce7" : "#fef3c7", color: isSupportOnline ? "#15803d" : "#b45309", border: `1px solid ${isSupportOnline ? "#a7f3d0" : "#fde68a"}`, padding: "3px 10px", borderRadius: "12px", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: isSupportOnline ? "#16a34a" : "#d97706" }} />
+                  {isSupportOnline ? "Online & Available Now" : "Offline - Leave a Message"}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>

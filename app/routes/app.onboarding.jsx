@@ -1,5 +1,5 @@
 const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Form, useNavigation, Link } from "react-router";
+import { useLoaderData, useFetcher, Link } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -58,7 +58,7 @@ export const action = async ({ request }) => {
 
 export default function Onboarding() {
   const { shop, fitmentCount, productAssignmentCount, widgetCustomized, themeExtensionConfirmed } = useLoaderData();
-  const navigation = useNavigation();
+  const fetcher = useFetcher();
 
   const steps = [
     {
@@ -219,11 +219,11 @@ export default function Onboarding() {
                 </Link>
               )}
               {s.confirmable && (
-                <Form method="post">
+                <fetcher.Form method="post">
                   <input type="hidden" name="intent" value="confirm_theme_extension" />
                   <button
                     type="submit"
-                    disabled={navigation.state !== "idle"}
+                    disabled={fetcher.state !== "idle"}
                     style={{
                       background: "#fff",
                       border: "1px solid #c9cccf",
@@ -236,7 +236,7 @@ export default function Onboarding() {
                   >
                     I've added the blocks →
                   </button>
-                </Form>
+                </fetcher.Form>
               )}
             </div>
           </div>

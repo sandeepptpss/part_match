@@ -263,22 +263,62 @@
     const clearBtn = widget.querySelector('[data-partmatch-clear]');
     if (clearBtn && widgetSettings.clearButtonText) clearBtn.textContent = widgetSettings.clearButtonText;
 
-    // Update Tab Availability (YMM vs VIN)
+    // Dynamic AI Voice Search Button & Tab Formatting
+    const voiceBtn = widget.querySelector('[data-partmatch-voice-btn]');
+    const voiceTab = widget.querySelector('[data-pm-tab="voice"]');
+    const voiceInput = widget.querySelector('[data-partmatch-voice-input]');
+
+    if (voiceBtn) {
+      if (widgetSettings.voiceSearchButtonText) {
+        voiceBtn.textContent = widgetSettings.voiceSearchButtonText;
+      }
+      voiceBtn.style.background = primary;
+      voiceBtn.style.color = '#ffffff';
+    }
+
+    if (voiceTab && widgetSettings.voiceSearchTabText) {
+      voiceTab.textContent = widgetSettings.voiceSearchTabText;
+    }
+
+    if (voiceInput && widgetSettings.voiceSearchPlaceholder) {
+      voiceInput.placeholder = widgetSettings.voiceSearchPlaceholder;
+    }
+
+    // Update Tab Availability (YMM vs VIN vs VOICE)
     const tabsContainer = widget.querySelector('.pm-tabs');
+    const ymmTab = widget.querySelector('[data-pm-tab="ymm"]');
+    const vinTab = widget.querySelector('[data-pm-tab="vin"]');
     const ymmPanel = widget.querySelector('[data-pm-ymm-panel]');
     const vinPanel = widget.querySelector('[data-pm-vin-panel]');
+    const voicePanel = widget.querySelector('[data-pm-voice-panel]');
 
     const enableYmm = widgetSettings.enableYmmSearch !== false;
-    const enableVin = widgetSettings.enableVinSearch !== false;
+    const enableVin = widgetSettings.enableVinSearch === true;
+    const enableVoice = widgetSettings.enableVoiceSearch === true;
+
+    if (ymmTab) {
+      ymmTab.style.display = enableYmm ? 'inline-block' : 'none';
+    }
+    if (vinTab) {
+      vinTab.style.display = enableVin ? 'inline-block' : 'none';
+    }
+    if (voiceTab) {
+      voiceTab.style.display = enableVoice ? 'inline-block' : 'none';
+    }
+
+    const activeTabsCount = (enableYmm ? 1 : 0) + (enableVin ? 1 : 0) + (enableVoice ? 1 : 0);
 
     if (tabsContainer) {
-      tabsContainer.style.display = (enableYmm && enableVin) ? 'flex' : 'none';
+      tabsContainer.style.display = activeTabsCount > 1 ? 'flex' : 'none';
     }
     if (ymmPanel) {
       ymmPanel.style.display = enableYmm ? 'flex' : 'none';
     }
     if (vinPanel) {
       vinPanel.style.display = (!enableYmm && enableVin) ? 'block' : 'none';
+    }
+    if (voicePanel) {
+      voicePanel.style.display = (!enableYmm && !enableVin && enableVoice) ? 'block' : 'none';
     }
   }
 
@@ -347,10 +387,11 @@
       yearSel.disabled = false;
     } catch { yearSel.disabled = false; }
 
-    // Tab Switching (BY VEHICLE YMM vs BY VIN LOOKUP)
+    // Tab Switching (BY VEHICLE YMM vs BY VIN LOOKUP vs AI VOICE SEARCH)
     const tabs = widget.querySelectorAll('[data-pm-tab]');
     const ymmPanel = widget.querySelector('[data-pm-ymm-panel]');
     const vinPanel = widget.querySelector('[data-pm-vin-panel]');
+    const voicePanel = widget.querySelector('[data-pm-voice-panel]');
 
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -368,62 +409,212 @@
         const mode = tab.dataset.pmTab;
         if (mode === 'vin') {
           if (ymmPanel) ymmPanel.style.display = 'none';
+          if (voicePanel) voicePanel.style.display = 'none';
           if (vinPanel) vinPanel.style.display = 'block';
+        } else if (mode === 'voice') {
+          if (ymmPanel) ymmPanel.style.display = 'none';
+          if (vinPanel) vinPanel.style.display = 'none';
+          if (voicePanel) voicePanel.style.display = 'block';
         } else {
           if (vinPanel) vinPanel.style.display = 'none';
+          if (voicePanel) voicePanel.style.display = 'none';
           if (ymmPanel) ymmPanel.style.display = 'flex';
         }
       });
     });
+
+    // Feedback Banner Helper with Dismiss Close Button (×)
+    function showBannerFeedback(el, message, type = 'error') {
+      if (!el) return;
+      const isError = type === 'error';
+      const isSuccess = type === 'success';
+
+      const bgColor = isError ? '#fef2f2' : isSuccess ? '#ecfdf5' : '#f0f9ff';
+      const textColor = isError ? '#991b1b' : isSuccess ? '#047857' : '#0369a1';
+      const borderColor = isError ? '#fecaca' : isSuccess ? '#a7f3d0' : '#bae6fd';
+
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'space-between';
+      el.style.gap = '10px';
+      el.style.background = bgColor;
+      el.style.color = textColor;
+      el.style.border = `1px solid ${borderColor}`;
+      el.style.borderRadius = '6px';
+      el.style.padding = '10px 14px';
+      el.style.fontSize = '13px';
+      el.style.fontWeight = '600';
+      el.style.marginTop = '10px';
+
+      const cleanMsg = message.replace(/^[❌✓⏳🎙️]\s*/, '');
+
+      el.innerHTML = `
+        <span style="flex: 1;">${cleanMsg}</span>
+        <button type="button" aria-label="Dismiss" style="background: transparent; border: none; color: ${textColor}; font-size: 18px; font-weight: 700; cursor: pointer; padding: 0 4px; line-height: 1; opacity: 0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+          &times;
+        </button>
+      `;
+
+      const closeBtn = el.querySelector('button');
+      if (closeBtn) {
+        closeBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          el.style.display = 'none';
+          el.innerHTML = '';
+        };
+      }
+    }
+
+    // AI Voice & Conversational Assistant Integration
+    const voiceInput = widget.querySelector('[data-partmatch-voice-input]');
+    const micBtn = widget.querySelector('[data-partmatch-mic-btn]');
+    const voiceBtn = widget.querySelector('[data-partmatch-voice-btn]');
+    const voiceFeedback = widget.querySelector('[data-partmatch-voice-feedback]');
+
+    if (voiceInput) {
+      voiceInput.addEventListener('input', () => {
+        if (voiceFeedback) {
+          voiceFeedback.style.display = 'none';
+          voiceFeedback.innerHTML = '';
+        }
+      });
+    }
+
+    if (micBtn && voiceInput) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        micBtn.addEventListener('click', () => {
+          try {
+            recognition.start();
+            micBtn.style.background = '#ef4444';
+            micBtn.style.color = '#ffffff';
+            micBtn.style.borderColor = '#dc2626';
+            showBannerFeedback(voiceFeedback, 'Listening... Speak your vehicle and part (e.g. 2018 Honda Civic EX brake pads)', 'info');
+          } catch (e) {
+            recognition.stop();
+          }
+        });
+
+        recognition.onresult = (event) => {
+          const transcript = event.results[0][0].transcript;
+          voiceInput.value = transcript;
+          micBtn.style.background = '#eff6ff';
+          micBtn.style.color = '#2563eb';
+          micBtn.style.borderColor = '#bfdbfe';
+          if (voiceBtn) voiceBtn.click();
+        };
+
+        recognition.onerror = (event) => {
+          micBtn.style.background = '#eff6ff';
+          micBtn.style.color = '#2563eb';
+          micBtn.style.borderColor = '#bfdbfe';
+          if (event?.error === 'not-allowed' || window.self !== window.top) {
+            showBannerFeedback(voiceFeedback, 'Microphone access restricted inside Theme Editor iframe. Type your query here or open Live Store to use Voice mic.', 'error');
+          } else {
+            showBannerFeedback(voiceFeedback, 'Voice input not captured. You can type your query directly.', 'error');
+          }
+        };
+
+        recognition.onend = () => {
+          micBtn.style.background = '#eff6ff';
+          micBtn.style.color = '#2563eb';
+          micBtn.style.borderColor = '#bfdbfe';
+        };
+      } else {
+        micBtn.addEventListener('click', () => {
+          showBannerFeedback(voiceFeedback, 'Voice recognition not supported in this browser. Please type your query.', 'error');
+        });
+      }
+    }
+
+    if (voiceBtn && voiceInput) {
+      voiceBtn.addEventListener('click', async () => {
+        const queryText = voiceInput.value ? voiceInput.value.trim() : '';
+        if (!queryText) return;
+
+        showBannerFeedback(voiceFeedback, 'AI is searching fitments...', 'info');
+
+        try {
+          const res = await fetch(`${PROXY_BASE}/api/ai-voice-search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: queryText })
+          });
+          const data = await res.json();
+
+          if (!res.ok || !data.success) {
+            showBannerFeedback(voiceFeedback, data.error || 'No results found.', 'error');
+            return;
+          }
+
+          showBannerFeedback(voiceFeedback, data.speechResponse || 'Found matching fitment records.', 'success');
+
+          if (data.parsedVehicle && data.parsedVehicle.year && data.parsedVehicle.make && data.parsedVehicle.model) {
+            saveVehicle({
+              year: data.parsedVehicle.year,
+              make: data.parsedVehicle.make,
+              model: data.parsedVehicle.model
+            });
+          }
+
+          if (resultsEl) {
+            await renderResults(resultsEl, {
+              hasResults: data.hasResults,
+              products: data.products || [],
+              resultCount: data.resultCount || 0,
+              year: data.parsedVehicle?.year || '',
+              make: data.parsedVehicle?.make || '',
+              model: data.parsedVehicle?.model || ''
+            });
+          }
+
+        } catch (err) {
+          showBannerFeedback(voiceFeedback, 'AI search unavailable. Try using Year/Make/Model dropdowns.', 'error');
+        }
+      });
+    }
 
     // VIN Lookup Decoding & Dropdown Auto-Selection
     const vinInput = widget.querySelector('[data-partmatch-vin]');
     const vinBtn   = widget.querySelector('[data-partmatch-vin-btn]');
     const vinFeedback = widget.querySelector('[data-partmatch-vin-feedback]');
 
+    if (vinInput) {
+      vinInput.addEventListener('input', () => {
+        if (vinFeedback) {
+          vinFeedback.style.display = 'none';
+          vinFeedback.innerHTML = '';
+        }
+      });
+    }
+
     if (vinBtn && vinInput) {
       vinBtn.addEventListener('click', async () => {
         const rawVin = vinInput.value ? vinInput.value.trim() : '';
         if (!rawVin || rawVin.length !== 17) {
-          if (vinFeedback) {
-            vinFeedback.style.display = 'block';
-            vinFeedback.style.background = '#fef2f2';
-            vinFeedback.style.color = '#991b1b';
-            vinFeedback.style.border = '1px solid #fecaca';
-            vinFeedback.textContent = '❌ Please enter a valid 17-character VIN number.';
-          }
+          showBannerFeedback(vinFeedback, 'Please enter a valid 17-character VIN number.', 'error');
           return;
         }
 
-        if (vinFeedback) {
-          vinFeedback.style.display = 'block';
-          vinFeedback.style.background = '#f0f9ff';
-          vinFeedback.style.color = '#0369a1';
-          vinFeedback.style.border = '1px solid #bae6fd';
-          vinFeedback.textContent = '⏳ Decoding VIN with vehicle registry...';
-        }
+        showBannerFeedback(vinFeedback, 'Decoding VIN with vehicle registry...', 'info');
 
         try {
           const res = await fetch(`${PROXY_BASE}/api/vin-lookup?vin=${encodeURIComponent(rawVin)}`);
           const data = await res.json();
 
           if (!res.ok || !data.success) {
-            if (vinFeedback) {
-              vinFeedback.style.background = '#fef2f2';
-              vinFeedback.style.color = '#991b1b';
-              vinFeedback.style.border = '1px solid #fecaca';
-              vinFeedback.textContent = `❌ ${data.error || 'Vehicle not found for this VIN'}`;
-            }
+            showBannerFeedback(vinFeedback, data.error || 'Vehicle not found for this VIN', 'error');
             return;
           }
 
           const { year, make, model } = data;
-          if (vinFeedback) {
-            vinFeedback.style.background = '#ecfdf5';
-            vinFeedback.style.color = '#047857';
-            vinFeedback.style.border = '1px solid #a7f3d0';
-            vinFeedback.textContent = `✓ Decoded: ${year} ${make} ${model}. Auto-selecting vehicle dropdowns…`;
-          }
+          showBannerFeedback(vinFeedback, `Decoded: ${year} ${make} ${model}. Auto-selecting vehicle dropdowns…`, 'success');
 
           // Switch to YMM panel to show auto-selected dropdowns
           setTimeout(() => {

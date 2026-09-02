@@ -1,6 +1,6 @@
 const json = (data, init) => Response.json(data, init);
 import { useState, useEffect } from "react";
-import { useLoaderData, Form, useNavigation, useActionData, Link } from "react-router";
+import { useLoaderData, useFetcher, Link } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
@@ -97,10 +97,10 @@ export const action = async ({ request }) => {
 
 export default function Settings() {
   const { shop, settings, planAllowsFitmentChecker, planLabel } = useLoaderData();
-  const actionData = useActionData();
-  const navigation = useNavigation();
+  const fetcher = useFetcher();
+  const actionData = fetcher.data;
 
-  const isSaving = navigation.state !== "idle";
+  const isSaving = fetcher.state !== "idle";
   const initial = actionData?.settings || settings || DEFAULT_SETTINGS;
 
   const [formState, setFormState] = useState(() => ({
@@ -194,7 +194,7 @@ export default function Settings() {
         </div>
       )}
 
-      <Form method="post">
+      <fetcher.Form method="post">
         <input type="hidden" name="redirect_on_search" value={formState.redirectOnSearch ? "true" : "false"} />
         <input type="hidden" name="results_url" value={formState.resultsUrl} />
 
@@ -504,7 +504,7 @@ export default function Settings() {
           </button>
         </div>
 
-      </Form>
+      </fetcher.Form>
     </div>
   );
 }

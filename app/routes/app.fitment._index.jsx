@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Form, useNavigation, useSearchParams, Link } from "react-router";
+import { useLoaderData, Form, useFetcher, useSearchParams, Link, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -61,33 +61,30 @@ export default function FitmentIndex() {
   const [searchParams] = useSearchParams();
   const totalPages = Math.ceil(total / pageSize);
   const loading = navigation.state !== "idle";
-  const [exporting, setExporting] = useState(false);
+  const exportFetcher = useFetcher();
+  const exporting = exportFetcher.state !== "idle";
 
-  const handleExportCSV = async () => {
-    try {
-      setExporting(true);
-      const res = await fetch("/app/fitment/export");
-      if (!res.ok) {
-        const text = await res.text();
-        alert(text || "Export failed. Please check plan permissions.");
-        setExporting(false);
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `fitment-export-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert("Failed to export CSV: " + err.message);
-    } finally {
-      setExporting(false);
-    }
+  const handleExportCSV = () => {
+    exportFetcher.load("/app/fitment/export");
   };
+
+  useEffect(() => {
+    if (exportFetcher.data) {
+      if (exportFetcher.data.allowed && exportFetcher.data.csv) {
+        const blob = new Blob([exportFetcher.data.csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = exportFetcher.data.filename || `fitment-export-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else if (exportFetcher.data.allowed === false && exportFetcher.data.message) {
+        alert(exportFetcher.data.message);
+      }
+    }
+  }, [exportFetcher.data]);
 
   return (
     <div style={{ padding: "28px 24px", maxWidth: "1240px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>
@@ -259,16 +256,7 @@ export default function FitmentIndex() {
                     <Link to={`/app/fitment/${r.id}/products`} style={tableActionBtn("#2563eb", "#dbeafe")}>
                       Manage Mappings
                     </Link>
-                    <Form method="post" style={{ display: "inline" }}>
-                      <input type="hidden" name="intent" value="delete" />
-                      <input type="hidden" name="id" value={r.id} />
-                      <button
-                        type="submit"
-                        style={tableActionBtn("#dc2626", "#fee2e2")}
-                      >
-                        Delete
-                      </button>
-                    </Form>
+                    <DeleteFitmentForm id={r.id} />
                   </div>
                 </td>
               </tr>
@@ -392,3 +380,22 @@ const tableActionBtn = (color, bg) => ({
   fontWeight: "700",
   cursor: "pointer",
 });
+
+function DeleteFitmentForm({ id }) {
+  const fetcher = useFetcher();
+  const deleting = fetcher.state !== "idle";
+
+  return (
+    <fetcher.Form method="post" style={{ display: "inline" }}>
+      <input type="hidden" name="intent" value="delete" />
+      <input type="hidden" name="id" value={id} />
+      <button
+        type="submit"
+        disabled={deleting}
+        style={{ ...tableActionBtn("#dc2626", "#fee2e2"), opacity: deleting ? 0.6 : 1 }}
+      >
+        {deleting ? "Deleting…" : "Delete"}
+      </button>
+    </fetcher.Form>
+  );
+}

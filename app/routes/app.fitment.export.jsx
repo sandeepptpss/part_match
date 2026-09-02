@@ -15,6 +15,12 @@ export async function loader({ request }) {
   const { plan } = await getShopPlan(shop);
   const limits = planLimits(plan);
   if (!limits.csvImportExport) {
+    if (url.searchParams.get("raw") === "true") {
+      return json({
+        allowed: false,
+        message: `CSV & ACES Export requires the Growth Professional plan or above. Your current plan is ${limits.label}.`,
+      }, { status: 403 });
+    }
     return json({
       allowed: false,
       message: `CSV & ACES Export requires the Growth Professional plan or above. Your current plan is ${limits.label}.`,
@@ -26,6 +32,21 @@ export async function loader({ request }) {
     include: { products: true, collections: true, tags: true, skus: true },
     orderBy: [{ year: "desc" }, { make: "asc" }, { model: "asc" }],
   });
+
+  if (!records || records.length === 0) {
+    if (url.searchParams.get("raw") === "true") {
+      return new Response("No fitment records found to export.", { status: 400 });
+    }
+    return json({
+      allowed: false,
+      csv: "",
+      filename: "",
+      format,
+      mimeType,
+      count: 0,
+      message: "No fitment records found in your catalog. Please add or import fitment records before exporting.",
+    });
+  }
 
   let outputContent = "";
   let filename = "";
@@ -170,19 +191,19 @@ export default function FitmentExport() {
             href="/app/fitment/export?format=csv&raw=true"
             style={{ background: "#0f172a", color: "#ffffff", padding: "10px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", textDecoration: "none" }}
           >
-            📄 Standard CSV Export
+            Standard CSV Export
           </a>
           <a
             href="/app/fitment/export?format=aces_csv&raw=true"
             style={{ background: "#059669", color: "#ffffff", padding: "10px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", textDecoration: "none" }}
           >
-            🚗 ACES Standard CSV Export
+            ACES Standard CSV Export
           </a>
           <a
             href="/app/fitment/export?format=aces_xml&raw=true"
             style={{ background: "#2563eb", color: "#ffffff", padding: "10px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", textDecoration: "none" }}
           >
-            ⚡ Enterprise ACES XML Export
+            Enterprise ACES XML Export
           </a>
         </div>
 

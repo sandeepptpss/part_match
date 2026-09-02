@@ -11,6 +11,9 @@ const DEFAULT_WIDGET_SETTINGS = {
   modelLabel: "MODEL",
   searchButtonText: "SEARCH",
   clearButtonText: "CLEAR",
+  voiceSearchButtonText: "ASK AI",
+  voiceSearchTabText: "AI VOICE SEARCH",
+  voiceSearchPlaceholder: "e.g. Front brake pads for 2018 Honda Civic EX...",
   primaryColor: "#0f172a",
   textColor: "#ffffff",
   backgroundColor: "#ffffff",
@@ -20,6 +23,7 @@ const DEFAULT_WIDGET_SETTINGS = {
   showSubheading: true,
   enableVinSearch: true,
   enableYmmSearch: true,
+  enableVoiceSearch: false,
 };
 
 const DEFAULT_APP_SETTINGS = {

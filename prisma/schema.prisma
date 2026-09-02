@@ -162,6 +162,9 @@ model WidgetSettings {
   vinSearchLabel  String @default("SEARCH BY VIN")
   searchButtonText String @default("SEARCH")
   clearButtonText  String @default("CLEAR")
+  voiceSearchButtonText String @default("ASK AI")
+  voiceSearchTabText    String @default("AI VOICE SEARCH")
+  voiceSearchPlaceholder String @default("e.g. Front brake pads for 2018 Honda Civic EX...")
   primaryColor    String @default("#0f172a")
   textColor       String @default("#0f172a")
   backgroundColor String @default("#ffffff")
@@ -171,6 +174,7 @@ model WidgetSettings {
   showSubheading  Boolean @default(true)
   enableVinSearch Boolean @default(true)
   enableYmmSearch Boolean @default(true)
+  enableVoiceSearch Boolean @default(true)
   backgroundImage String  @default("")
   bgOverlayOpacity Int    @default(0)
   enableBgImage   Boolean @default(false)
@@ -219,6 +223,7 @@ model AppSettings {
   themeExtensionConfirmed Boolean @default(false)
   annualDiscountPercent Int   @default(20)
   merchantDiscountPercent Int @default(0)
+  isSupportOnline     Boolean @default(true)
 
   @@index([shop])
 }
