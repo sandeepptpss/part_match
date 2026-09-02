@@ -33,6 +33,10 @@ export async function loader({ request }) {
     orderBy: [{ year: "desc" }, { make: "asc" }, { model: "asc" }],
   });
 
+  let outputContent = "";
+  let filename = "";
+  let mimeType = "text/csv";
+
   if (!records || records.length === 0) {
     if (url.searchParams.get("raw") === "true") {
       return new Response("No fitment records found to export.", { status: 400 });
@@ -47,10 +51,6 @@ export async function loader({ request }) {
       message: "No fitment records found in your catalog. Please add or import fitment records before exporting.",
     });
   }
-
-  let outputContent = "";
-  let filename = "";
-  let mimeType = "text/csv";
 
   if (format === "aces_xml") {
     mimeType = "application/xml";
