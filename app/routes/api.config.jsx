@@ -12,12 +12,14 @@ const DEFAULT_WIDGET_SETTINGS = {
   searchButtonText: "SEARCH",
   clearButtonText: "CLEAR",
   primaryColor: "#0f172a",
-  textColor: "#0f172a",
+  textColor: "#ffffff",
   backgroundColor: "#ffffff",
   borderRadius: 6,
   layout: "horizontal",
   showHeading: true,
   showSubheading: true,
+  enableVinSearch: true,
+  enableYmmSearch: true,
 };
 
 const DEFAULT_APP_SETTINGS = {
@@ -47,20 +49,6 @@ export async function loader({ request }) {
   let widget = await prisma.widgetSettings?.findUnique({ where: { shop } });
   if (!widget) {
     widget = { shop, ...DEFAULT_WIDGET_SETTINGS };
-  } else {
-    widget = {
-      ...widget,
-      heading: widget.heading === "Find Your Part" ? "FIND YOUR PART" : widget.heading,
-      subheading: widget.subheading === "Search by Application" ? "SEARCH BY APPLICATION" : widget.subheading,
-      yearLabel: widget.yearLabel === "Year" ? "YEAR" : widget.yearLabel,
-      makeLabel: widget.makeLabel === "Make" ? "MAKE" : widget.makeLabel,
-      modelLabel: widget.modelLabel === "Model" ? "MODEL" : widget.modelLabel,
-      searchButtonText: widget.searchButtonText === "Search" ? "SEARCH" : widget.searchButtonText,
-      clearButtonText: widget.clearButtonText === "Clear" ? "CLEAR" : widget.clearButtonText,
-      primaryColor: (!widget.primaryColor || widget.primaryColor === "#008060" || widget.primaryColor === "#934b17" || widget.primaryColor.startsWith("#eb") || widget.primaryColor.startsWith("#e2") || widget.primaryColor.startsWith("#e5")) ? "#0f172a" : widget.primaryColor,
-      backgroundColor: (widget.backgroundColor === "#f4f6f8" || widget.backgroundColor === "#1a1a1a") ? "#ffffff" : widget.backgroundColor,
-      textColor: (widget.backgroundColor === "#ffffff" || !widget.backgroundColor) ? "#0f172a" : widget.textColor,
-    };
   }
 
   let appSettings = await prisma.appSettings?.findUnique({ where: { shop } });

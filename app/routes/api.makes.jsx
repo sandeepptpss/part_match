@@ -6,7 +6,9 @@ async function getShopFromRequest(request) {
   try {
     const { session } = await authenticate.public.appProxy(request);
     if (session?.shop) return session.shop;
-  } catch (err) {}
+  } catch (err) {
+    // Ignore proxy auth error and fallback to query params/database
+  }
 
   const url = new URL(request.url);
   const paramShop = url.searchParams.get("shop");

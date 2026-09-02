@@ -57,11 +57,35 @@
   assign pm_results_mode = block.settings.results_mode
   assign pm_show_inline = block.settings.show_inline
   assign pm_results_url = block.settings.results_page_url | default: '/collections/all'
+
+  assign pm_enable_bg_image = block.settings.enable_bg_image
+  if pm_enable_bg_image == nil
+    assign pm_enable_bg_image = false
+  endif
+
+  assign pm_enable_full_width = block.settings.enable_full_width
+  if pm_enable_full_width == nil
+    assign pm_enable_full_width = false
+  endif
+
+  assign pm_widget_max_width = block.settings.widget_max_width | default: 1200
+  assign pm_banner_min_height = block.settings.banner_min_height | default: 220
+  assign pm_banner_padding = block.settings.banner_padding_vertical | default: 30
+  assign pm_bg_image_size = block.settings.bg_image_size | default: 'cover'
+
+  assign pm_bg_img = ''
+  if block.settings.bg_image != blank
+    assign pm_bg_img = block.settings.bg_image | image_url: width: 2000
+  elsif block.settings.bg_image_url != blank
+    assign pm_bg_img = block.settings.bg_image_url
+  endif
+
+  assign pm_overlay_opacity = block.settings.bg_overlay_opacity | default: 0
 -%}
 
 <div
   id="partmatch-widget"
-  class="pm-widget"
+  class="pm-widget {% if pm_enable_full_width %}pm-widget--full-width{% endif %}"
   data-partmatch-widget
   data-results-mode="{{ pm_results_mode }}"
   data-show-inline="{{ pm_show_inline }}"
@@ -72,8 +96,28 @@
     --pm-text: {{ pm_text_color }};
     --pm-radius: {{ pm_border_radius }}px;
     --pm-btn-radius: {{ pm_border_radius }}px;
+    {% if pm_enable_full_width %}
+      width: 100%;
+      max-width: 100%;
+    {% else %}
+      max-width: {{ pm_widget_max_width }}px;
+    {% endif %}
+    margin-left: auto;
+    margin-right: auto;
+    min-height: {{ pm_banner_min_height }}px;
+    padding-top: {{ pm_banner_padding }}px;
+    padding-bottom: {{ pm_banner_padding }}px;
     background-color: {{ pm_bg_color }};
+    {% if pm_enable_bg_image and pm_bg_img != blank %}
+      background-image: linear-gradient(rgba(0, 0, 0, {{ pm_overlay_opacity | divided_by: 100.0 }}), rgba(0, 0, 0, {{ pm_overlay_opacity | divided_by: 100.0 }})), url('{{ pm_bg_img }}');
+      background-size: {{ pm_bg_image_size }};
+      background-position: center;
+      background-repeat: no-repeat;
+    {% endif %}
     color: {{ pm_text_color }};
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
   "
   {{ block.shopify_attributes }}
 >
@@ -84,71 +128,82 @@
     </h2>
   {%- endif -%}
 
-  <div class="pm-tabs" style="display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;">
-    <button type="button" class="pm-tab pm-tab--active" data-pm-tab="ymm" style="padding: 6px 16px; border-radius: 20px; border: 1px solid #0f172a; background: #0f172a; color: #ffffff; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
-      BY VEHICLE (YMM)
-    </button>
-    <button type="button" class="pm-tab" data-pm-tab="vin" style="padding: 6px 16px; border-radius: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
-      BY VIN LOOKUP
-    </button>
-  </div>
+  {%- assign pm_enable_ymm = block.settings.enable_ymm_search -%}
+  {%- if pm_enable_ymm == nil -%}{%- assign pm_enable_ymm = true -%}{%- endif -%}
+  {%- assign pm_enable_vin = block.settings.enable_vin_search -%}
+  {%- if pm_enable_vin == nil -%}{%- assign pm_enable_vin = true -%}{%- endif -%}
 
-  <div class="pm-vin-panel" data-pm-vin-panel style="display: none; max-width: 680px; margin: 0 auto 20px; text-align: center;">
-    <div style="display: flex; gap: 8px; align-items: center;">
-      <input type="text" data-partmatch-vin placeholder="ENTER 17-DIGIT VIN NUMBER..." maxlength="17" style="flex: 1; height: 46px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: var(--pm-btn-radius, 6px); font-size: 14px; font-weight: 600; text-transform: uppercase; color: #0f172a;" />
-      <button type="button" class="pm-btn pm-btn--search" data-partmatch-vin-btn style="height: 46px;">
-        DECODE VIN
+  {%- if pm_enable_ymm and pm_enable_vin -%}
+    <div class="pm-tabs" style="display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;">
+      <button type="button" class="pm-tab pm-tab--active" data-pm-tab="ymm" style="padding: 6px 16px; border-radius: 20px; border: 1px solid #0f172a; background: #0f172a; color: #ffffff; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+        BY VEHICLE (YMM)
+      </button>
+      <button type="button" class="pm-tab" data-pm-tab="vin" style="padding: 6px 16px; border-radius: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+        BY VIN LOOKUP
       </button>
     </div>
-    <div data-partmatch-vin-feedback style="display: none; font-size: 13px; font-weight: 600; margin-top: 10px; text-align: left; padding: 8px 12px; border-radius: 6px;"></div>
-  </div>
+  {%- endif -%}
 
-  <div class="pm-widget__form" data-pm-ymm-panel>
-    <div class="pm-widget__select-wrap">
-      <select
-        data-partmatch-year
-        data-placeholder="{{ pm_year_label }}"
-        aria-label="{{ pm_year_label }}"
-      >
-        <option value="" disabled selected>{{ pm_year_label }}</option>
-      </select>
+  {%- if pm_enable_vin -%}
+    <div class="pm-vin-panel" data-pm-vin-panel style="{% if pm_enable_ymm %}display: none;{% else %}display: block;{% endif %} max-width: 680px; margin: 0 auto 20px; text-align: center;">
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <input type="text" data-partmatch-vin placeholder="ENTER 17-DIGIT VIN NUMBER..." maxlength="17" style="flex: 1; height: 46px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: var(--pm-btn-radius, 6px); font-size: 14px; font-weight: 600; text-transform: uppercase; color: #0f172a;" />
+        <button type="button" class="pm-btn pm-btn--search" data-partmatch-vin-btn style="height: 46px;">
+          DECODE VIN
+        </button>
+      </div>
+      <div data-partmatch-vin-feedback style="display: none; font-size: 13px; font-weight: 600; margin-top: 10px; text-align: left; padding: 8px 12px; border-radius: 6px;"></div>
     </div>
+  {%- endif -%}
 
-    <div class="pm-widget__select-wrap">
-      <select
-        data-partmatch-make
-        data-placeholder="{{ pm_make_label }}"
-        aria-label="{{ pm_make_label }}"
+  {%- if pm_enable_ymm -%}
+    <div class="pm-widget__form" data-pm-ymm-panel>
+      <div class="pm-widget__select-wrap">
+        <select
+          data-partmatch-year
+          data-placeholder="{{ pm_year_label }}"
+          aria-label="{{ pm_year_label }}"
+        >
+          <option value="" disabled selected>{{ pm_year_label }}</option>
+        </select>
+      </div>
+
+      <div class="pm-widget__select-wrap">
+        <select
+          data-partmatch-make
+          data-placeholder="{{ pm_make_label }}"
+          aria-label="{{ pm_make_label }}"
+          disabled
+        >
+          <option value="" disabled selected>{{ pm_make_label }}</option>
+        </select>
+      </div>
+
+      <div class="pm-widget__select-wrap">
+        <select
+          data-partmatch-model
+          data-placeholder="{{ pm_model_label }}"
+          aria-label="{{ pm_model_label }}"
+          disabled
+        >
+          <option value="" disabled selected>{{ pm_model_label }}</option>
+        </select>
+      </div>
+
+      <button
+        class="pm-btn pm-btn--search"
+        data-partmatch-search
         disabled
       >
-        <option value="" disabled selected>{{ pm_make_label }}</option>
-      </select>
+        {{ pm_search_text }}
+        <span class="pm-spinner" data-partmatch-spinner></span>
+      </button>
+
+      <button class="pm-btn pm-btn--clear" data-partmatch-clear>
+        {{ pm_clear_text }}
+      </button>
     </div>
-
-    <div class="pm-widget__select-wrap">
-      <select
-        data-partmatch-model
-        data-placeholder="{{ pm_model_label }}"
-        aria-label="{{ pm_model_label }}"
-        disabled
-      >
-        <option value="" disabled selected>{{ pm_model_label }}</option>
-      </select>
-    </div>
-
-    <button
-      class="pm-btn pm-btn--search"
-      data-partmatch-search
-      disabled
-    >
-      {{ pm_search_text }}
-      <span class="pm-spinner" data-partmatch-spinner></span>
-    </button>
-
-    <button class="pm-btn pm-btn--clear" data-partmatch-clear>
-      {{ pm_clear_text }}
-    </button>
-  </div>
+  {%- endif -%}
 
   <div data-partmatch-results></div>
 </div>
@@ -162,102 +217,85 @@
   "settings": [
     {
       "type": "header",
-      "content": "Text Labels"
-    },
-    {
-      "type": "text",
-      "id": "heading",
-      "label": "Heading",
-      "default": "FIND YOUR PART"
-    },
-    {
-      "type": "text",
-      "id": "subheading",
-      "label": "Subheading",
-      "default": "SEARCH BY APPLICATION"
-    },
-    {
-      "type": "text",
-      "id": "year_label",
-      "label": "Year dropdown label",
-      "default": "YEAR"
-    },
-    {
-      "type": "text",
-      "id": "make_label",
-      "label": "Make dropdown label",
-      "default": "MAKE"
-    },
-    {
-      "type": "text",
-      "id": "model_label",
-      "label": "Model dropdown label",
-      "default": "MODEL"
-    },
-    {
-      "type": "text",
-      "id": "search_text",
-      "label": "Search button text",
-      "default": "SEARCH"
-    },
-    {
-      "type": "text",
-      "id": "clear_text",
-      "label": "Clear button text",
-      "default": "CLEAR"
-    },
-    {
-      "type": "header",
-      "content": "Appearance & Colors"
-    },
-    {
-      "type": "color",
-      "id": "primary_color",
-      "label": "Primary Button color",
-      "default": "#0f172a"
-    },
-    {
-      "type": "color",
-      "id": "bg_color",
-      "label": "Background color",
-      "default": "#ffffff"
-    },
-    {
-      "type": "color",
-      "id": "text_color",
-      "label": "Text color",
-      "default": "#0f172a"
-    },
-    {
-      "type": "range",
-      "id": "border_radius",
-      "label": "Border radius",
-      "min": 0,
-      "max": 20,
-      "step": 1,
-      "unit": "px",
-      "default": 6
-    },
-    {
-      "type": "header",
-      "content": "Search Results Options"
+      "content": "Banner Dimensions & Size Adjustment"
     },
     {
       "type": "checkbox",
-      "id": "show_heading",
-      "label": "Show heading",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_inline",
-      "label": "Show results Inline (Instead of redirecting)",
+      "id": "enable_full_width",
+      "label": "Full Width Banner (100% Edge-to-Edge)",
       "default": false
     },
     {
-      "type": "url",
-      "id": "results_page_url",
-      "label": "Results page URL (when not Inline)"
+      "type": "range",
+      "id": "widget_max_width",
+      "label": "Widget Max Width (when not full width)",
+      "min": 500,
+      "max": 2000,
+      "step": 20,
+      "unit": "px",
+      "default": 1200
+    },
+    {
+      "type": "range",
+      "id": "banner_min_height",
+      "label": "Banner Minimum Height",
+      "min": 120,
+      "max": 600,
+      "step": 10,
+      "unit": "px",
+      "default": 220
+    },
+    {
+      "type": "range",
+      "id": "banner_padding_vertical",
+      "label": "Banner Vertical Padding (Top & Bottom)",
+      "min": 10,
+      "max": 100,
+      "step": 5,
+      "unit": "px",
+      "default": 30
+    },
+    {
+      "type": "header",
+      "content": "Background Image Banner"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_bg_image",
+      "label": "Enable Background Image Banner",
+      "default": false
+    },
+    {
+      "type": "image_picker",
+      "id": "bg_image",
+      "label": "Background Image"
+    },
+    {
+      "type": "text",
+      "id": "bg_image_url",
+      "label": "Background Image External URL (Optional)",
+      "placeholder": "https://example.com/banner.jpg"
+    },
+    {
+      "type": "select",
+      "id": "bg_image_size",
+      "label": "Background Image Fitting",
+      "options": [
+        { "value": "cover", "label": "Cover (Fill Entire Banner)" },
+        { "value": "contain", "label": "Contain (Fit Whole Image)" },
+        { "value": "auto", "label": "Auto (Original Size)" }
+      ],
+      "default": "cover"
+    },
+    {
+      "type": "range",
+      "id": "bg_overlay_opacity",
+      "label": "Dark Overlay Opacity (for text readability)",
+      "min": 0,
+      "max": 90,
+      "step": 5,
+      "unit": "%",
+      "default": 20
     }
   ]
 }

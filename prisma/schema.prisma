@@ -170,6 +170,14 @@ model WidgetSettings {
   showHeading     Boolean @default(true)
   showSubheading  Boolean @default(true)
   enableVinSearch Boolean @default(true)
+  enableYmmSearch Boolean @default(true)
+  backgroundImage String  @default("")
+  bgOverlayOpacity Int    @default(0)
+  enableBgImage   Boolean @default(false)
+  widgetMaxWidth  Int     @default(1000)
+  bannerMinHeight Int     @default(220)
+  bannerPaddingVertical Int @default(30)
+  bgImageSize     String  @default("cover")
 
   @@index([shop])
 }

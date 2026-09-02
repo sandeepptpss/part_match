@@ -16,6 +16,7 @@ export async function loader({ request }) {
   const handle = url.searchParams.get("handle");
   const year = url.searchParams.get("year");
   const make = url.searchParams.get("make");
+  const model = url.searchParams.get("model");
   const trim = url.searchParams.get("trim") || "";
 
   if (!handle || !year || !make || !model) {

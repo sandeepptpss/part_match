@@ -8,7 +8,9 @@ export async function loader({ request }) {
   try {
     const { session } = await authenticate.public.appProxy(request);
     if (session?.shop) shop = session.shop;
-  } catch (err) {}
+  } catch (err) {
+    // Ignore proxy auth error and fallback to query params/database
+  }
 
   if (!shop) {
     const url = new URL(request.url);

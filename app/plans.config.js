@@ -1,3 +1,4 @@
+/* global process */
 // Controls whether billing.request()/billing.cancel() create real charges.
 // Real money only moves when this app is actually running with NODE_ENV=production.
 export function getIsTestCharge(shop = "") {

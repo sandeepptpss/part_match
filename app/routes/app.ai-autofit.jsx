@@ -189,7 +189,15 @@ export default function AiAutoFitCatalog() {
               return (
                 <div
                   key={idx}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => toggleSelect(idx)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggleSelect(idx);
+                    }
+                  }}
                   style={{
                     display: "flex",
                     alignItems: "center",

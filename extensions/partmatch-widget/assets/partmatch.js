@@ -236,9 +236,21 @@
     const yearSel = widget.querySelector('[data-partmatch-year]');
     const makeSel = widget.querySelector('[data-partmatch-make]');
     const modelSel = widget.querySelector('[data-partmatch-model]');
-    if (yearSel && widgetSettings.yearLabel) yearSel.dataset.placeholder = widgetSettings.yearLabel;
-    if (makeSel && widgetSettings.makeLabel) makeSel.dataset.placeholder = widgetSettings.makeLabel;
-    if (modelSel && widgetSettings.modelLabel) modelSel.dataset.placeholder = widgetSettings.modelLabel;
+    if (yearSel && widgetSettings.yearLabel) {
+      yearSel.dataset.placeholder = widgetSettings.yearLabel;
+      const firstOpt = yearSel.querySelector('option[value=""]');
+      if (firstOpt) firstOpt.textContent = widgetSettings.yearLabel;
+    }
+    if (makeSel && widgetSettings.makeLabel) {
+      makeSel.dataset.placeholder = widgetSettings.makeLabel;
+      const firstOpt = makeSel.querySelector('option[value=""]');
+      if (firstOpt) firstOpt.textContent = widgetSettings.makeLabel;
+    }
+    if (modelSel && widgetSettings.modelLabel) {
+      modelSel.dataset.placeholder = widgetSettings.modelLabel;
+      const firstOpt = modelSel.querySelector('option[value=""]');
+      if (firstOpt) firstOpt.textContent = widgetSettings.modelLabel;
+    }
 
     const searchBtn = widget.querySelector('[data-partmatch-search]');
     if (searchBtn && widgetSettings.searchButtonText) {
@@ -250,6 +262,24 @@
     }
     const clearBtn = widget.querySelector('[data-partmatch-clear]');
     if (clearBtn && widgetSettings.clearButtonText) clearBtn.textContent = widgetSettings.clearButtonText;
+
+    // Update Tab Availability (YMM vs VIN)
+    const tabsContainer = widget.querySelector('.pm-tabs');
+    const ymmPanel = widget.querySelector('[data-pm-ymm-panel]');
+    const vinPanel = widget.querySelector('[data-pm-vin-panel]');
+
+    const enableYmm = widgetSettings.enableYmmSearch !== false;
+    const enableVin = widgetSettings.enableVinSearch !== false;
+
+    if (tabsContainer) {
+      tabsContainer.style.display = (enableYmm && enableVin) ? 'flex' : 'none';
+    }
+    if (ymmPanel) {
+      ymmPanel.style.display = enableYmm ? 'flex' : 'none';
+    }
+    if (vinPanel) {
+      vinPanel.style.display = (!enableYmm && enableVin) ? 'block' : 'none';
+    }
   }
 
   // ─── Populate Select ─────────────────────────────────────────────────────────
@@ -1027,10 +1057,62 @@
     }
   }
 
+  // ─── Render HTML for Snippet Containers ────────────────────────────────────
+  function renderWidgetHtml(container) {
+    if (container.querySelector('[data-partmatch-year]')) return;
+
+    container.innerHTML = `
+      <div class="pm-widget" data-partmatch-widget style="max-width: 1000px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.08); box-sizing: border-box; font-family: inherit;">
+        <div class="pm-widget__header" style="text-align: center; margin-bottom: 16px;">
+          <h2 class="pm-widget__heading" style="font-size: 20px; font-weight: 800; margin: 0 0 4px; color: #0f172a;">FIND YOUR PART</h2>
+          <div class="pm-widget__heading-small" style="font-size: 13px; color: #64748b;">SEARCH BY APPLICATION</div>
+        </div>
+
+        <div class="pm-tabs" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 16px;">
+          <button type="button" class="pm-tab pm-tab--active" data-pm-tab="ymm" style="padding: 6px 14px; border-radius: 16px; background: #0f172a; color: #ffffff; border: none; font-size: 12px; font-weight: 700; cursor: pointer;">BY VEHICLE (YMM)</button>
+          <button type="button" class="pm-tab" data-pm-tab="vin" style="padding: 6px 14px; border-radius: 16px; background: #ffffff; color: #475569; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 700; cursor: pointer;">BY VIN LOOKUP</button>
+        </div>
+
+        <div data-pm-ymm-panel style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;">
+          <select data-partmatch-year data-placeholder="YEAR" style="flex: 1; min-width: 130px; padding: 10px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 13px; background: #fff;">
+            <option value="" disabled selected>YEAR</option>
+          </select>
+          <select data-partmatch-make data-placeholder="MAKE" disabled style="flex: 1; min-width: 130px; padding: 10px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 13px; background: #fff;">
+            <option value="" disabled selected>MAKE</option>
+          </select>
+          <select data-partmatch-model data-placeholder="MODEL" disabled style="flex: 1; min-width: 130px; padding: 10px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 13px; background: #fff;">
+            <option value="" disabled selected>MODEL</option>
+          </select>
+          <button type="button" data-partmatch-search disabled style="padding: 10px 24px; border-radius: 6px; background: #0f172a; color: #fff; border: none; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+            <span>SEARCH</span>
+            <span class="pm-spinner" data-partmatch-spinner style="display: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: pm-spin 0.8s linear infinite;"></span>
+          </button>
+          <button type="button" data-partmatch-clear style="padding: 10px 16px; border-radius: 6px; background: #ffffff; color: #475569; border: 1px solid #cbd5e1; font-weight: 600; font-size: 13px; cursor: pointer;">CLEAR</button>
+        </div>
+
+        <div data-pm-vin-panel style="display: none; margin-top: 10px;">
+          <div style="display: flex; gap: 8px;">
+            <input type="text" data-pm-vin-input placeholder="ENTER 17-DIGIT VIN NUMBER..." style="flex: 1; padding: 10px 14px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 13px;" />
+            <button type="button" data-pm-vin-btn style="padding: 10px 20px; border-radius: 6px; background: #0f172a; color: #fff; border: none; font-weight: 700; font-size: 13px; cursor: pointer;">DECODE VIN</button>
+          </div>
+        </div>
+
+        <div data-partmatch-results style="margin-top: 20px;"></div>
+      </div>
+    `;
+  }
+
   // ─── Init ────────────────────────────────────────────────────────────────────
   function init() {
-    const widgets = document.querySelectorAll('[data-partmatch-widget]');
-    widgets.forEach(initSearchWidget);
+    const rawContainers = document.querySelectorAll('[data-partmatch-widget], #partmatch-search-widget, #partmatch-widget, .partmatch-search-widget');
+    const initializedWidgets = [];
+
+    rawContainers.forEach(container => {
+      renderWidgetHtml(container);
+      const widget = container.hasAttribute('data-partmatch-widget') ? container : (container.querySelector('[data-partmatch-widget]') || container);
+      initSearchWidget(widget);
+      initializedWidgets.push(widget);
+    });
 
     loadConfig().then(() => {
       handleCollectionPageFilter();
@@ -1040,9 +1122,9 @@
         handleCollectionPageFilter();
       });
 
-      // If widgets.length === 0 and there is a vehicle, show standalone results
+      // If initializedWidgets.length === 0 and there is a vehicle, show standalone results
       const isCollectionPage = window.location.pathname.includes('/collections') || window.location.pathname.includes('/search');
-      if (!isCollectionPage && widgets.length === 0) {
+      if (!isCollectionPage && initializedWidgets.length === 0) {
         const handleStandalone = () => {
           const urlParams = new URLSearchParams(window.location.search);
           const urlYear  = urlParams.get('year');
@@ -1072,6 +1154,19 @@
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
+  }
+
+  // Observer for dynamic embed elements in Theme Customizer live editor
+  if (window.Shopify && window.Shopify.designMode) {
+    const observer = new MutationObserver(() => {
+      const rawContainers = document.querySelectorAll('#partmatch-search-widget:empty, #partmatch-widget:empty, .partmatch-search-widget:empty');
+      rawContainers.forEach(container => {
+        renderWidgetHtml(container);
+        const widget = container.querySelector('[data-partmatch-widget]') || container;
+        initSearchWidget(widget);
+      });
+    });
+    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
   }
 
   // Public API

@@ -1,6 +1,6 @@
 const json = (data, init) => Response.json(data, init);
-import { useState } from "react";
 import { useLoaderData, Link, useSearchParams } from "react-router";
+import PropTypes from "prop-types";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
