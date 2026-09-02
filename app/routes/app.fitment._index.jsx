@@ -265,9 +265,6 @@ export default function FitmentIndex() {
                       <button
                         type="submit"
                         style={tableActionBtn("#dc2626", "#fee2e2")}
-                        onClick={(e) => {
-                          if (!confirm(`Delete fitment record for ${r.year} ${r.make} ${r.model}?`)) e.preventDefault();
-                        }}
                       >
                         Delete
                       </button>

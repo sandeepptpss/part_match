@@ -7,7 +7,7 @@ import prisma from "../db.server";
 const PAGE_SIZE = 25;
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const url = new URL(request.url);
   const search = url.searchParams.get("q") || "";
@@ -46,8 +46,44 @@ export const loader = async ({ request }) => {
       prisma.fitmentProduct?.count({ where }) ?? 0,
     ]);
 
-    mappedProducts = items;
     totalCount = count;
+
+    if (items.length > 0) {
+      try {
+        const productIds = Array.from(new Set(items.map((i) => i.shopifyProductId).filter(Boolean)));
+        if (productIds.length > 0) {
+          const res = await admin.graphql(
+            `query getProductImages($ids: [ID!]!) {
+              nodes(ids: $ids) {
+                ... on Product {
+                  id
+                  featuredImage { url altText }
+                }
+              }
+            }`,
+            { variables: { ids: productIds } },
+          );
+          const data = await res.json();
+          const imageMap = new Map();
+          (data.data?.nodes || []).forEach((node) => {
+            if (node?.id && node?.featuredImage?.url) {
+              imageMap.set(node.id, node.featuredImage.url);
+            }
+          });
+          mappedProducts = items.map((item) => ({
+            ...item,
+            imageUrl: imageMap.get(item.shopifyProductId) || null,
+          }));
+        } else {
+          mappedProducts = items;
+        }
+      } catch (err) {
+        console.error("[products loader GraphQL error]", err);
+        mappedProducts = items;
+      }
+    } else {
+      mappedProducts = items;
+    }
   } catch (err) {
     console.error("[products loader error]", err);
   }
@@ -190,16 +226,26 @@ export default function ProductsIndex() {
                     {/* Product Column */}
                     <td style={tdStyle}>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "#f1f5f9", border: "1px solid #cbd5e1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <BoxIcon size={18} color="#64748b" />
-                        </div>
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.productTitle}
+                            style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover", border: "1px solid #cbd5e1", flexShrink: 0 }}
+                          />
+                        ) : (
+                          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "#f1f5f9", border: "1px solid #cbd5e1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <BoxIcon size={18} color="#64748b" />
+                          </div>
+                        )}
                         <div>
                           <strong style={{ display: "block", color: "#0f172a", fontSize: "14px", fontWeight: "700" }}>
                             {item.productTitle || item.shopifyHandle || `Product #${item.id}`}
                           </strong>
-                          <span style={{ fontSize: "12px", color: "#64748b" }}>
-                            Handle: <code style={{ background: "#f8fafc", padding: "1px 5px", borderRadius: "4px" }}>{item.shopifyHandle || "N/A"}</code>
-                          </span>
+                          {item.shopifyHandle && (
+                            <span style={{ color: "#64748b", fontSize: "12px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", display: "inline-block", marginTop: "2px" }}>
+                              /products/{item.shopifyHandle}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -207,18 +253,19 @@ export default function ProductsIndex() {
                     {/* Vehicle Column */}
                     <td style={tdStyle}>
                       {fitment ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <span style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b" }}>
-                            {fitment.year} {fitment.make} {fitment.model}
-                          </span>
+                        <div style={{ display: "inline-block", background: "#f8fafc", border: "1px solid #e2e8f0", padding: "6px 12px", borderRadius: "8px" }}>
+                          <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a", lineHeight: "1.2", textTransform: "capitalize" }}>
+                            <span style={{ color: "#2563eb", fontWeight: "800", marginRight: "4px" }}>{fitment.year}</span>
+                            {fitment.make} {fitment.model}
+                          </div>
                           {fitment.trim && (
-                            <span style={{ fontSize: "11px", background: "#f1f5f9", color: "#475569", padding: "2px 8px", borderRadius: "10px", fontWeight: "600" }}>
-                              {fitment.trim}
-                            </span>
+                            <div style={{ fontSize: "11px", color: "#64748b", fontWeight: "600", marginTop: "2px" }}>
+                              Trim: {fitment.trim}
+                            </div>
                           )}
                         </div>
                       ) : (
-                        <span style={{ color: "#94a3b8", fontSize: "13px" }}>Fitment record removed</span>
+                        <span style={{ color: "#94a3b8", fontSize: "13px", fontStyle: "italic" }}>Fitment record removed</span>
                       )}
                     </td>
 

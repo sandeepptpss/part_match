@@ -112,8 +112,12 @@ export default function UniversalProducts() {
             universalProducts.map((p) => (
               <div key={p.id} style={row}>
                 <div>
-                  <div style={{ fontWeight: "500", fontSize: "14px" }}>{p.productTitle || p.shopifyHandle}</div>
-                  <div style={{ color: "#6d7175", fontSize: "12px" }}>{p.shopifyHandle}</div>
+                  <div style={{ fontWeight: "600", fontSize: "14px", color: "#0f172a" }}>{p.productTitle || p.shopifyHandle}</div>
+                  {p.shopifyHandle && (
+                    <div style={{ color: "#64748b", fontSize: "12px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", marginTop: "2px" }}>
+                      /products/{p.shopifyHandle}
+                    </div>
+                  )}
                 </div>
                 <Form method="post">
                   <input type="hidden" name="intent" value="remove" />
@@ -141,8 +145,12 @@ export default function UniversalProducts() {
               {available.map((p) => (
                 <div key={p.id} style={row}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: "500", fontSize: "14px" }}>{p.title}</div>
-                    <div style={{ color: "#6d7175", fontSize: "12px" }}>{p.handle}</div>
+                    <div style={{ fontWeight: "600", fontSize: "14px", color: "#0f172a" }}>{p.title}</div>
+                    {p.handle && (
+                      <div style={{ color: "#64748b", fontSize: "12px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", marginTop: "2px" }}>
+                        /products/{p.handle}
+                      </div>
+                    )}
                   </div>
                   <Form method="post">
                     <input type="hidden" name="intent" value="add" />

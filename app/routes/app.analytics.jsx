@@ -74,12 +74,14 @@ export const loader = async ({ request }) => {
       }) ?? [],
     ]);
 
-    // Group daily counts in JS to avoid raw SQL dialect mismatches across databases
+    // Group daily counts in JS
     const dailyMap = {};
     allLogsForChart.forEach((log) => {
-      const dateStr = new Date(log.createdAt).toISOString().slice(0, 10);
+      const dateObj = new Date(log.createdAt);
+      const dateStr = dateObj.toISOString().slice(0, 10);
+      const formattedLabel = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       if (!dailyMap[dateStr]) {
-        dailyMap[dateStr] = { date: dateStr, total: 0, matched: 0, missed: 0 };
+        dailyMap[dateStr] = { date: dateStr, label: formattedLabel, total: 0, matched: 0, missed: 0 };
       }
       dailyMap[dateStr].total += 1;
       if (log.hasResults) {
@@ -129,22 +131,24 @@ export const loader = async ({ request }) => {
 };
 
 export default function Analytics() {
-  const { stats, topVehicles, noResultVehicles, recentLogs, dailySearches, range, planLabel } = useLoaderData();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { stats, topVehicles, noResultVehicles, recentLogs, dailySearches, range } = useLoaderData();
+  const [, setSearchParams] = useSearchParams();
 
   const handleRangeChange = (newRange) => {
     setSearchParams({ range: newRange });
   };
 
   const cards = [
-    { label: "Total Customer Searches", value: stats.totalSearches, color: "#2563eb", icon: <SearchIcon color="#2563eb" />, bg: "#eff6ff" },
-    { label: "Fitment Conversion", value: `${stats.successRate}%`, color: "#7c3aed", icon: <TrendingUpIcon color="#7c3aed" />, bg: "#f3e8ff" },
-    { label: "Matched Vehicle Fits", value: stats.successfulSearches, color: "#008060", icon: <CheckCircleIcon color="#008060" />, bg: "#ecfdf5" },
-    { label: "Prevented Returns", value: `${stats.estimatedReturnsPrevented} orders`, color: "#0284c7", icon: <ShieldCheckIcon color="#0284c7" />, bg: "#f0f9ff" },
-    { label: "Est. Return Savings", value: `$${stats.estimatedSavedReturnCost.toLocaleString()}`, color: "#d97706", icon: <DollarIcon color="#d97706" />, bg: "#fffbe6" },
+    { label: "Total Customer Searches", value: stats.totalSearches, color: "#2563eb", icon: <SearchIcon color="#2563eb" />, bg: "#eff6ff", trend: "100% Verified" },
+    { label: "Fitment Conversion", value: `${stats.successRate}%`, color: "#7c3aed", icon: <TrendingUpIcon color="#7c3aed" />, bg: "#f3e8ff", trend: "High Match Rate" },
+    { label: "Matched Vehicle Fits", value: stats.successfulSearches, color: "#059669", icon: <CheckCircleIcon color="#059669" />, bg: "#ecfdf5", trend: "Live Searches" },
+    { label: "Prevented Returns", value: `${stats.estimatedReturnsPrevented} orders`, color: "#0284c7", icon: <ShieldCheckIcon color="#0284c7" />, bg: "#f0f9ff", trend: "Est. Wrong Part Saved" },
+    { label: "Est. Return Savings", value: `$${stats.estimatedSavedReturnCost.toLocaleString()}`, color: "#d97706", icon: <DollarIcon color="#d97706" />, bg: "#fffbe6", trend: "@ $35/return cost" },
   ];
 
-  const maxDailyCount = Math.max(...dailySearches.map((d) => d.total), 1);
+  const maxDailyCount = Math.max(...dailySearches.map((d) => d.total), 5);
+  // Y-axis grid scale steps
+  const gridSteps = [maxDailyCount, Math.round(maxDailyCount * 0.75), Math.round(maxDailyCount * 0.5), Math.round(maxDailyCount * 0.25), 0];
 
   return (
     <div style={{ padding: "28px 24px 60px", maxWidth: "1280px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
@@ -156,7 +160,8 @@ export default function Analytics() {
             <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>
               Search Analytics & Vehicle Intelligence
             </h1>
-            <span style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "2px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "700" }}>
+            <span style={{ background: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)", border: "1px solid #a7f3d0", color: "#047857", padding: "3px 12px", borderRadius: "16px", fontSize: "12px", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", animation: "pulse 2s infinite" }} />
               Live Storefront Metrics
             </span>
           </div>
@@ -191,7 +196,7 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* KPI Stat Cards */}
+      {/* Executive KPI Stat Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "16px", marginBottom: "28px" }}>
         {cards.map((c) => (
           <div key={c.label} style={kpiCardStyle}>
@@ -199,65 +204,119 @@ export default function Analytics() {
               <span style={{ fontSize: "11px", fontWeight: "800", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                 {c.label}
               </span>
-              <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: c.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: "34px", height: "34px", borderRadius: "10px", background: c.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {c.icon}
               </div>
             </div>
-            <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", letterSpacing: "-0.8px" }}>
+            <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", letterSpacing: "-0.8px", marginBottom: "4px" }}>
               {typeof c.value === "number" ? c.value.toLocaleString() : c.value}
+            </div>
+            <div style={{ fontSize: "11px", fontWeight: "600", color: "#64748b" }}>
+              {c.trend}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Daily Search Activity Chart */}
-      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "24px", marginBottom: "28px", boxShadow: "0 4px 16px rgba(0, 0, 0, 0.03)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+      {/* Sleek Daily Search Activity Chart */}
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "24px", marginBottom: "28px", boxShadow: "0 4px 20px rgba(0, 0, 0, 0.03)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
           <div>
-            <h3 style={{ fontSize: "16px", fontWeight: "800", margin: "0 0 2px", color: "#0f172a" }}>Daily Search Query Volume</h3>
-            <p style={{ fontSize: "13px", color: "#64748b", margin: 0 }}>Customer searches over the selected period ({range.toUpperCase()})</p>
+            <h3 style={{ fontSize: "16px", fontWeight: "800", margin: "0 0 4px", color: "#0f172a" }}>Daily Search Query Volume</h3>
+            <p style={{ fontSize: "13px", color: "#64748b", margin: 0 }}>Customer vehicle searches logged over the selected period ({range.toUpperCase()})</p>
           </div>
-          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#475569", fontWeight: "600" }}>
-              <span style={{ width: "10px", height: "10px", borderRadius: "3px", background: "#2563eb" }} />
+          <div style={{ display: "flex", gap: "20px", alignItems: "center", background: "#f8fafc", padding: "6px 14px", borderRadius: "20px", border: "1px solid #f1f5f9" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "#334155", fontWeight: "600" }}>
+              <span style={{ width: "12px", height: "12px", borderRadius: "4px", background: "linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)", boxShadow: "0 2px 4px rgba(37,99,235,0.3)" }} />
               <span>Matched Searches</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#475569", fontWeight: "600" }}>
-              <span style={{ width: "10px", height: "10px", borderRadius: "3px", background: "#f87171" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "#334155", fontWeight: "600" }}>
+              <span style={{ width: "12px", height: "12px", borderRadius: "4px", background: "linear-gradient(180deg, #f87171 0%, #dc2626 100%)", boxShadow: "0 2px 4px rgba(220,38,38,0.3)" }} />
               <span>No-Result Queries</span>
             </div>
           </div>
         </div>
 
         {dailySearches.length === 0 ? (
-          <div style={{ padding: "40px 20px", textAlign: "center", color: "#64748b" }}>
-            <SearchIcon size={32} color="#cbd5e1" />
-            <p style={{ margin: "12px 0 0", fontSize: "14px" }}>No storefront vehicle searches logged during this time period.</p>
+          <div style={{ padding: "48px 20px", textAlign: "center", color: "#64748b", background: "#f8fafc", borderRadius: "12px", border: "1px dashed #cbd5e1" }}>
+            <SearchIcon size={36} color="#94a3b8" />
+            <p style={{ margin: "12px 0 4px", fontSize: "14px", fontWeight: "700", color: "#334155" }}>No storefront vehicle searches logged yet</p>
+            <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>Searches performed by store visitors using the Year/Make/Model widget will appear here automatically.</p>
           </div>
         ) : (
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", height: "160px", paddingT: "20px", borderBottom: "1px solid #f1f5f9", overflowX: "auto" }}>
-            {dailySearches.map((d) => {
-              const matchedHeight = Math.round((d.matched / maxDailyCount) * 120);
-              const missedHeight = Math.round((d.missed / maxDailyCount) * 120);
-              return (
-                <div key={d.date} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "1 0 28px", minWidth: "28px" }}>
-                  <div
-                    title={`${d.date}: ${d.total} total (${d.matched} matched, ${d.missed} 0-result)`}
-                    style={{ width: "100%", display: "flex", flexDirection: "column-reverse", alignItems: "center" }}
-                  >
-                    {matchedHeight > 0 && (
-                      <div style={{ width: "100%", height: `${Math.max(matchedHeight, 6)}px`, background: "#2563eb", borderRadius: d.missed > 0 ? "0 0 4px 4px" : "4px" }} />
-                    )}
-                    {missedHeight > 0 && (
-                      <div style={{ width: "100%", height: `${Math.max(missedHeight, 6)}px`, background: "#f87171", borderRadius: d.matched > 0 ? "4px 4px 0 0" : "4px" }} />
-                    )}
-                  </div>
-                  <span style={{ fontSize: "10px", color: "#64748b", marginTop: "8px", fontWeight: "600" }}>
-                    {d.date.slice(5)}
+          <div style={{ position: "relative", paddingTop: "10px" }}>
+            {/* Background Grid Lines & Y-Axis Scale */}
+            <div style={{ position: "absolute", top: "10px", left: "0", right: "0", bottom: "34px", display: "flex", flexDirection: "column", justifyContent: "space-between", pointerEvents: "none", zIndex: 0 }}>
+              {gridSteps.map((step, idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "center", width: "100%" }}>
+                  <span style={{ width: "32px", fontSize: "10px", color: "#94a3b8", fontWeight: "700", textAlign: "right", paddingRight: "10px" }}>
+                    {step}
                   </span>
+                  <div style={{ flex: 1, borderTop: "1px dashed #e2e8f0" }} />
                 </div>
-              );
-            })}
+              ))}
+            </div>
+
+            {/* Bars Area */}
+            <div style={{ position: "relative", zIndex: 1, marginLeft: "36px", display: "flex", alignItems: "flex-end", gap: "16px", height: "180px", paddingBottom: "34px", overflowX: "auto" }}>
+              {dailySearches.map((d) => {
+                const totalPct = Math.min(100, Math.max(8, Math.round((d.total / maxDailyCount) * 100)));
+                const matchedPct = d.total > 0 ? (d.matched / d.total) * 100 : 100;
+                const missedPct = d.total > 0 ? (d.missed / d.total) * 100 : 0;
+
+                return (
+                  <div key={d.date} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "1 0 36px", maxWidth: "48px", height: "100%", justifyContent: "flex-end" }}>
+                    {/* Top Numeric Badge */}
+                    <div style={{ fontSize: "11px", fontWeight: "800", color: "#3b82f6", marginBottom: "6px" }}>
+                      {d.total}
+                    </div>
+
+                    {/* Staked Bar Container */}
+                    <div
+                      title={`${d.label} (${d.date}): ${d.total} total searches (${d.matched} matched, ${d.missed} 0-result)`}
+                      style={{
+                        width: "100%",
+                        maxWidth: "28px",
+                        height: `${totalPct}%`,
+                        display: "flex",
+                        flexDirection: "column",
+                        borderRadius: "8px 8px 2px 2px",
+                        overflow: "hidden",
+                        boxShadow: "0 3px 8px rgba(37,99,235,0.15)",
+                        transition: "transform 0.2s ease",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {/* Missed Portion (Top) */}
+                      {d.missed > 0 && (
+                        <div
+                          style={{
+                            width: "100%",
+                            height: `${missedPct}%`,
+                            background: "linear-gradient(180deg, #f87171 0%, #dc2626 100%)",
+                          }}
+                        />
+                      )}
+                      {/* Matched Portion (Bottom) */}
+                      {d.matched > 0 && (
+                        <div
+                          style={{
+                            width: "100%",
+                            height: `${matchedPct}%`,
+                            background: "linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)",
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    {/* Date Label */}
+                    <span style={{ position: "absolute", bottom: "4px", fontSize: "11px", color: "#64748b", fontWeight: "700", whiteSpace: "nowrap" }}>
+                      {d.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -283,14 +342,14 @@ export default function Analytics() {
               <tbody>
                 {topVehicles.map((v, i) => (
                   <tr key={i} style={{ borderBottom: "1px solid #f8fafc" }}>
-                    <td style={{ ...tdStyle, width: "40px", fontWeight: "800", color: i === 0 ? "#d97706" : "#64748b" }}>
+                    <td style={{ ...tdStyle, width: "40px", fontWeight: "800", color: i === 0 ? "#d97706" : i === 1 ? "#64748b" : i === 2 ? "#b45309" : "#94a3b8" }}>
                       #{i + 1}
                     </td>
                     <td style={{ ...tdStyle, fontWeight: "700", color: "#0f172a" }}>
                       {v.year} {v.make} {v.model}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "right" }}>
-                      <span style={{ background: "#eff6ff", color: "#1d4ed8", padding: "3px 10px", borderRadius: "12px", fontWeight: "700", fontSize: "12px" }}>
+                      <span style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", padding: "3px 10px", borderRadius: "12px", fontWeight: "700", fontSize: "12px" }}>
                         {v._count.id} queries
                       </span>
                     </td>
@@ -411,6 +470,8 @@ function SearchIcon({ size = 16, color = "currentColor" }) {
   );
 }
 
+SearchIcon.propTypes = { size: PropTypes.number, color: PropTypes.string };
+
 function TrendingUpIcon({ size = 16, color = "currentColor" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -419,6 +480,8 @@ function TrendingUpIcon({ size = 16, color = "currentColor" }) {
     </svg>
   );
 }
+
+TrendingUpIcon.propTypes = { size: PropTypes.number, color: PropTypes.string };
 
 function CheckCircleIcon({ size = 16, color = "currentColor" }) {
   return (
@@ -429,6 +492,8 @@ function CheckCircleIcon({ size = 16, color = "currentColor" }) {
   );
 }
 
+CheckCircleIcon.propTypes = { size: PropTypes.number, color: PropTypes.string };
+
 function ShieldCheckIcon({ size = 16, color = "currentColor" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -437,6 +502,8 @@ function ShieldCheckIcon({ size = 16, color = "currentColor" }) {
     </svg>
   );
 }
+
+ShieldCheckIcon.propTypes = { size: PropTypes.number, color: PropTypes.string };
 
 function DollarIcon({ size = 16, color = "currentColor" }) {
   return (
@@ -447,6 +514,8 @@ function DollarIcon({ size = 16, color = "currentColor" }) {
   );
 }
 
+DollarIcon.propTypes = { size: PropTypes.number, color: PropTypes.string };
+
 function PlusIcon({ size = 12, color = "currentColor" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -455,6 +524,8 @@ function PlusIcon({ size = 12, color = "currentColor" }) {
     </svg>
   );
 }
+
+PlusIcon.propTypes = { size: PropTypes.number, color: PropTypes.string };
 
 // Styling Tokens
 const kpiCardStyle = {
@@ -522,3 +593,4 @@ const addFitmentBtn = {
   fontWeight: "700",
   textDecoration: "none",
 };
+

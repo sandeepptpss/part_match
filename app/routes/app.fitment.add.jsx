@@ -32,7 +32,7 @@ export const action = async ({ request }) => {
   }
 
   const existing = await prisma.fitmentRecord.findUnique({
-    where: { shop_year_make_model: { shop, year, make, model } },
+    where: { shop_year_make_model_trim: { shop, year, make, model, trim: "" } },
   });
 
   if (!existing) {
@@ -56,8 +56,8 @@ export const action = async ({ request }) => {
 
   try {
     const record = await prisma.fitmentRecord.upsert({
-      where: { shop_year_make_model: { shop, year, make, model } },
-      create: { shop, year, make, model },
+      where: { shop_year_make_model_trim: { shop, year, make, model, trim: "" } },
+      create: { shop, year, make, model, trim: "" },
       update: {},
     });
     if (record && record.id) {

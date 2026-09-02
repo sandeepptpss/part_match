@@ -455,13 +455,30 @@ export default function FitmentProducts() {
               <div style={{ maxHeight: "480px", overflowY: "auto" }}>
                 {fitment.products.map((p) => {
                   const displayTitle = p.productTitle || p.shopifyHandle || p.shopifyProductId;
+                  const shopifyItem = shopifyProducts.find((sp) => sp.id === p.shopifyProductId);
+                  const imgUrl = shopifyItem?.featuredImage?.url;
                   return (
                     <div key={p.id} style={productRow}>
+                      {imgUrl ? (
+                        <img
+                          src={imgUrl}
+                          alt={displayTitle}
+                          style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover", border: "1px solid #e2e8f0", flexShrink: 0 }}
+                        />
+                      ) : (
+                        <div style={{ width: "36px", height: "36px", borderRadius: "6px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <BoxIcon size={18} color="#64748b" />
+                        </div>
+                      )}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: "600", fontSize: "14px", color: "#1e293b" }}>
+                        <div style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a" }}>
                           {displayTitle}
                         </div>
-                        <div style={{ color: "#64748b", fontSize: "12px" }}>handle: {p.shopifyHandle}</div>
+                        {p.shopifyHandle && (
+                          <div style={{ color: "#64748b", fontSize: "12px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", marginTop: "2px" }}>
+                            /products/{p.shopifyHandle}
+                          </div>
+                        )}
                       </div>
                       <Form method="post">
                         <input type="hidden" name="intent" value="remove" />
@@ -523,13 +540,58 @@ export default function FitmentProducts() {
               <div style={{ maxHeight: "420px", overflowY: "auto" }}>
                 {sortedAvailableProducts.map((p) => {
                   const suggestion = suggestionMap.get(p.id);
+                  const variants = p.variants?.nodes || [];
+                  const primarySku = variants.find((v) => v.sku)?.sku || "";
+                  const variantCount = variants.length;
+                  const variantTitles = variants
+                    .map((v) => v.title)
+                    .filter((t) => t && t !== "Default Title")
+                    .slice(0, 3)
+                    .join(", ");
+
+                  const imgUrl = p.featuredImage?.url;
                   return (
                     <div key={p.id} style={productRow}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: "600", fontSize: "14px", color: "#1e293b" }}>{p.title}</div>
-                        <div style={{ color: "#64748b", fontSize: "12px" }}>handle: {p.handle}</div>
+                      {imgUrl ? (
+                        <img
+                          src={imgUrl}
+                          alt={p.title}
+                          style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover", border: "1px solid #e2e8f0", flexShrink: 0 }}
+                        />
+                      ) : (
+                        <div style={{ width: "36px", height: "36px", borderRadius: "6px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <BoxIcon size={18} color="#64748b" />
+                        </div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {p.title}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "3px" }}>
+                          {p.handle && (
+                            <span style={{ color: "#64748b", fontSize: "12px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+                              /products/{p.handle}
+                            </span>
+                          )}
+                          {primarySku && (
+                            <span style={{ fontSize: "11px", background: "#f1f5f9", color: "#334155", padding: "1px 6px", borderRadius: "4px", fontWeight: "700", border: "1px solid #cbd5e1" }}>
+                              SKU: {primarySku}
+                            </span>
+                          )}
+                          {variantTitles ? (
+                            <span style={{ fontSize: "11px", color: "#475569", background: "#f8fafc", padding: "1px 6px", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
+                              Variants ({variantCount}): {variantTitles}{variantCount > 3 ? "…" : ""}
+                            </span>
+                          ) : (
+                            variantCount > 1 && (
+                              <span style={{ fontSize: "11px", color: "#475569", background: "#f8fafc", padding: "1px 6px", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
+                                {variantCount} Variants
+                              </span>
+                            )
+                          )}
+                        </div>
                         {suggestion && (
-                          <div style={{ marginTop: "4px", fontSize: "11px", color: "#8a6d00", background: "#fff8e1", display: "inline-block", padding: "2px 8px", borderRadius: "10px" }}>
+                          <div style={{ marginTop: "6px", fontSize: "11px", color: "#8a6d00", background: "#fff8e1", border: "1px solid #fef08a", display: "inline-block", padding: "2px 8px", borderRadius: "10px", fontWeight: "600" }}>
                             {suggestion.confidence}% match — {suggestion.reason}
                           </div>
                         )}

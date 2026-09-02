@@ -1,21 +1,86 @@
 import Anthropic from "@anthropic-ai/sdk";
+import https from "node:https";
 
-const MODEL = "claude-haiku-4-5-20251001";
+const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 
-let client;
-function getClient() {
+let anthropicClient;
+function getAnthropicClient() {
   if (!process.env.ANTHROPIC_API_KEY) return null;
-  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return client;
+  if (!anthropicClient) anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return anthropicClient;
 }
 
 export function isAiConfigured() {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY);
 }
 
-// No ANTHROPIC_API_KEY set: simulate suggestions via plain keyword matching so
+function httpsPostJson(urlStr, bodyObj) {
+  return new Promise((resolve, reject) => {
+    try {
+      const u = new URL(urlStr);
+      const data = JSON.stringify(bodyObj);
+      const req = https.request(
+        {
+          hostname: u.hostname,
+          path: u.pathname + u.search,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(data),
+          },
+        },
+        (res) => {
+          let body = "";
+          res.on("data", (chunk) => (body += chunk));
+          res.on("end", () => {
+            let jsonParsed = null;
+            try { jsonParsed = JSON.parse(body); } catch {}
+            resolve({
+              ok: res.statusCode >= 200 && res.statusCode < 300,
+              status: res.statusCode,
+              text: body,
+              json: jsonParsed,
+            });
+          });
+        }
+      );
+      req.on("error", reject);
+      req.write(data);
+      req.end();
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+// Call Google Gemini API (Free Tier Support)
+async function callGeminiApi(prompt) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  const models = ["gemini-2.5-flash", "gemini-flash-latest"];
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    try {
+      const response = await httpsPostJson(url, {
+        contents: [{ parts: [{ text: prompt }] }],
+      });
+
+      if (response.ok && response.json) {
+        const text = response.json?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+        if (text) return text;
+      } else {
+        console.error(`[ai.server] Gemini model ${model} HTTP Error:`, response.status, response.text);
+      }
+    } catch (err) {
+      console.error(`[ai.server] Gemini model ${model} exception:`, err);
+    }
+  }
+  return null;
+}
+
+// No API key set: simulate suggestions via plain keyword matching so
 // the UI flow (button, badges, accept/reject) can be tested at zero cost.
-// Every reason is prefixed "[DEMO]" so it's never mistaken for a real AI call.
 function mockSuggestFitmentProducts({ year, make, model, products }) {
   const makeLower = make.toLowerCase();
   const modelLower = model.toLowerCase();
@@ -41,38 +106,62 @@ function mockSuggestFitmentProducts({ year, make, model, products }) {
     .sort((a, b) => b.confidence - a.confidence);
 }
 
-// Given a vehicle (year/make/model) and a list of candidate Shopify products
-// ({ id, title, description }), asks Claude which products are likely
-// compatible and returns them sorted by confidence, highest first.
-// Returns { suggestions, mock } — mock is true when no API key is configured
-// and results came from the keyword-matching fallback above instead of Claude.
+// Given a vehicle (year/make/model) and a list of candidate Shopify products,
+// asks Gemini (or Claude) which products are likely compatible.
 export async function suggestFitmentProducts({ year, make, model, products }) {
-  const anthropic = getClient();
-  if (!products?.length) return { suggestions: [], mock: !anthropic };
-  if (!anthropic) {
-    return { suggestions: mockSuggestFitmentProducts({ year, make, model, products }), mock: true };
-  }
+  if (!products?.length) return { suggestions: [], mock: !isAiConfigured() };
 
   const productList = products
     .map((p) => `- id="${p.id}" title="${p.title}" description="${(p.description || "").slice(0, 200).replace(/"/g, "'")}"`)
     .join("\n");
 
-  const prompt = `You are helping an auto parts store match products to a specific vehicle.
+  const prompt = `You are an AI catalog fitment assistant for a Shopify store matching products to vehicle applications.
 
-Vehicle: ${year} ${make} ${model}
+Target Vehicle: ${year} ${make} ${model}
 
-Store products:
+Store Catalog Products:
 ${productList}
 
-Return ONLY a JSON array (no prose, no markdown fences) of the products likely compatible with this vehicle — based on their title/description mentioning this make/model/year (directly or within a stated range), or being a generic/universal part that would plausibly fit any vehicle. Each item: {"id": "<exact id from above>", "confidence": <integer 0-100>, "reason": "<reason, under 12 words>"}. If nothing plausibly matches, return [].`;
+Analyze the store products and select up to 10 products that could fit or apply to this vehicle (${year} ${make} ${model}).
+Criteria:
+1. Exact or partial vehicle specification matches (matching make, model, year, or vehicle type in title/description).
+2. Universal/Generic products (accessories, gear, general items compatible across vehicles).
+3. Best plausible catalog matches.
 
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    messages: [{ role: "user", content: prompt }],
-  });
+Return ONLY a JSON array (no markdown code blocks, no intro text):
+[
+  { "id": "<exact product id from above>", "confidence": <integer 30-100>, "reason": "<concise reason under 10 words>" }
+]
+If exact vehicle matches exist, assign 80-100 confidence. If generic/universal or best catalog candidates, assign 40-75 confidence.`;
 
-  const text = response.content?.[0]?.type === "text" ? response.content[0].text : "[]";
+  let text = null;
+
+  // 1. Try Gemini Free API first if GEMINI_API_KEY is configured
+  if (process.env.GEMINI_API_KEY) {
+    text = await callGeminiApi(prompt);
+  }
+
+  // 2. Try Anthropic API if Gemini wasn't used or failed
+  if (!text && process.env.ANTHROPIC_API_KEY) {
+    const anthropic = getAnthropicClient();
+    if (anthropic) {
+      try {
+        const response = await anthropic.messages.create({
+          model: ANTHROPIC_MODEL,
+          max_tokens: 1024,
+          messages: [{ role: "user", content: prompt }],
+        });
+        text = response.content?.[0]?.type === "text" ? response.content[0].text : "[]";
+      } catch (err) {
+        console.error("[ai.server] Anthropic error:", err);
+      }
+    }
+  }
+
+  // 3. Fallback to mock keyword matching if no API response
+  if (!text) {
+    return { suggestions: mockSuggestFitmentProducts({ year, make, model, products }), mock: true };
+  }
 
   let parsed;
   try {
@@ -99,23 +188,59 @@ Return ONLY a JSON array (no prose, no markdown fences) of the products likely c
 
 // Scans an entire list of products and extracts vehicle fitment rules directly from titles & descriptions
 export async function extractFitmentFromProductCatalog(products) {
-  const anthropic = getClient();
-  if (!products?.length) return { extracted: [], mock: !anthropic };
+  if (!products?.length) return { extracted: [], mock: !isAiConfigured() };
 
-  // Fallback pattern matching if no API key is set
-  if (!anthropic) {
+  const productList = products
+    .slice(0, 25)
+    .map((p) => `- id="${p.id}" handle="${p.handle}" title="${p.title}" desc="${(p.description || "").slice(0, 150).replace(/"/g, "'")}"`)
+    .join("\n");
+
+  const prompt = `Analyze these auto parts products and extract vehicle compatibility (Year, Make, Model, Trim).
+Products:
+${productList}
+
+Return ONLY a JSON array of mappings:
+[{"productId": "<id>", "handle": "<handle>", "productTitle": "<title>", "year": "<YYYY>", "make": "<Make>", "model": "<Model>", "trim": "<Trim or empty>", "confidence": <80-100>, "reason": "<short explanation>"}]
+If no specific vehicle is mentioned, return [].`;
+
+  let text = null;
+
+  // 1. Try Gemini Free API first
+  if (process.env.GEMINI_API_KEY) {
+    text = await callGeminiApi(prompt);
+  }
+
+  // 2. Try Anthropic API
+  if (!text && process.env.ANTHROPIC_API_KEY) {
+    const anthropic = getAnthropicClient();
+    if (anthropic) {
+      try {
+        const response = await anthropic.messages.create({
+          model: ANTHROPIC_MODEL,
+          max_tokens: 2048,
+          messages: [{ role: "user", content: prompt }],
+        });
+        text = response.content?.[0]?.type === "text" ? response.content[0].text : "[]";
+      } catch (err) {
+        console.error("[ai.server] Anthropic error:", err);
+      }
+    }
+  }
+
+  // 3. Fallback pattern matching if no API key is configured or API failed
+  if (!text) {
     const extracted = [];
     const yearPattern = /\b(19\d{2}|20\d{2})\b/g;
     const commonMakes = ["honda", "toyota", "ford", "chevrolet", "bmw", "audi", "mercedes", "nissan", "dodge", "jeep", "hyundai", "kia"];
 
     products.forEach((p) => {
-      const text = `${p.title} ${p.description || ""}`.toLowerCase();
-      const years = text.match(yearPattern) || ["2022"];
-      const makeMatch = commonMakes.find((m) => text.includes(m));
+      const textStr = `${p.title} ${p.description || ""}`.toLowerCase();
+      const years = textStr.match(yearPattern) || ["2022"];
+      const makeMatch = commonMakes.find((m) => textStr.includes(m));
 
       if (makeMatch) {
         const make = makeMatch.charAt(0).toUpperCase() + makeMatch.slice(1);
-        const words = text.split(/\s+/);
+        const words = textStr.split(/\s+/);
         const makeIdx = words.indexOf(makeMatch);
         const modelCandidate = words[makeIdx + 1] ? words[makeIdx + 1].toUpperCase() : "GENERAL";
 
@@ -137,27 +262,7 @@ export async function extractFitmentFromProductCatalog(products) {
     return { extracted, mock: true };
   }
 
-  const productList = products
-    .slice(0, 25)
-    .map((p) => `- id="${p.id}" handle="${p.handle}" title="${p.title}" desc="${(p.description || "").slice(0, 150).replace(/"/g, "'")}"`)
-    .join("\n");
-
-  const prompt = `Analyze these auto parts products and extract vehicle compatibility (Year, Make, Model, Trim).
-Products:
-${productList}
-
-Return ONLY a JSON array of mappings:
-[{"productId": "<id>", "handle": "<handle>", "productTitle": "<title>", "year": "<YYYY>", "make": "<Make>", "model": "<Model>", "trim": "<Trim or empty>", "confidence": <80-100>, "reason": "<short explanation>"}]
-If no specific vehicle is mentioned, return [].`;
-
   try {
-    const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 2048,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const text = response.content?.[0]?.type === "text" ? response.content[0].text : "[]";
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : "[]");
 
@@ -179,4 +284,5 @@ If no specific vehicle is mentioned, return [].`;
     return { extracted: [], mock: false };
   }
 }
+
 
