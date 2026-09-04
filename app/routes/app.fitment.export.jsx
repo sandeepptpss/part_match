@@ -101,7 +101,7 @@ export async function loader({ request }) {
     records.forEach((r) => {
       const hasAny = r.products.length > 0 || r.collections.length > 0 || r.tags.length > 0 || r.skus.length > 0;
       if (!hasAny) {
-        rows.push(`${r.year},${csvEsc(r.make)},${csvEsc(r.model)},${csvEsc(r.trim || "")},,,,,`);
+        rows.push(`${r.year},${csvEsc(r.make)},${csvEsc(r.model)},${csvEsc(r.trim || "")},,,,`);
       } else {
         r.products.forEach((p) => {
           rows.push(
@@ -130,7 +130,9 @@ export async function loader({ request }) {
   }
 
   if (url.searchParams.get("raw") === "true") {
-    return new Response(outputContent, {
+    const isCsv = mimeType.includes("csv");
+    const bodyContent = isCsv && !outputContent.startsWith("\uFEFF") ? "\uFEFF" + outputContent : outputContent;
+    return new Response(bodyContent, {
       headers: {
         "Content-Type": mimeType,
         "Content-Disposition": `attachment; filename="${filename}"`,
@@ -146,7 +148,9 @@ export default function FitmentExport() {
 
   const triggerDownload = (content, fname, mime) => {
     if (!content) return;
-    const blob = new Blob([content], { type: `${mime || "text/csv"};charset=utf-8;` });
+    const isCsv = (mime || "").includes("csv") || (fname || "").endsWith(".csv");
+    const finalContent = isCsv && !content.startsWith("\uFEFF") ? "\uFEFF" + content : content;
+    const blob = new Blob([finalContent], { type: `${mime || "text/csv"};charset=utf-8;` });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

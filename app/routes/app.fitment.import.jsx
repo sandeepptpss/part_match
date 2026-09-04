@@ -296,6 +296,7 @@ export default function FitmentImport() {
   const [acesInput, setAcesInput] = useState("");
   const [convertedCsv, setConvertedCsv] = useState("");
   const [conversionStatus, setConversionStatus] = useState(null);
+  const [dismissActionError, setDismissActionError] = useState(false);
 
   const convertAcesToCsv = () => {
     if (!acesInput.trim()) {
@@ -307,7 +308,7 @@ export default function FitmentImport() {
       let rows = [["year", "make", "model", "trim", "product_handle", "product_title", "collection_handle", "tag", "sku"]];
       let input = acesInput.trim();
 
-      if (input.startsWith("<")) {
+      if (input.startsWith("<") || input.includes("<ACES") || input.includes("<App")) {
         const appBlocks = input.match(/<App[\s\S]*?<\/App>/gi) || [];
         if (appBlocks.length === 0) {
           setConversionStatus({ type: "error", message: "No <App> XML elements found in ACES content." });
@@ -333,11 +334,11 @@ export default function FitmentImport() {
         const lines = input.split("\n").filter(l => l.trim());
         if (lines.length > 1) {
           const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/["']/g, ""));
-          const yearIdx = headers.findIndex(h => ["year", "yearid", "modelyear", "basevehicleyear"].includes(h));
-          const makeIdx = headers.findIndex(h => ["make", "makename", "brand"].includes(h));
-          const modelIdx = headers.findIndex(h => ["model", "modelname"].includes(h));
-          const trimIdx = headers.findIndex(h => ["trim", "submodel", "submodelname"].includes(h));
-          const partIdx = headers.findIndex(h => ["partnumber", "part_number", "part", "sku", "itemnumber"].includes(h));
+          const yearIdx = headers.findIndex(h => ["year", "yearid", "modelyear", "basevehicleyear", "model_year", "yyyy"].includes(h));
+          const makeIdx = headers.findIndex(h => ["make", "makename", "make_name", "brand", "manufacturer"].includes(h));
+          const modelIdx = headers.findIndex(h => ["model", "modelname", "model_name", "vehicle_model"].includes(h));
+          const trimIdx = headers.findIndex(h => ["trim", "submodel", "submodelname", "sub_model", "enginebase", "engine"].includes(h));
+          const partIdx = headers.findIndex(h => ["partnumber", "part_number", "part", "partno", "sku", "itemnumber", "product_sku", "handle"].includes(h));
 
           for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(",").map(c => c.trim().replace(/^["']|["']$/g, ""));
@@ -355,12 +356,14 @@ export default function FitmentImport() {
       }
 
       if (rows.length <= 1) {
-        setConversionStatus({ type: "error", message: "Could not extract valid ACES records." });
+        setConversionStatus({ type: "error", message: "Could not extract valid ACES records. Please check your XML or CSV format." });
         return;
       }
 
       const generatedCsv = rows.map(r => r.map(cell => `"${(cell || "").replace(/"/g, '""')}"`).join(",")).join("\n");
       setConvertedCsv(generatedCsv);
+      setCsvContent(generatedCsv);
+      setFileName("converted_aces_partmatch.csv");
       setConversionStatus({ type: "success", count: rows.length - 1 });
     } catch (err) {
       setConversionStatus({ type: "error", message: `Conversion error: ${err.message}` });
@@ -369,8 +372,8 @@ export default function FitmentImport() {
 
   const sampleCSV = `year,make,model,trim,product_handle,product_title,collection_handle,tag,sku
 2025,Arctic Cat,Norseman 400,Base,brake-pad-arctic-cat,Brake Pad Arctic Cat,,,
-2025,Arctic Cat,Norseman 400,LX,,arctic-cat-parts,,
-2024,Polaris,Sportsman 850,SP,,,polaris-sportsman-2024,
+2025,Arctic Cat,Norseman 400,LX,,,arctic-cat-parts,,
+2024,Polaris,Sportsman 850,SP,,,,polaris-sportsman-2024,
 2026,BMW,M3,Base,,,,SKU-BMW-M3-2026`;
 
   const sampleACES = `YearID,MakeName,ModelName,SubModelName,PartNumber,BrandID
@@ -405,7 +408,7 @@ export default function FitmentImport() {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (e) => {
-      let content = e.target?.result || "";
+      let content = (e.target?.result || "").toString().replace(/^\uFEFF/, "");
       let trimmed = content.trim();
       if (trimmed.startsWith("{") && trimmed.includes('"csv"')) {
         try {
@@ -427,7 +430,9 @@ export default function FitmentImport() {
   };
 
   const downloadFile = (content, filename, type) => {
-    const blob = new Blob([content], { type: `${type};charset=utf-8;` });
+    const isCsv = type.includes("csv") || filename.endsWith(".csv");
+    const finalContent = isCsv && !content.startsWith("\uFEFF") ? "\uFEFF" + content : content;
+    const blob = new Blob([finalContent], { type: `${type};charset=utf-8;` });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -435,6 +440,7 @@ export default function FitmentImport() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -485,9 +491,19 @@ export default function FitmentImport() {
       {/* Main Container */}
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.03)" }}>
         
-        {actionData?.error && (
-          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "16px 20px", borderRadius: "12px", marginBottom: "24px", fontSize: "14px", fontWeight: "500", display: "flex", alignItems: "flex-start", gap: "10px" }}>
-            <span style={{ fontWeight: "700" }}>Error:</span> {actionData.error}
+        {actionData?.error && !dismissActionError && (
+          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "16px 20px", borderRadius: "12px", marginBottom: "24px", fontSize: "14px", fontWeight: "500", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+            <div>
+              <span style={{ fontWeight: "700" }}>Error:</span> {actionData.error}
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissActionError(true)}
+              style={{ background: "none", border: "none", color: "#991b1b", fontSize: "16px", fontWeight: "800", cursor: "pointer", padding: "2px 6px" }}
+              title="Dismiss error"
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -636,10 +652,46 @@ export default function FitmentImport() {
           </div>
 
           {conversionStatus && (
-            <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", color: conversionStatus.type === "success" ? "#15803d" : "#b91c1c" }}>
-              {conversionStatus.type === "success"
-                ? `✓ Successfully converted ${conversionStatus.count} ACES records into PartMatch CSV!`
-                : `❌ ${conversionStatus.message}`}
+            <div style={{
+              marginTop: "14px",
+              padding: "10px 14px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: "600",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+              background: conversionStatus.type === "success" ? "#f0fdf4" : "#fef2f2",
+              border: `1px solid ${conversionStatus.type === "success" ? "#bbf7d0" : "#fecaca"}`,
+              color: conversionStatus.type === "success" ? "#15803d" : "#991b1b"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>{conversionStatus.type === "success" ? "✓" : "⚠️"}</span>
+                <span>
+                  {conversionStatus.type === "success"
+                    ? `Successfully converted ${conversionStatus.count} ACES records into PartMatch CSV!`
+                    : conversionStatus.message}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConversionStatus(null)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: conversionStatus.type === "success" ? "#15803d" : "#991b1b",
+                  fontSize: "16px",
+                  fontWeight: "800",
+                  cursor: "pointer",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  lineHeight: "1"
+                }}
+                title="Dismiss message"
+              >
+                ✕
+              </button>
             </div>
           )}
         </div>
@@ -663,6 +715,9 @@ export default function FitmentImport() {
 
           {/* Upload Dropzone */}
           <div
+            onClick={() => {
+              if (planAllowsImport) document.getElementById("csvFileInput")?.click();
+            }}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
@@ -710,13 +765,18 @@ export default function FitmentImport() {
                   Data Content Preview / Manual Editor
                 </label>
                 {csvContent && (
-                  <button
-                    type="button"
-                    onClick={() => { setCsvContent(""); setFileName(""); }}
-                    style={{ background: "none", border: "none", color: "#ef4444", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
-                  >
-                    Clear Content
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ fontSize: "12px", color: "#059669", fontWeight: "700", background: "#ecfdf5", padding: "2px 8px", borderRadius: "6px", border: "1px solid #a7f3d0" }}>
+                      ✓ {csvContent.trim().split("\n").length} Lines Loaded
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { setCsvContent(""); setFileName(""); setConvertedCsv(""); }}
+                      style={{ background: "none", border: "none", color: "#ef4444", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
+                    >
+                      Clear Content
+                    </button>
+                  </div>
                 )}
               </div>
               <textarea

@@ -74,7 +74,7 @@ export const loader = async ({ request }) => {
         const planObj = shopPlansList.find((p) => p.shop === domain);
         const activePlanLabel = planObj?.plan
           ? planObj.plan === "enterprise"
-            ? "Enterprise Unlimited ($49.99/mo)"
+            ? "Enterprise Unlimited ($79.99/mo)"
             : planObj.plan === "growth"
             ? "Growth Professional ($19.99/mo)"
             : "Starter Free ($0/mo)"

@@ -71,7 +71,9 @@ export default function FitmentIndex() {
   useEffect(() => {
     if (exportFetcher.data) {
       if (exportFetcher.data.allowed && exportFetcher.data.csv) {
-        const blob = new Blob([exportFetcher.data.csv], { type: "text/csv;charset=utf-8;" });
+        const content = exportFetcher.data.csv;
+        const finalContent = !content.startsWith("\uFEFF") ? "\uFEFF" + content : content;
+        const blob = new Blob([finalContent], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;

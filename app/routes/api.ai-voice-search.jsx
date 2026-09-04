@@ -119,6 +119,15 @@ export async function action({ request }) {
     getShopPlan(shop),
   ]);
   const limits = planLimits(shopPlan?.plan || "free");
+  if (!limits.voiceSearchAssistant) {
+    return Response.json(
+      {
+        error: "AI Voice & Conversational Search requires the Growth Professional or Enterprise plan.",
+        success: false,
+      },
+      { status: 403 }
+    );
+  }
   const includeUniversal = (appSettings?.includeUniversal ?? true) && limits.universalProducts;
 
   let fitments = [];

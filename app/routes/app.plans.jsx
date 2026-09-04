@@ -138,8 +138,8 @@ export const action = async ({ request }) => {
         : 0;
     const totalAnnualDiscount = globalAnnualDiscount + merchantDiscount;
 
-    // High conversion pricing strategy: $19.99 for Growth, $49.99 for Enterprise
-    const baseMonthlyPrice = selectedPlan === "growth" ? 19.99 : 49.99;
+    // High conversion pricing strategy: $19.99 for Growth, $79.99 for Enterprise
+    const baseMonthlyPrice = selectedPlan === "growth" ? 19.99 : 79.99;
     let dynamicLineItem;
 
     if (billingCycle === "annual") {
@@ -216,15 +216,11 @@ export default function PlansPage() {
     activePlan,
     activeBillingCycle,
     recordsLimit,
-    vinLimit,
-    vinOverageRate,
   } = useLoaderData();
 
   const actionData = useActionData();
   const navigation = useNavigation();
   const [billingCycle, setBillingCycle] = useState("monthly");
-
-  const isSubmitting = navigation.state !== "idle";
 
   const calcMonthly = (basePrice) => {
     if (basePrice === 0) return "$0";
@@ -232,10 +228,16 @@ export default function PlansPage() {
     return `$${discounted.toFixed(2)}`;
   };
 
-  const calcAnnual = (basePrice) => {
+  const calcAnnualMonthlyEq = (basePrice) => {
     if (basePrice === 0) return "$0";
-    const discounted = basePrice * (1 - totalAnnualDiscount / 100);
-    return `$${discounted.toFixed(2)}`;
+    const discountedMonthly = basePrice * (1 - totalAnnualDiscount / 100);
+    return `$${discountedMonthly.toFixed(2)}`;
+  };
+
+  const calcAnnualTotal = (basePrice) => {
+    if (basePrice === 0) return "$0";
+    const total = (basePrice * 12) * (1 - totalAnnualDiscount / 100);
+    return `$${total.toFixed(2)}`;
   };
 
   // High conversion pricing strategy tailored for Shopify Auto Parts Merchants
@@ -245,13 +247,14 @@ export default function PlansPage() {
       name: "Starter Free",
       priceMonthly: "$0",
       priceAnnual: "$0",
+      priceAnnualNote: "Free forever, no credit card required",
       period: "Forever Free",
       description: "Ideal for testing & small specialty auto catalogs. Risk-free setup.",
       recordsLimit: "100 Mapped Vehicle Records",
       badge: null,
       trialBadge: "Instant Setup",
       highlight: false,
-      ctaText: "Current Plan",
+      ctaText: "Downgrade to Free",
       features: [
         "Up to 100 Fitment Records",
         "Year / Make / Model Search Widget",
@@ -274,7 +277,8 @@ export default function PlansPage() {
       id: "growth",
       name: "Growth Professional",
       priceMonthly: calcMonthly(19.99),
-      priceAnnual: calcAnnual(19.99),
+      priceAnnual: calcAnnualMonthlyEq(19.99),
+      priceAnnualNote: `Billed annually at ${calcAnnualTotal(19.99)}/year (${totalAnnualDiscount}% OFF)`,
       period: "per month",
       dailyCost: "~$0.66/day · 1 saved return pays for full month",
       description: "Complete fitment solution for growing auto parts retailers.",
@@ -303,10 +307,11 @@ export default function PlansPage() {
     {
       id: "enterprise",
       name: "Enterprise Unlimited",
-      priceMonthly: calcMonthly(49.99),
-      priceAnnual: calcAnnual(49.99),
+      priceMonthly: calcMonthly(79.99),
+      priceAnnual: calcAnnualMonthlyEq(79.99),
+      priceAnnualNote: `Billed annually at ${calcAnnualTotal(79.99)}/year (${totalAnnualDiscount}% OFF)`,
       period: "per month",
-      dailyCost: "~$1.66/day · High ROI for large auto catalogs",
+      dailyCost: "~$2.66/day · High ROI for large auto catalogs",
       description: "Maximum scale & dedicated performance for large automotive stores.",
       recordsLimit: "Unlimited Fitment Records",
       badge: "UNLIMITED SCALE",
@@ -329,6 +334,137 @@ export default function PlansPage() {
         "VIP Dedicated Account Manager",
       ],
       disabledFeatures: [],
+    },
+  ];
+
+  // Feature Matrix Groups
+  const matrixGroups = [
+    {
+      category: "Core Scale & Capacity",
+      rows: [
+        {
+          name: "14-Day Risk-Free Trial",
+          free: "Instant Setup",
+          growth: "✓ 14 Days Free",
+          enterprise: "✓ 14 Days Free",
+        },
+        {
+          name: "Fitment Records Capacity",
+          free: "100",
+          growth: "5,000",
+          enterprise: "Unlimited",
+        },
+        {
+          name: "Results Display Options",
+          free: "Inline Widget & Single Page",
+          growth: "✓ Full Collections Grid, Dedicated Page & Inline Widget",
+          enterprise: "✓ Multi-Layout, Custom Theme Integration & Proxy SLA",
+        },
+      ],
+    },
+    {
+      category: "ACES / PIES & Data Engineering",
+      rows: [
+        {
+          name: "ACES / PIES Standard Engine (XML & CSV)",
+          free: "✕",
+          growth: "✓ Import & Export",
+          enterprise: "✓ Full Enterprise Engine",
+        },
+        {
+          name: "CSV Bulk Import & Export",
+          free: "✕",
+          growth: "✓ Unlimited CSV",
+          enterprise: "✓ Automated Sync",
+        },
+        {
+          name: "1-Click Competitor Data Migration Importer",
+          free: "✕",
+          growth: "✓ Easy YMM / Fitment Group / ACES",
+          enterprise: "✓ Unlimited Competitor Migration",
+        },
+        {
+          name: "Universal Products Support",
+          free: "✕",
+          growth: "✓ Unlimited",
+          enterprise: "✓ Unlimited",
+        },
+      ],
+    },
+    {
+      category: "Smart Search & AI Intelligence",
+      rows: [
+        {
+          name: "VIN Lookups Allowance",
+          free: "✕ Disabled",
+          growth: "100 Free/mo ($0.05 after)",
+          enterprise: "1,000 Free/mo ($0.03 after)",
+        },
+        {
+          name: "AI Voice & Conversational Search Assistant",
+          free: "✕",
+          growth: "✓ Standard Natural Voice Search",
+          enterprise: "✓ Advanced AI Conversational Engine",
+        },
+        {
+          name: "1-Click AI Catalog Auto-Fitter (Beta)",
+          free: "✕",
+          growth: "✕",
+          enterprise: "✓ Included (AI Suggestions)",
+        },
+        {
+          name: "Sub-Model & Trim Filtering",
+          free: "Basic Year/Make/Model",
+          growth: "✓ Full Trim Support",
+          enterprise: "✓ Advanced Engine Specs",
+        },
+        {
+          name: "Search Analytics & Gap Intelligence",
+          free: "Basic Summary",
+          growth: "Detailed + Gap Logs",
+          enterprise: "Realtime Export",
+        },
+      ],
+    },
+    {
+      category: "Shopper Experience & Persistence",
+      rows: [
+        {
+          name: "Product Page Fitment Checker Badge",
+          free: "✕",
+          growth: "✓ Included",
+          enterprise: "✓ Included",
+        },
+        {
+          name: "My Garage Saved Vehicles Persistence",
+          free: "Local Storage",
+          growth: "Local + Persistence",
+          enterprise: "Cross-Device Sync",
+        },
+      ],
+    },
+    {
+      category: "Performance, SLA & Security",
+      rows: [
+        {
+          name: "Storefront Proxy SLA & Performance",
+          free: "Standard App Proxy",
+          growth: "✓ High-Speed CDN Proxy",
+          enterprise: "✓ VIP Dedicated Proxy & Edge Caching",
+        },
+        {
+          name: "Database Backups & Safety",
+          free: "Weekly Auto-Backup",
+          growth: "Daily Automated Backups",
+          enterprise: "Hourly Realtime Backups",
+        },
+        {
+          name: "Support SLA",
+          free: "Standard Email",
+          growth: "Priority Support",
+          enterprise: "VIP 1-on-1 Manager",
+        },
+      ],
     },
   ];
 
@@ -450,6 +586,8 @@ export default function PlansPage() {
             buttonLabel = "Current Active Plan";
           } else if (activePlan === plan.id) {
             buttonLabel = billingCycle === "annual" ? `Switch to Annual Plan (Save ${totalAnnualDiscount}%) →` : "Switch to Monthly Plan →";
+          } else if (plan.id === "free") {
+            buttonLabel = "Downgrade to Free";
           }
 
           return (
@@ -492,9 +630,14 @@ export default function PlansPage() {
                 </p>
 
                 {/* Price Display */}
-                <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "8px" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "4px" }}>
                   <span style={{ fontSize: "36px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>{displayPrice}</span>
                   <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "600" }}>{plan.period}</span>
+                </div>
+
+                {/* Annual Billing Subtext Note */}
+                <div style={{ fontSize: "12px", color: "#059669", fontWeight: "600", minHeight: "18px", marginBottom: "8px" }}>
+                  {billingCycle === "annual" && plan.priceAnnualNote ? plan.priceAnnualNote : null}
                 </div>
 
                 {/* High ROI Badge */}
@@ -551,121 +694,151 @@ export default function PlansPage() {
 
       {/* Comprehensive Feature Comparison Matrix */}
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", marginBottom: "40px", boxShadow: "0 4px 16px rgba(0,0,0,0.03)" }}>
-        <h2 style={{ margin: "0 0 20px", fontSize: "22px", fontWeight: "800", color: "#0f172a" }}>
-          Comprehensive Feature Comparison Matrix
-        </h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "24px" }}>
+          <div>
+            <h2 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: "800", color: "#0f172a" }}>
+              Comprehensive Feature Comparison Matrix
+            </h2>
+            <p style={{ margin: 0, color: "#64748b", fontSize: "14px" }}>
+              Detailed breakdown of features, limits, data standards, and support options across all plans.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "#475569" }}>
+            <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#10b981", display: "inline-block" }}></span>
+            <span>Your current active plan is highlighted below</span>
+          </div>
+        </div>
+
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
             <thead>
-              <tr style={{ borderBottom: "2px solid #e2e8f0", background: "#f8fafc" }}>
-                <th style={{ padding: "14px 16px", width: "40%", color: "#64748b", fontWeight: "700" }}>Feature</th>
-                <th style={{ padding: "14px 16px", textAlign: "center", color: "#64748b", fontWeight: "700" }}>Starter Free</th>
-                <th style={{ padding: "14px 16px", textAlign: "center", background: "#ecfdf5", color: "#047857", fontWeight: "800" }}>Growth Pro</th>
-                <th style={{ padding: "14px 16px", textAlign: "center", color: "#64748b", fontWeight: "700" }}>Enterprise</th>
+              <tr style={{ borderBottom: "2px solid #cbd5e1", background: "#f8fafc" }}>
+                <th style={{ padding: "16px", width: "37%", color: "#334155", fontWeight: "800", fontSize: "14px" }}>
+                  Feature Specification
+                </th>
+                
+                {/* Starter Free Header */}
+                <th style={{
+                  padding: "16px",
+                  textAlign: "center",
+                  width: "21%",
+                  background: activePlan === "free" ? "#f0fdf4" : "transparent",
+                  borderLeft: activePlan === "free" ? "2px solid #10b981" : "none",
+                  borderRight: activePlan === "free" ? "2px solid #10b981" : "none",
+                  borderTop: activePlan === "free" ? "3px solid #10b981" : "none",
+                }}>
+                  {activePlan === "free" && (
+                    <div style={{ background: "#10b981", color: "#ffffff", padding: "3px 8px", borderRadius: "10px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px", display: "inline-block" }}>
+                      YOUR ACTIVE PLAN
+                    </div>
+                  )}
+                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "16px" }}>Starter Free</div>
+                  <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "500", marginTop: "2px" }}>$0 / month</div>
+                </th>
+
+                {/* Growth Pro Header */}
+                <th style={{
+                  padding: "16px",
+                  textAlign: "center",
+                  width: "21%",
+                  background: activePlan === "growth" ? "#ecfdf5" : "#f0fdf4",
+                  borderLeft: activePlan === "growth" ? "2px solid #10b981" : "none",
+                  borderRight: activePlan === "growth" ? "2px solid #10b981" : "none",
+                  borderTop: activePlan === "growth" ? "3px solid #10b981" : "none",
+                }}>
+                  {activePlan === "growth" ? (
+                    <div style={{ background: "#10b981", color: "#ffffff", padding: "3px 8px", borderRadius: "10px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px", display: "inline-block" }}>
+                      YOUR ACTIVE PLAN
+                    </div>
+                  ) : (
+                    <div style={{ background: "#059669", color: "#ffffff", padding: "3px 8px", borderRadius: "10px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px", display: "inline-block" }}>
+                      MOST POPULAR
+                    </div>
+                  )}
+                  <div style={{ fontWeight: "800", color: "#047857", fontSize: "16px" }}>Growth Pro</div>
+                  <div style={{ fontSize: "12px", color: "#047857", fontWeight: "600", marginTop: "2px" }}>
+                    {billingCycle === "annual" ? `${calcAnnualMonthlyEq(19.99)} / mo` : `${calcMonthly(19.99)} / mo`}
+                  </div>
+                </th>
+
+                {/* Enterprise Header */}
+                <th style={{
+                  padding: "16px",
+                  textAlign: "center",
+                  width: "21%",
+                  background: activePlan === "enterprise" ? "#f0fdf4" : "transparent",
+                  borderLeft: activePlan === "enterprise" ? "2px solid #10b981" : "none",
+                  borderRight: activePlan === "enterprise" ? "2px solid #10b981" : "none",
+                  borderTop: activePlan === "enterprise" ? "3px solid #10b981" : "none",
+                }}>
+                  {activePlan === "enterprise" && (
+                    <div style={{ background: "#10b981", color: "#ffffff", padding: "3px 8px", borderRadius: "10px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px", display: "inline-block" }}>
+                      YOUR ACTIVE PLAN
+                    </div>
+                  )}
+                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "16px" }}>Enterprise</div>
+                  <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "500", marginTop: "2px" }}>
+                    {billingCycle === "annual" ? `${calcAnnualMonthlyEq(79.99)} / mo` : `${calcMonthly(79.99)} / mo`}
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>14-Day Risk-Free Trial</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", color: "#64748b" }}>Instant Setup</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "800", color: "#047857" }}>✓ 14 Days Free</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "800", color: "#047857" }}>✓ 14 Days Free</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Fitment Records Capacity</td>
-                <td style={{ padding: "14px 16px", textAlign: "center" }}>100</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "800", color: "#047857" }}>5,000</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Unlimited</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>VIN Lookups Allowance</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕ Disabled</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>100 Free/mo ($0.05 after)</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>1,000 Free/mo ($0.03 after)</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>ACES / PIES Data Standards (XML & CSV)</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Import & Export</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "800", color: "#047857" }}>✓ Full Enterprise Engine</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Sub-Model & Trim Filtering</td>
-                <td style={{ padding: "14px 16px", textAlign: "center" }}>Basic Year/Make/Model</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Full Trim Support</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Advanced Engine Specs</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Universal Products</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Unlimited</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Unlimited</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Product Page Fitment Checker</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Included</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Included</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>My Garage Saved Vehicles</td>
-                <td style={{ padding: "14px 16px", textAlign: "center" }}>Local Storage</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700" }}>Local + Persistence</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Cross-Device Sync</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>CSV Bulk Import / Export</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Unlimited</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Automated Sync</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Search Analytics & Logs</td>
-                <td style={{ padding: "14px 16px", textAlign: "center" }}>Basic Summary</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>Detailed + Gap Logs</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Realtime Export</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Results Display Options</td>
-                <td style={{ padding: "14px 16px", textAlign: "center" }}>Inline Only</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ /collections/all, Dedicated Page & Inline</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ Multi-Layout & Custom Theme Integration</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>1-Click Competitor Data Migration Importer</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Easy YMM / Fitment Group / ACES</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "800", color: "#047857" }}>✓ Unlimited Competitor Migration</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>AI Voice & Conversational Search Assistant</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ Standard Natural Voice Search</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "800", color: "#047857" }}>✓ Advanced AI Conversational Engine</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>AI Fitment Matcher (Beta)</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", color: "#cbd5e1" }}>✕</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", color: "#cbd5e1" }}>✕</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "800", color: "#047857" }}>✓ Included (AI Suggestions)</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Storefront Proxy SLA & Performance</td>
-                <td style={{ padding: "14px 16px", textAlign: "center" }}>Standard App Proxy</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700", color: "#047857" }}>✓ High-Speed CDN Proxy</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>✓ VIP Dedicated Proxy & Edge Caching</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Database Backups & Safety</td>
-                <td style={{ padding: "14px 16px", textAlign: "center" }}>Weekly Auto-Backup</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700" }}>Daily Automated Backups</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>Hourly Realtime Backups</td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>Support SLA</td>
-                <td style={{ padding: "14px 16px", textAlign: "center" }}>Standard Email</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", background: "#f8fafc", fontWeight: "700" }}>Priority Support</td>
-                <td style={{ padding: "14px 16px", textAlign: "center", fontWeight: "700" }}>VIP 1-on-1 Manager</td>
+              {matrixGroups.map((group, gIdx) => (
+                <MatrixGroupSection
+                  key={gIdx}
+                  group={group}
+                  activePlan={activePlan}
+                />
+              ))}
+
+              {/* Bottom CTA Actions Row in Matrix */}
+              <tr style={{ background: "#f8fafc", borderTop: "2px solid #e2e8f0" }}>
+                <td style={{ padding: "20px 16px", fontWeight: "800", color: "#0f172a" }}>
+                  Select Plan
+                </td>
+                
+                {/* Starter Free CTA */}
+                <td style={{ padding: "16px", textAlign: "center", background: activePlan === "free" ? "#f0fdf4" : "transparent" }}>
+                  <PlanCardForm
+                    plan={plans[0]}
+                    billingCycle={billingCycle}
+                    isCurrent={activePlan === "free"}
+                    activePlan={activePlan}
+                    buttonLabel={activePlan === "free" ? "Active Plan" : "Downgrade to Free"}
+                  />
+                </td>
+
+                {/* Growth Pro CTA */}
+                <td style={{ padding: "16px", textAlign: "center", background: activePlan === "growth" ? "#ecfdf5" : "#f0fdf4" }}>
+                  <PlanCardForm
+                    plan={plans[1]}
+                    billingCycle={billingCycle}
+                    isCurrent={activePlan === "growth" && billingCycle === (activeBillingCycle || "monthly")}
+                    activePlan={activePlan}
+                    buttonLabel={
+                      activePlan === "growth" && billingCycle === (activeBillingCycle || "monthly")
+                        ? "Active Plan"
+                        : "Choose Growth Pro →"
+                    }
+                  />
+                </td>
+
+                {/* Enterprise CTA */}
+                <td style={{ padding: "16px", textAlign: "center", background: activePlan === "enterprise" ? "#f0fdf4" : "transparent" }}>
+                  <PlanCardForm
+                    plan={plans[2]}
+                    billingCycle={billingCycle}
+                    isCurrent={activePlan === "enterprise" && billingCycle === (activeBillingCycle || "monthly")}
+                    activePlan={activePlan}
+                    buttonLabel={
+                      activePlan === "enterprise" && billingCycle === (activeBillingCycle || "monthly")
+                        ? "Active Plan"
+                        : "Choose Enterprise →"
+                    }
+                  />
+                </td>
               </tr>
             </tbody>
           </table>
@@ -675,12 +848,110 @@ export default function PlansPage() {
   );
 }
 
+function MatrixGroupSection({ group, activePlan }) {
+  return (
+    <>
+      {/* Category Section Header */}
+      <tr style={{ background: "#f1f5f9", borderBottom: "1px solid #cbd5e1" }}>
+        <td
+          colSpan={4}
+          style={{
+            padding: "10px 16px",
+            fontWeight: "800",
+            fontSize: "12px",
+            color: "#334155",
+            textTransform: "uppercase",
+            letterSpacing: "0.8px",
+          }}
+        >
+          {group.category}
+        </td>
+      </tr>
+
+      {/* Category Rows */}
+      {group.rows.map((row, rIdx) => (
+        <tr
+          key={rIdx}
+          style={{
+            borderBottom: "1px solid #f1f5f9",
+            background: "#ffffff",
+          }}
+        >
+          <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>
+            {row.name}
+          </td>
+
+          {/* Starter Free Cell */}
+          <td
+            style={{
+              padding: "14px 16px",
+              textAlign: "center",
+              color: row.free === "✕" ? "#cbd5e1" : "#334155",
+              fontWeight: row.free.startsWith("✓") ? "700" : "500",
+              background: activePlan === "free" ? "#f0fdf4" : "transparent",
+              borderLeft: activePlan === "free" ? "2px solid #10b981" : "none",
+              borderRight: activePlan === "free" ? "2px solid #10b981" : "none",
+            }}
+          >
+            {formatMatrixCell(row.free)}
+          </td>
+
+          {/* Growth Pro Cell */}
+          <td
+            style={{
+              padding: "14px 16px",
+              textAlign: "center",
+              fontWeight: row.growth.startsWith("✓") ? "800" : "600",
+              color: row.growth.startsWith("✓") ? "#047857" : (row.growth === "✕" ? "#cbd5e1" : "#0f172a"),
+              background: activePlan === "growth" ? "#ecfdf5" : "#f8fafc",
+              borderLeft: activePlan === "growth" ? "2px solid #10b981" : "none",
+              borderRight: activePlan === "growth" ? "2px solid #10b981" : "none",
+            }}
+          >
+            {formatMatrixCell(row.growth)}
+          </td>
+
+          {/* Enterprise Cell */}
+          <td
+            style={{
+              padding: "14px 16px",
+              textAlign: "center",
+              fontWeight: row.enterprise.startsWith("✓") ? "800" : "600",
+              color: row.enterprise.startsWith("✓") ? "#047857" : (row.enterprise === "✕" ? "#cbd5e1" : "#0f172a"),
+              background: activePlan === "enterprise" ? "#f0fdf4" : "transparent",
+              borderLeft: activePlan === "enterprise" ? "2px solid #10b981" : "none",
+              borderRight: activePlan === "enterprise" ? "2px solid #10b981" : "none",
+            }}
+          >
+            {formatMatrixCell(row.enterprise)}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function formatMatrixCell(text) {
+  if (text === "✕") {
+    return <span style={{ color: "#cbd5e1", fontSize: "16px" }}>✕</span>;
+  }
+  if (text.startsWith("✓")) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+        <span style={{ color: "#10b981", fontWeight: "800" }}>✓</span>
+        <span>{text.replace(/^✓\s*/, "")}</span>
+      </span>
+    );
+  }
+  return text;
+}
+
 function PlanCardForm({ plan, billingCycle, isCurrent, activePlan, buttonLabel }) {
   const fetcher = useFetcher();
   const isCardSubmitting = fetcher.state !== "idle";
 
   return (
-    <fetcher.Form method="post" style={{ marginBottom: "24px" }}>
+    <fetcher.Form method="post" style={{ margin: 0 }}>
       <input type="hidden" name="intent" value="selectPlan" />
       <input type="hidden" name="plan" value={plan.id} />
       <input type="hidden" name="billingCycle" value={billingCycle} />

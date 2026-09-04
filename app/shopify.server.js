@@ -28,11 +28,11 @@ const shopify = shopifyApp({
     },
     enterprise_monthly: {
       trialDays: 14,
-      lineItems: [{ amount: 49.99, currencyCode: "USD", interval: BillingInterval.Every30Days }],
+      lineItems: [{ amount: 79.99, currencyCode: "USD", interval: BillingInterval.Every30Days }],
     },
     enterprise_annual: {
       trialDays: 14,
-      lineItems: [{ amount: 479.88, currencyCode: "USD", interval: BillingInterval.Annual }],
+      lineItems: [{ amount: 767.90, currencyCode: "USD", interval: BillingInterval.Annual }],
     },
   },
   future: {
