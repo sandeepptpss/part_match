@@ -32,6 +32,18 @@ export async function action({ request }) {
     },
   });
 
+  // Check Merchant VIN Safety Cap Settings to prevent over-billing
+  const appSettings = await prisma.appSettings.findFirst({ where: { shop: session.shop } });
+  if (appSettings?.vinCapEnabled && monthVinCount >= (appSettings.vinMonthlyCapLimit || 50)) {
+    return json(
+      {
+        error: `Store monthly VIN safety cap limit (${appSettings.vinMonthlyCapLimit} lookups) reached. Over-billing budget guard active.`,
+        capReached: true,
+      },
+      { status: 429 }
+    );
+  }
+
   // Check if monthly limit reached for non-unlimited plans
   if (limits.vinMonthlyLimit && Number.isFinite(limits.vinMonthlyLimit) && monthVinCount >= limits.vinMonthlyLimit) {
     // Note: In live Shopify Billing usage charges, extra lookups can be billed at limits.vinOverageRate ($0.05)

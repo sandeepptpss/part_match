@@ -15,6 +15,9 @@ const DEFAULT_SETTINGS = {
   persistSelection: true,
   enableGarage: true,
   showFitmentChecker: true,
+  vinCapEnabled: true,
+  vinMonthlyCapLimit: 50,
+  vinAlertEmail: "sandeepptpss@gmail.com",
 };
 
 export const loader = async ({ request }) => {
@@ -46,6 +49,19 @@ export const loader = async ({ request }) => {
     console.error("[settings loader error]", err);
   }
 
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  let vinLookupCount = 0;
+  try {
+    vinLookupCount = await prisma.vinLookupLog.count({
+      where: { shop, createdAt: { gte: startOfMonth } },
+    });
+  } catch (err) {
+    console.warn("[settings loader] vinLookupCount error:", err);
+  }
+
   const { plan } = await getShopPlan(shop);
   const limits = planLimits(plan);
 
@@ -54,6 +70,9 @@ export const loader = async ({ request }) => {
     settings: settings || DEFAULT_SETTINGS,
     planAllowsFitmentChecker: limits.fitmentChecker,
     planLabel: limits.label,
+    vinMonthlyLimit: limits.vinMonthlyLimit,
+    vinOverageRate: limits.vinOverageRate,
+    vinLookupCount,
     isAdmin,
   });
 };
@@ -79,6 +98,9 @@ export const action = async ({ request }) => {
     persistSelection: formData.get("persist_selection") === "true",
     enableGarage: formData.get("enable_garage") === "true",
     showFitmentChecker: formData.get("show_fitment_checker") === "true" && limits.fitmentChecker,
+    vinCapEnabled: formData.get("vin_cap_enabled") === "true",
+    vinMonthlyCapLimit: parseInt(formData.get("vin_monthly_cap_limit") || "50", 10),
+    vinAlertEmail: formData.get("vin_alert_email")?.toString() || "",
   };
 
   let savedSettings = null;
@@ -96,7 +118,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Settings() {
-  const { shop, settings, planAllowsFitmentChecker, planLabel } = useLoaderData();
+  const { shop, settings, planAllowsFitmentChecker, planLabel, vinMonthlyLimit, vinOverageRate, vinLookupCount } = useLoaderData();
   const fetcher = useFetcher();
   const actionData = fetcher.data;
 
@@ -113,6 +135,9 @@ export default function Settings() {
     persistSelection: initial.persistSelection ?? true,
     enableGarage: initial.enableGarage ?? true,
     showFitmentChecker: initial.showFitmentChecker ?? true,
+    vinCapEnabled: initial.vinCapEnabled ?? true,
+    vinMonthlyCapLimit: initial.vinMonthlyCapLimit ?? 50,
+    vinAlertEmail: initial.vinAlertEmail || "sandeepptpss@gmail.com",
   }));
 
   useEffect(() => {
@@ -128,6 +153,9 @@ export default function Settings() {
         persistSelection: current.persistSelection,
         enableGarage: current.enableGarage,
         showFitmentChecker: current.showFitmentChecker,
+        vinCapEnabled: current.vinCapEnabled ?? true,
+        vinMonthlyCapLimit: current.vinMonthlyCapLimit ?? 50,
+        vinAlertEmail: current.vinAlertEmail || "sandeepptpss@gmail.com",
       });
     }
   }, [settings, actionData]);
@@ -441,10 +469,102 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Card 4: Theme App Extension Guide */}
+          {/* Card 4: VIN Safety & Over-Billing Guard */}
           <div style={cardStyle}>
             <div style={cardHeaderStyle}>
-              <div style={badgeStyle("#fff7ed", "#ea580c")}>04</div>
+              <div style={badgeStyle("#fef2f2", "#dc2626")}>04</div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <h3 style={cardTitleStyle}>VIN Budget Protection & Over-Billing Guard</h3>
+                  <span style={{ background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5", fontSize: "11px", fontWeight: "800", padding: "2px 8px", borderRadius: "12px" }}>
+                    SAFETY SHIELD ACTIVE
+                  </span>
+                </div>
+                <p style={cardSubStyle}>Prevent surprise billing charges when storefront traffic spikes suddenly.</p>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Live VIN Usage Metric Bar */}
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "#334155" }}>
+                    Monthly VIN Lookups Used:
+                  </span>
+                  <strong style={{ fontSize: "14px", color: vinLookupCount >= (formState.vinMonthlyCapLimit || 50) ? "#dc2626" : "#047857" }}>
+                    {vinLookupCount} / {formState.vinMonthlyCapLimit || 50} Lookups
+                  </strong>
+                </div>
+
+                <div style={{ width: "100%", height: "8px", background: "#e2e8f0", borderRadius: "4px", overflow: "hidden", marginBottom: "8px" }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${Math.min(100, Math.round((vinLookupCount / (formState.vinMonthlyCapLimit || 50)) * 100))}%`,
+                      background: vinLookupCount >= (formState.vinMonthlyCapLimit || 50) ? "#dc2626" : vinLookupCount >= (formState.vinMonthlyCapLimit || 50) * 0.8 ? "#d97706" : "#008060",
+                      transition: "width 0.3s ease",
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#64748b" }}>
+                  <span>Plan Free Limit: {vinMonthlyLimit} lookups/mo</span>
+                  <span>Overage Rate: ${vinOverageRate?.toFixed(2)}/VIN lookup</span>
+                </div>
+              </div>
+
+              <ToggleRow
+                name="vin_cap_enabled"
+                checked={formState.vinCapEnabled}
+                onChange={(val) => handleChange("vinCapEnabled", val)}
+                title="Enable VIN Monthly Spend Protection"
+                desc="Automatically alert or pause VIN API searches once your defined monthly safety limit is reached."
+              />
+
+              {formState.vinCapEnabled && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", background: "#fff5f5", border: "1px solid #fed7d7", borderRadius: "12px", padding: "16px" }}>
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: "800", color: "#792828", display: "block", marginBottom: "6px" }}>
+                      Max Monthly VIN Cap
+                    </label>
+                    <input
+                      type="number"
+                      name="vin_monthly_cap_limit"
+                      value={formState.vinMonthlyCapLimit}
+                      onChange={(e) => handleChange("vinMonthlyCapLimit", parseInt(e.target.value || "50", 10))}
+                      style={{ ...inputStyle, borderColor: "#fca5a5" }}
+                      min="1"
+                    />
+                    <span style={{ fontSize: "11px", color: "#9b2c2c", marginTop: "4px", display: "block" }}>
+                      Prevents searches over this count.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: "800", color: "#792828", display: "block", marginBottom: "6px" }}>
+                      Alert Notification Email
+                    </label>
+                    <input
+                      type="email"
+                      name="vin_alert_email"
+                      value={formState.vinAlertEmail}
+                      onChange={(e) => handleChange("vinAlertEmail", e.target.value)}
+                      style={{ ...inputStyle, borderColor: "#fca5a5" }}
+                      placeholder="merchant@example.com"
+                    />
+                    <span style={{ fontSize: "11px", color: "#9b2c2c", marginTop: "4px", display: "block" }}>
+                      Receives alert at 80% usage.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Card 5: Theme App Extension Guide */}
+          <div style={cardStyle}>
+            <div style={cardHeaderStyle}>
+              <div style={badgeStyle("#fff7ed", "#ea580c")}>05</div>
               <div>
                 <h3 style={cardTitleStyle}>Storefront Theme Integration</h3>
                 <p style={cardSubStyle}>Quick reference for embedding PartMatch widgets into your Shopify theme.</p>

@@ -45,7 +45,7 @@ export const PLAN_TIERS = {
   },
   starter: {
     label: "Starter Pro",
-    fitmentLimit: 3000,
+    fitmentLimit: 5000,
     universalProducts: true,
     fitmentChecker: true,
     csvImportExport: true,

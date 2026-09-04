@@ -236,6 +236,11 @@ model AppSettings {
   volumeDiscountPercent   Int       @default(25)
   isVolumeDiscountActive  Boolean   @default(true)
 
+  // ─── VIN Safety & Budget Alert Settings ──────────────────────────────
+  vinCapEnabled           Boolean   @default(true)
+  vinMonthlyCapLimit      Int       @default(50)
+  vinAlertEmail           String    @default("")
+
   @@index([shop])
 }
 
