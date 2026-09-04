@@ -20,7 +20,7 @@ export const loader = async ({ request }) => {
   const isAdmin =
     shop.includes(adminStore) ||
     shop.includes("quickstart-749ac396") ||
-    sessionEmail.includes("sandeepptpss") ||
+    sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
     sessionEmail === adminEmail;
 
   // Show onboarding badge if no fitment data yet

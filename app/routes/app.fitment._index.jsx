@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Form, useFetcher, useSearchParams, Link, useNavigation } from "react-router";
+import { useLoaderData, Form, useFetcher, useSearchParams, Link, useNavigation, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-
-const PAGE_SIZE = 20;
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const url = new URL(request.url);
+  const rawLimit = parseInt(url.searchParams.get("limit") || "10", 10);
+  const pageSize = [10, 25, 50, 100].includes(rawLimit) ? rawLimit : 10;
   const page = parseInt(url.searchParams.get("page") || "1", 10);
   const search = url.searchParams.get("q") || "";
-  const skip = (page - 1) * PAGE_SIZE;
+  const skip = (page - 1) * pageSize;
 
   const where = {
     shop,
@@ -32,13 +32,13 @@ export const loader = async ({ request }) => {
       where,
       orderBy: [{ year: "desc" }, { make: "asc" }, { model: "asc" }],
       skip,
-      take: PAGE_SIZE,
+      take: pageSize,
       include: { _count: { select: { products: true, collections: true, tags: true, skus: true } } },
     }),
     prisma.fitmentRecord?.count({ where }),
   ]);
 
-  return json({ records, total, page, search, pageSize: PAGE_SIZE });
+  return json({ records, total, page, search, pageSize });
 };
 
 export const action = async ({ request }) => {
@@ -58,6 +58,7 @@ export const action = async ({ request }) => {
 export default function FitmentIndex() {
   const { records, total, page, search, pageSize } = useLoaderData();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const totalPages = Math.ceil(total / pageSize);
   const loading = navigation.state !== "idle";
@@ -267,32 +268,141 @@ export default function FitmentIndex() {
         </table>
       </div>
 
-      {/* Pagination Bar */}
-      {totalPages > 1 && (
-        <div style={{ display: "flex", gap: "8px", marginTop: "24px", justifyContent: "center", alignItems: "center" }}>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-            <Link
-              key={p}
-              to={`/app/fitment?page=${p}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                textDecoration: "none",
-                fontSize: "14px",
-                fontWeight: "700",
-                background: p === page ? "#008060" : "#ffffff",
-                color: p === page ? "#ffffff" : "#475569",
-                border: `1px solid ${p === page ? "#008060" : "#cbd5e1"}`,
-                boxShadow: p === page ? "0 2px 6px rgba(0, 128, 96, 0.3)" : "none",
-              }}
-            >
-              {p}
-            </Link>
-          ))}
+      {/* Pagination Bar & Items Per Page Selector */}
+      {total > 10 && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginTop: "24px",
+            flexWrap: "wrap",
+            gap: "16px",
+          }}
+        >
+          {/* Left Side: Items Per Page Selector */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "13px", color: "#475569", fontWeight: "600" }}>
+              Show per page:
+            </span>
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  const newLimit = e.target.value;
+                  navigate(`/app/fitment?page=1&limit=${newLimit}${search ? `&q=${encodeURIComponent(search)}` : ""}`);
+                }}
+                style={{
+                  padding: "8px 30px 8px 12px",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  color: "#0f172a",
+                  background: "#ffffff",
+                  cursor: "pointer",
+                  outline: "none",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                }}
+              >
+                <option value="10">10 fitments</option>
+                <option value="25">25 fitments</option>
+                <option value="50">50 fitments</option>
+                <option value="100">100 fitments</option>
+              </select>
+              <span
+                style={{
+                  position: "absolute",
+                  right: "10px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                  color: "#64748b",
+                  fontSize: "10px",
+                }}
+              >
+                ▼
+              </span>
+            </div>
+          </div>
+
+          {/* Right Side: Page Navigation Links */}
+          {totalPages > 1 && (
+            <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+              {/* Previous Page Link */}
+              <Link
+                to={`/app/fitment?page=${Math.max(1, page - 1)}&limit=${pageSize}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0 12px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  textDecoration: "none",
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  background: "#ffffff",
+                  color: page === 1 ? "#94a3b8" : "#475569",
+                  border: "1px solid #cbd5e1",
+                  pointerEvents: page === 1 ? "none" : "auto",
+                  opacity: page === 1 ? 0.5 : 1,
+                }}
+              >
+                ← Prev
+              </Link>
+
+              {/* Numbered Page Links */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <Link
+                  key={p}
+                  to={`/app/fitment?page=${p}&limit=${pageSize}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "8px",
+                    textDecoration: "none",
+                    fontSize: "14px",
+                    fontWeight: "700",
+                    background: p === page ? "#008060" : "#ffffff",
+                    color: p === page ? "#ffffff" : "#475569",
+                    border: `1px solid ${p === page ? "#008060" : "#cbd5e1"}`,
+                    boxShadow: p === page ? "0 2px 6px rgba(0, 128, 96, 0.3)" : "none",
+                  }}
+                >
+                  {p}
+                </Link>
+              ))}
+
+              {/* Next Page Link */}
+              <Link
+                to={`/app/fitment?page=${Math.min(totalPages, page + 1)}&limit=${pageSize}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0 12px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  textDecoration: "none",
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  background: "#ffffff",
+                  color: page === totalPages ? "#94a3b8" : "#475569",
+                  border: "1px solid #cbd5e1",
+                  pointerEvents: page === totalPages ? "none" : "auto",
+                  opacity: page === totalPages ? 0.5 : 1,
+                }}
+              >
+                Next →
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>

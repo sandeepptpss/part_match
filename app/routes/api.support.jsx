@@ -6,7 +6,7 @@ export const action = async ({ request }) => {
     return Response.json({ success: false, error: "Method not allowed" }, { status: 405 });
   }
 
-  let shop = "Unknown Store";
+  let shop = "";
   let defaultSessionEmail = "";
 
   try {
@@ -14,7 +14,17 @@ export const action = async ({ request }) => {
     if (session?.shop) shop = session.shop;
     if (session?.email) defaultSessionEmail = session.email;
   } catch (err) {
-    console.warn("[api.support] Admin auth session fallback:", err?.message);
+    try {
+      const { session } = await authenticate.public.appProxy(request);
+      if (session?.shop) shop = session.shop;
+    } catch (proxyErr) {}
+  }
+
+  if (!shop) {
+    return Response.json(
+      { success: false, error: "Unauthorized access. Please access via Shopify Admin to submit support queries." },
+      { status: 401 }
+    );
   }
 
   let name = "";

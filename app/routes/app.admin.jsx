@@ -19,7 +19,7 @@ export const loader = async ({ request }) => {
   const isAdmin =
     currentShop.includes(adminStore) ||
     currentShop.includes("quickstart-749ac396") ||
-    sessionEmail.includes("sandeepptpss") ||
+    sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
     sessionEmail === adminEmail;
 
   if (!isAdmin) {
@@ -178,7 +178,22 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const currentShop = session.shop;
+  const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
+  const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
+  const sessionEmail = session.email || adminEmail;
+
+  const isAdmin =
+    currentShop.includes(adminStore) ||
+    currentShop.includes("quickstart-749ac396") ||
+    sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
+    sessionEmail === adminEmail;
+
+  if (!isAdmin) {
+    return Response.json({ success: false, error: "Unauthorized" }, { status: 403 });
+  }
+
   const formData = await request.formData();
   const intent = formData.get("intent");
 

@@ -3,6 +3,15 @@
  * Handles sending admin email notifications when a merchant submits a support query.
  */
 
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export async function sendSupportEmailToAdmin({ merchantShop, senderName, senderEmail, subject, message }) {
   const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.RESEND_FROM_EMAIL || "CatalogHealth Alert <onboarding@resend.dev>";
@@ -12,6 +21,12 @@ export async function sendSupportEmailToAdmin({ merchantShop, senderName, sender
     console.error("[Resend Email Error] RESEND_API_KEY is not configured.");
     return { success: false, error: "RESEND_API_KEY is missing." };
   }
+
+  const safeShop = escapeHtml(merchantShop);
+  const safeName = escapeHtml(senderName);
+  const safeEmail = escapeHtml(senderEmail);
+  const safeSubject = escapeHtml(subject);
+  const safeMessage = escapeHtml(message);
 
   const emailSubject = `[Merchant Support Query] ${subject || "New Query"} — ${merchantShop || senderName}`;
   const htmlBody = `
@@ -46,19 +61,19 @@ export async function sendSupportEmailToAdmin({ merchantShop, senderName, sender
             <table class="meta-table">
               <tr>
                 <td class="label">Merchant Store:</td>
-                <td class="val"><strong style="color: #2563eb;">${merchantShop || "Unknown Store"}</strong></td>
+                <td class="val"><strong style="color: #2563eb;">${safeShop || "Unknown Store"}</strong></td>
               </tr>
               <tr>
                 <td class="label">Merchant Name:</td>
-                <td class="val">${senderName}</td>
+                <td class="val">${safeName}</td>
               </tr>
               <tr>
                 <td class="label">Contact Email:</td>
-                <td class="val"><a href="mailto:${senderEmail}" style="color: #2563eb; text-decoration: none;">${senderEmail}</a></td>
+                <td class="val"><a href="mailto:${safeEmail}" style="color: #2563eb; text-decoration: none;">${safeEmail}</a></td>
               </tr>
               <tr>
                 <td class="label">Subject / Topic:</td>
-                <td class="val">${subject}</td>
+                <td class="val">${safeSubject}</td>
               </tr>
               <tr>
                 <td class="label">Submitted At:</td>
@@ -68,7 +83,7 @@ export async function sendSupportEmailToAdmin({ merchantShop, senderName, sender
 
             <div class="message-box">
               <div class="message-title">Query Message / Related Details</div>
-              <p class="message-body">${message}</p>
+              <p class="message-body">${safeMessage}</p>
             </div>
           </div>
           <div class="footer">

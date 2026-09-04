@@ -14,13 +14,9 @@ export async function loader({ request }) {
 
     const url = new URL(req.url);
     const paramShop = url.searchParams.get("shop");
-    if (paramShop) return paramShop;
-
-    const firstRecord = await prisma.fitmentRecord.findFirst({ select: { shop: true } });
-    if (firstRecord?.shop) return firstRecord.shop;
-
-    const firstSettings = await prisma.appSettings.findFirst({ select: { shop: true } });
-    if (firstSettings?.shop) return firstSettings.shop;
+    if (paramShop && typeof paramShop === "string") {
+      return paramShop.trim();
+    }
 
     return null;
   }

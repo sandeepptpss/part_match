@@ -14,12 +14,10 @@ export async function loader({ request }) {
 
   if (!shop) {
     const url = new URL(request.url);
-    shop = url.searchParams.get("shop");
-  }
-
-  if (!shop) {
-    const firstRecord = await prisma.fitmentRecord.findFirst({ select: { shop: true } });
-    if (firstRecord?.shop) shop = firstRecord.shop;
+    const paramShop = url.searchParams.get("shop");
+    if (paramShop && typeof paramShop === "string") {
+      shop = paramShop.trim();
+    }
   }
 
   if (!shop) {
