@@ -30,10 +30,10 @@ export const loader = async ({ request }) => {
   const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
   const sessionEmail = session.email || adminEmail;
   const isAdmin =
-    shop.includes(adminStore) ||
-    shop.includes("quickstart-749ac396") ||
-    sessionEmail.includes("sandeepptpss") ||
-    sessionEmail === adminEmail;
+    shop === adminStore ||
+    shop === `${adminStore}.myshopify.com` ||
+    sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
+    (adminEmail && sessionEmail.toLowerCase() === adminEmail.toLowerCase());
 
   let settings = null;
   try {

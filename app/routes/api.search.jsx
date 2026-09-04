@@ -159,7 +159,7 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
                     }
                   }
                 }`,
-                { variables: { query: `tag:"${t.tag}"` } },
+                { variables: { query: `tag:"${t.tag.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` } },
               );
               const tagData = await tagRes.json();
               const nodes = tagData.data?.products?.nodes ?? [];
@@ -193,7 +193,7 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
                     }
                   }
                 }`,
-                { variables: { query: `sku:"${s.sku}"` } },
+                { variables: { query: `sku:"${s.sku.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` } },
               );
               const skuData = await skuRes.json();
               const nodes = skuData.data?.products?.nodes ?? [];

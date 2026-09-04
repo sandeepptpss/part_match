@@ -15,12 +15,12 @@ export const loader = async ({ request }) => {
 
   const sessionEmail = session.email || adminEmail;
 
-  // Admin access check
+  // Admin access check (strict equality to prevent arbitrary domain inclusion vulnerabilities)
   const isAdmin =
-    currentShop.includes(adminStore) ||
-    currentShop.includes("quickstart-749ac396") ||
+    currentShop === adminStore ||
+    currentShop === `${adminStore}.myshopify.com` ||
     sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
-    sessionEmail === adminEmail;
+    (adminEmail && sessionEmail.toLowerCase() === adminEmail.toLowerCase());
 
   if (!isAdmin) {
     return redirect("/app");
@@ -185,10 +185,10 @@ export const action = async ({ request }) => {
   const sessionEmail = session.email || adminEmail;
 
   const isAdmin =
-    currentShop.includes(adminStore) ||
-    currentShop.includes("quickstart-749ac396") ||
+    currentShop === adminStore ||
+    currentShop === `${adminStore}.myshopify.com` ||
     sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
-    sessionEmail === adminEmail;
+    (adminEmail && sessionEmail.toLowerCase() === adminEmail.toLowerCase());
 
   if (!isAdmin) {
     return Response.json({ success: false, error: "Unauthorized" }, { status: 403 });
