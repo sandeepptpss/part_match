@@ -1,11 +1,11 @@
 const json = (data, init) => Response.json(data, init);
 import { useState, useMemo, useEffect } from "react";
-import { useLoaderData, useFetcher, redirect } from "react-router";
+import { useLoaderData, useFetcher, useRevalidator, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const currentShop = session.shop;
 
   // eslint-disable-next-line no-undef
@@ -33,6 +33,10 @@ export const loader = async ({ request }) => {
   let globalDiscount = 20;
 
   let isSupportOnline = true;
+  let autoGrantFirst10 = false;
+  let vipFreeOfferMonths = 2;
+  let vipFreeOfferStoreLimit = 10;
+
   try {
     // Fetch Global Settings
     const globalSettings = await prisma.appSettings.findFirst({
@@ -44,11 +48,31 @@ export const loader = async ({ request }) => {
     if (globalSettings?.isSupportOnline != null) {
       isSupportOnline = globalSettings.isSupportOnline;
     }
+    if (globalSettings?.autoGrantFirst10 != null) {
+      autoGrantFirst10 = globalSettings.autoGrantFirst10;
+    }
+    if (globalSettings?.vipFreeOfferMonths != null) {
+      vipFreeOfferMonths = globalSettings.vipFreeOfferMonths;
+    }
+    if (globalSettings?.vipFreeOfferStoreLimit != null) {
+      vipFreeOfferStoreLimit = globalSettings.vipFreeOfferStoreLimit;
+    }
 
     // Get unique shops
     const settingsList = (await prisma.appSettings.findMany()) ?? [];
     const sessions = (await prisma.session.findMany({ select: { shop: true, email: true } })) ?? [];
     const shopPlansList = (await prisma.shopPlan.findMany()) ?? [];
+
+    let currentShopName = "";
+    try {
+      if (admin?.graphql) {
+        const shopRes = await admin.graphql(`{ shop { name } }`);
+        const shopJson = await shopRes.json();
+        currentShopName = shopJson?.data?.shop?.name || "";
+      }
+    } catch (err) {
+      console.warn("[admin loader] Error fetching shop name:", err?.message);
+    }
 
     const shopSet = new Set([
       currentShop,
@@ -60,7 +84,7 @@ export const loader = async ({ request }) => {
 
     // Detailed per-shop stats
     shopsList = await Promise.all(
-      shopDomains.map(async (domain) => {
+      shopDomains.map(async (domain, index) => {
         const [fitments, mappings, universals, searches, settings] = await Promise.all([
           prisma.fitmentRecord.count({ where: { shop: domain } }) ?? 0,
           prisma.fitmentProduct.count({ where: { fitment: { shop: domain } } }) ?? 0,
@@ -69,17 +93,19 @@ export const loader = async ({ request }) => {
           prisma.appSettings.findFirst({ where: { shop: domain } }),
         ]);
 
+        let storeName = "";
+        if (domain === currentShop && currentShopName) {
+          storeName = currentShopName;
+        } else {
+          const rawPrefix = domain.replace(/\.myshopify\.com$/i, "");
+          storeName = rawPrefix
+            .split(/[-_]+/)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ");
+        }
+
         const sessionMatch = sessions.find((s) => s.shop === domain);
         const contactEmail = sessionMatch?.email || adminEmail;
-        const planObj = shopPlansList.find((p) => p.shop === domain);
-        const activePlanLabel = planObj?.plan
-          ? planObj.plan === "enterprise"
-            ? "Enterprise Unlimited ($79.99/mo)"
-            : planObj.plan === "growth"
-            ? "Growth Professional ($19.99/mo)"
-            : "Starter Free ($0/mo)"
-          : "Growth Professional ($19.99/mo)";
-
         const merchantDiscount =
           settings?.merchantDiscountPercent != null
             ? settings.merchantDiscountPercent
@@ -88,8 +114,27 @@ export const loader = async ({ request }) => {
             : 0;
         const isCustomDiscount = merchantDiscount > 0;
 
+        const isFirst10 = index < vipFreeOfferStoreLimit;
+        const isVipExplicit = settings?.vipFreeOfferActive ?? false;
+        const vipFreeOfferActive = isVipExplicit || (autoGrantFirst10 && isFirst10);
+        const vipFreeOfferClaimed = settings?.vipFreeOfferClaimed ?? false;
+
+        const planObj = shopPlansList.find((p) => p.shop === domain);
+        const basePrices = { free: 0, starter: 19, growth: 49, enterprise: 99 };
+        const planTitles = {
+          free: "Starter Free",
+          starter: "Starter Pro",
+          growth: "Growth Pro",
+          enterprise: "Enterprise Unlimited",
+        };
+        const userPlanKey = planObj?.plan || "free";
+        const basePrice = basePrices[userPlanKey] ?? 0;
+        const effectivePrice = basePrice > 0 ? (basePrice * (1 - merchantDiscount / 100)).toFixed(2) : "0";
+        const activePlanLabel = `${planTitles[userPlanKey] || "Starter Free"} ($${effectivePrice}/mo)`;
+
         return {
           shop: domain,
+          name: storeName,
           email: contactEmail,
           fitments,
           mappings,
@@ -99,6 +144,11 @@ export const loader = async ({ request }) => {
           isCustomDiscount,
           activePlan: activePlanLabel,
           status: "Active",
+          storeIndex: index,
+          isFirst10,
+          isVipExplicit,
+          vipFreeOfferActive,
+          vipFreeOfferClaimed,
         };
       })
     );
@@ -121,6 +171,9 @@ export const loader = async ({ request }) => {
     totalSearches,
     globalDiscount,
     isSupportOnline,
+    autoGrantFirst10,
+    vipFreeOfferMonths,
+    vipFreeOfferStoreLimit,
   });
 };
 
@@ -133,11 +186,17 @@ export const action = async ({ request }) => {
     const currentStatus = formData.get("currentSupportStatus") === "true";
     const nextStatus = !currentStatus;
 
-    await prisma.appSettings.upsert({
-      where: { shop: "__GLOBAL__" },
-      update: { isSupportOnline: nextStatus },
-      create: { shop: "__GLOBAL__", isSupportOnline: nextStatus },
-    });
+    const globalRec = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+    if (globalRec) {
+      await prisma.appSettings.update({
+        where: { id: globalRec.id },
+        data: { isSupportOnline: nextStatus },
+      });
+    } else {
+      await prisma.appSettings.create({
+        data: { shop: "__GLOBAL__", isSupportOnline: nextStatus },
+      });
+    }
 
     return json({
       success: true,
@@ -150,14 +209,17 @@ export const action = async ({ request }) => {
   if (intent === "saveGlobalDiscount") {
     const discount = parseInt(formData.get("globalDiscountPercent"), 10) || 20;
 
-    await prisma.appSettings.upsert({
-      where: { shop: "__GLOBAL__" },
-      update: { annualDiscountPercent: discount },
-      create: {
-        shop: "__GLOBAL__",
-        annualDiscountPercent: discount,
-      },
-    });
+    const globalRec = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+    if (globalRec) {
+      await prisma.appSettings.update({
+        where: { id: globalRec.id },
+        data: { annualDiscountPercent: discount },
+      });
+    } else {
+      await prisma.appSettings.create({
+        data: { shop: "__GLOBAL__", annualDiscountPercent: discount },
+      });
+    }
 
     return json({
       success: true,
@@ -179,28 +241,26 @@ export const action = async ({ request }) => {
     const annualDiscountToSave = userDiscount > 0 ? userDiscount : globalDiscount;
 
     try {
-      await prisma.appSettings.upsert({
-        where: { shop: targetShop },
-        update: {
-          merchantDiscountPercent: userDiscount,
-          annualDiscountPercent: annualDiscountToSave,
-        },
-        create: {
-          shop: targetShop,
-          merchantDiscountPercent: userDiscount,
-          annualDiscountPercent: annualDiscountToSave,
-        },
-      });
+      const shopRec = await prisma.appSettings.findFirst({ where: { shop: targetShop } });
+      if (shopRec) {
+        await prisma.appSettings.update({
+          where: { id: shopRec.id },
+          data: {
+            merchantDiscountPercent: userDiscount,
+            annualDiscountPercent: annualDiscountToSave,
+          },
+        });
+      } else {
+        await prisma.appSettings.create({
+          data: {
+            shop: targetShop,
+            merchantDiscountPercent: userDiscount,
+            annualDiscountPercent: annualDiscountToSave,
+          },
+        });
+      }
     } catch (err) {
-      console.warn("[saveUserDiscount] Falling back to annualDiscountPercent field:", err?.message);
-      await prisma.appSettings.upsert({
-        where: { shop: targetShop },
-        update: { annualDiscountPercent: annualDiscountToSave },
-        create: {
-          shop: targetShop,
-          annualDiscountPercent: annualDiscountToSave,
-        },
-      });
+      console.warn("[saveUserDiscount] Error saving merchant discount:", err?.message);
     }
 
     return json({
@@ -214,37 +274,216 @@ export const action = async ({ request }) => {
     });
   }
 
-  if (intent === "resetUserDiscount") {
+  if (intent === "saveVipFreeOfferConfig") {
+    const rawMonths = formData.get("vipFreeOfferMonths");
+    const rawStoreLimit = formData.get("vipFreeOfferStoreLimit");
+    const months = parseInt(rawMonths, 10) > 0 ? parseInt(rawMonths, 10) : 2;
+    const storeLimit = parseInt(rawStoreLimit, 10) > 0 ? parseInt(rawStoreLimit, 10) : 10;
+    const autoGrant = formData.get("autoGrantFirst10") === "true";
+
+    try {
+      const globalRec = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+      if (globalRec) {
+        await prisma.appSettings.update({
+          where: { id: globalRec.id },
+          data: {
+            vipFreeOfferMonths: months,
+            vipFreeOfferStoreLimit: storeLimit,
+            autoGrantFirst10: autoGrant,
+          },
+        });
+      } else {
+        await prisma.appSettings.create({
+          data: {
+            shop: "__GLOBAL__",
+            vipFreeOfferMonths: months,
+            vipFreeOfferStoreLimit: storeLimit,
+            autoGrantFirst10: autoGrant,
+          },
+        });
+      }
+
+      const perShopUpdateData = {
+        vipFreeOfferMonths: months,
+        vipFreeOfferStoreLimit: storeLimit,
+        autoGrantFirst10: autoGrant,
+      };
+
+      if (!autoGrant) {
+        perShopUpdateData.vipFreeOfferActive = false;
+        perShopUpdateData.vipFreeOfferClaimed = false;
+      }
+
+      await prisma.appSettings.updateMany({
+        where: { shop: { not: "__GLOBAL__" } },
+        data: perShopUpdateData,
+      });
+    } catch (err) {
+      console.warn("[saveVipFreeOfferConfig] Error updating appSettings:", err?.message);
+      return json({ success: false, message: "Error saving VIP offer config to database: " + (err?.message || "Unknown error") }, { status: 500 });
+    }
+
+    return json({
+      success: true,
+      intent: "saveVipFreeOfferConfig",
+      autoGrantFirst10: autoGrant,
+      vipFreeOfferMonths: months,
+      vipFreeOfferStoreLimit: storeLimit,
+      message: `VIP Free Offer settings saved! (${months} Months FREE for First ${storeLimit} Stores, Auto-Grant: ${
+        autoGrant ? "ENABLED" : "DISABLED"
+      })`,
+    });
+  }
+
+  if (intent === "toggleAutoGrantFirst10") {
+    const currentVal = formData.get("currentAutoGrantFirst10") === "true";
+    const nextVal = !currentVal;
+    const rawMonths = formData.get("vipFreeOfferMonths");
+    const rawStoreLimit = formData.get("vipFreeOfferStoreLimit");
+
+    const globalRec = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+    const months = parseInt(rawMonths, 10) > 0 ? parseInt(rawMonths, 10) : globalRec?.vipFreeOfferMonths ?? 2;
+    const storeLimit = parseInt(rawStoreLimit, 10) > 0 ? parseInt(rawStoreLimit, 10) : globalRec?.vipFreeOfferStoreLimit ?? 10;
+
+    try {
+      if (globalRec) {
+        await prisma.appSettings.update({
+          where: { id: globalRec.id },
+          data: {
+            autoGrantFirst10: nextVal,
+            vipFreeOfferMonths: months,
+            vipFreeOfferStoreLimit: storeLimit,
+          },
+        });
+      } else {
+        await prisma.appSettings.create({
+          data: {
+            shop: "__GLOBAL__",
+            autoGrantFirst10: nextVal,
+            vipFreeOfferMonths: months,
+            vipFreeOfferStoreLimit: storeLimit,
+          },
+        });
+      }
+
+      const perShopUpdateData = {
+        autoGrantFirst10: nextVal,
+        vipFreeOfferMonths: months,
+        vipFreeOfferStoreLimit: storeLimit,
+      };
+
+      if (!nextVal) {
+        perShopUpdateData.vipFreeOfferActive = false;
+        perShopUpdateData.vipFreeOfferClaimed = false;
+      }
+
+      await prisma.appSettings.updateMany({
+        where: { shop: { not: "__GLOBAL__" } },
+        data: perShopUpdateData,
+      });
+    } catch (err) {
+      console.warn("[toggleAutoGrantFirst10] Error updating appSettings:", err?.message);
+      return json({ success: false, message: "Error toggling Auto-Grant status: " + (err?.message || "Unknown error") }, { status: 500 });
+    }
+
+    return json({
+      success: true,
+      intent: "toggleAutoGrantFirst10",
+      autoGrantFirst10: nextVal,
+      vipFreeOfferMonths: months,
+      vipFreeOfferStoreLimit: storeLimit,
+      message: `Auto-grant FREE Growth Pro offer to First Stores is now ${
+        nextVal ? "ENABLED" : "DISABLED"
+      }! (${months} Months FREE, First ${storeLimit} Stores)`,
+    });
+  }
+
+  if (intent === "toggleMerchantVipOffer") {
     const targetShop = formData.get("targetShop");
+    const currentOfferActive = formData.get("currentOfferActive") === "true";
+    const nextOfferState = !currentOfferActive;
+
     if (targetShop) {
-      const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
-      const globalDiscount = globalSettings?.annualDiscountPercent ?? 20;
+      const globalSet = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+      const currentMonths = globalSet?.vipFreeOfferMonths ?? 2;
+      const currentLimit = globalSet?.vipFreeOfferStoreLimit ?? 10;
 
       try {
-        await prisma.appSettings.upsert({
-          where: { shop: targetShop },
-          update: {
-            merchantDiscountPercent: 0,
-            annualDiscountPercent: globalDiscount,
-          },
-          create: { shop: targetShop, merchantDiscountPercent: 0, annualDiscountPercent: globalDiscount },
-        });
+        const shopRec = await prisma.appSettings.findFirst({ where: { shop: targetShop } });
+        if (shopRec) {
+          await prisma.appSettings.update({
+            where: { id: shopRec.id },
+            data: {
+              vipFreeOfferActive: nextOfferState,
+              vipFreeOfferMonths: currentMonths,
+              vipFreeOfferStoreLimit: currentLimit,
+              vipFreeOfferGrantedAt: nextOfferState ? new Date() : null,
+            },
+          });
+        } else {
+          await prisma.appSettings.create({
+            data: {
+              shop: targetShop,
+              vipFreeOfferActive: nextOfferState,
+              vipFreeOfferMonths: currentMonths,
+              vipFreeOfferStoreLimit: currentLimit,
+              vipFreeOfferGrantedAt: nextOfferState ? new Date() : null,
+            },
+          });
+        }
       } catch (err) {
-        console.warn("[resetUserDiscount] Falling back to annualDiscountPercent reset:", err?.message);
-        await prisma.appSettings.upsert({
-          where: { shop: targetShop },
-          update: { annualDiscountPercent: globalDiscount },
-          create: { shop: targetShop, annualDiscountPercent: globalDiscount },
-        });
+        console.warn("[toggleMerchantVipOffer] Error updating appSettings:", err?.message);
       }
 
       return json({
         success: true,
-        intent: "resetUserDiscount",
+        intent: "toggleMerchantVipOffer",
         targetShop,
-        message: `Merchant VIP discount for ${targetShop} reset to 0%!`,
+        vipFreeOfferActive: nextOfferState,
+        message: nextOfferState
+          ? `Growth Pro ${currentMonths}-Months FREE Offer granted to: ${targetShop}! Merchant notified in app.`
+          : `Growth Pro ${currentMonths}-Months FREE Offer revoked for: ${targetShop}.`,
       });
     }
+  }
+
+  if (intent === "saveVolumeDiscountConfig") {
+    const isVolumeActive = formData.get("isVolumeDiscountActive") === "true";
+    const volumePercent = parseInt(formData.get("volumeDiscountPercent"), 10) || 25;
+    const volumeThreshold = parseInt(formData.get("volumeDiscountThreshold"), 10) || 10;
+
+    try {
+      const globalRec = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+      if (globalRec) {
+        await prisma.appSettings.update({
+          where: { id: globalRec.id },
+          data: {
+            isVolumeDiscountActive: isVolumeActive,
+            volumeDiscountPercent: volumePercent,
+            volumeDiscountThreshold: volumeThreshold,
+          },
+        });
+      } else {
+        await prisma.appSettings.create({
+          data: {
+            shop: "__GLOBAL__",
+            isVolumeDiscountActive: isVolumeActive,
+            volumeDiscountPercent: volumePercent,
+            volumeDiscountThreshold: volumeThreshold,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn("[saveVolumeDiscountConfig] Error updating appSettings:", err?.message);
+    }
+
+    return json({
+      success: true,
+      intent: "saveVolumeDiscountConfig",
+      message: `Volume Discount config saved! (${volumePercent}% OFF for ${volumeThreshold}+ stores, Status: ${
+        isVolumeActive ? "ACTIVE" : "INACTIVE"
+      })`,
+    });
   }
 
   if (intent === "clearLogs") {
@@ -269,18 +508,27 @@ export default function AdminPage() {
     totalSearches,
     globalDiscount,
     isSupportOnline: initialIsSupportOnline,
+    autoGrantFirst10: initialAutoGrantFirst10,
+    vipFreeOfferMonths: initialVipFreeOfferMonths = 2,
+    vipFreeOfferStoreLimit: initialVipFreeOfferStoreLimit = 10,
   } = useLoaderData();
 
   const supportFetcher = useFetcher();
   const discountFetcher = useFetcher();
   const logsFetcher = useFetcher();
   const userDiscountFetcher = useFetcher();
-
+  const autoGrantFetcher = useFetcher();
+  const vipOfferFetcher = useFetcher();
+  const revalidator = useRevalidator();
   const isSupportOnline = supportFetcher.data?.isSupportOnline ?? initialIsSupportOnline;
+  const autoGrantFirst10 = autoGrantFetcher.data?.autoGrantFirst10 ?? initialAutoGrantFirst10;
+
   const isSupportSubmitting = supportFetcher.state !== "idle";
   const isDiscountSubmitting = discountFetcher.state !== "idle";
   const isLogsSubmitting = logsFetcher.state !== "idle";
   const isUserDiscountSubmitting = userDiscountFetcher.state !== "idle";
+  const isAutoGrantSubmitting = autoGrantFetcher.state !== "idle";
+  const isVipOfferSubmitting = vipOfferFetcher.state !== "idle";
 
   const activeNotification =
     supportFetcher.data?.message
@@ -291,10 +539,19 @@ export default function AdminPage() {
       ? logsFetcher.data
       : userDiscountFetcher.data?.message
       ? userDiscountFetcher.data
+      : autoGrantFetcher.data?.message
+      ? autoGrantFetcher.data
+      : vipOfferFetcher.data?.message
+      ? vipOfferFetcher.data
       : null;
 
+  const [activeTab, setActiveTab] = useState("merchants");
   const [globalDiscountInput, setGlobalDiscountInput] = useState(globalDiscount);
+  const [vipMonthsInput, setVipMonthsInput] = useState(initialVipFreeOfferMonths);
+  const [vipStoreLimitInput, setVipStoreLimitInput] = useState(initialVipFreeOfferStoreLimit);
+  const [autoGrantToggle, setAutoGrantToggle] = useState(initialAutoGrantFirst10);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showPurgeConfirmModal, setShowPurgeConfirmModal] = useState(false);
   const [userDiscountInputs, setUserDiscountInputs] = useState(() => {
     const initial = {};
     shopsList.forEach((s) => {
@@ -311,6 +568,37 @@ export default function AdminPage() {
     setUserDiscountInputs(updatedInputs);
   }, [shopsList]);
 
+  useEffect(() => {
+    setVipMonthsInput(initialVipFreeOfferMonths);
+    setVipStoreLimitInput(initialVipFreeOfferStoreLimit);
+    setAutoGrantToggle(initialAutoGrantFirst10);
+  }, [initialVipFreeOfferMonths, initialVipFreeOfferStoreLimit, initialAutoGrantFirst10]);
+
+  useEffect(() => {
+    if (
+      (autoGrantFetcher.data?.intent === "saveVipFreeOfferConfig" ||
+        autoGrantFetcher.data?.intent === "toggleAutoGrantFirst10") &&
+      autoGrantFetcher.state === "idle"
+    ) {
+      if (autoGrantFetcher.data.vipFreeOfferMonths != null) {
+        setVipMonthsInput(autoGrantFetcher.data.vipFreeOfferMonths);
+      }
+      if (autoGrantFetcher.data.vipFreeOfferStoreLimit != null) {
+        setVipStoreLimitInput(autoGrantFetcher.data.vipFreeOfferStoreLimit);
+      }
+      if (autoGrantFetcher.data.autoGrantFirst10 != null) {
+        setAutoGrantToggle(autoGrantFetcher.data.autoGrantFirst10);
+      }
+      revalidator.revalidate();
+    }
+  }, [autoGrantFetcher.data, autoGrantFetcher.state, revalidator]);
+
+  useEffect(() => {
+    if (vipOfferFetcher.data?.intent === "toggleMerchantVipOffer" && vipOfferFetcher.state === "idle") {
+      revalidator.revalidate();
+    }
+  }, [vipOfferFetcher.data, vipOfferFetcher.state, revalidator]);
+
   const handleUserDiscountChange = (shop, value) => {
     setUserDiscountInputs((prev) => ({
       ...prev,
@@ -323,6 +611,7 @@ export default function AdminPage() {
     const query = searchQuery.toLowerCase();
     return shopsList.filter(
       (s) =>
+        (s.name && s.name.toLowerCase().includes(query)) ||
         s.shop.toLowerCase().includes(query) ||
         (s.email && s.email.toLowerCase().includes(query))
     );
@@ -600,10 +889,102 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* Navigation Tabs */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          marginBottom: "24px",
+          background: "#ffffff",
+          padding: "6px",
+          borderRadius: "12px",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
+          overflowX: "auto",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveTab("merchants")}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "8px 16px",
+            borderRadius: "8px",
+            fontSize: "13px",
+            fontWeight: "700",
+            border: "none",
+            cursor: "pointer",
+            background: activeTab === "merchants" ? "#047857" : "transparent",
+            color: activeTab === "merchants" ? "#ffffff" : "#64748b",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          Merchant Accounts
+          <span
+            style={{
+              background: activeTab === "merchants" ? "rgba(255,255,255,0.25)" : "#e2e8f0",
+              color: activeTab === "merchants" ? "#ffffff" : "#475569",
+              padding: "2px 6px",
+              borderRadius: "10px",
+              fontSize: "11px",
+              fontWeight: "800",
+            }}
+          >
+            {shopsList.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("global")}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "8px 16px",
+            borderRadius: "8px",
+            fontSize: "13px",
+            fontWeight: "700",
+            border: "none",
+            cursor: "pointer",
+            background: activeTab === "global" ? "#047857" : "transparent",
+            color: activeTab === "global" ? "#ffffff" : "#64748b",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          Global Settings & System Tools
+          <span
+            style={{
+              background: activeTab === "global" ? "rgba(255,255,255,0.25)" : "#e2e8f0",
+              color: activeTab === "global" ? "#ffffff" : "#475569",
+              padding: "2px 6px",
+              borderRadius: "10px",
+              fontSize: "11px",
+              fontWeight: "800",
+            }}
+          >
+            4
+          </span>
+        </button>
+      </div>
+
       {/* Global Controls & Maintenance Cards */}
       <div
         style={{
-          display: "grid",
+          display: activeTab === "global" ? "grid" : "none",
           gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
           gap: "18px",
           marginBottom: "24px",
@@ -645,8 +1026,8 @@ export default function AdminPage() {
             
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1" }}>
               <div>
-                <strong style={{ fontSize: "13px", color: isSupportOnline ? "#15803d" : "#b45309", display: "block" }}>
-                  Status: {isSupportOnline ? "🟢 ONLINE" : "🟡 OFFLINE"}
+                <strong style={{ fontSize: "13px", color: isSupportOnline ? "#15803d" : "#b45309", display: "flex", alignItems: "center", gap: "6px" }}>
+                  Status: <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: isSupportOnline ? "#16a34a" : "#d97706", display: "inline-block" }}></span>{isSupportOnline ? "ONLINE" : "OFFLINE"}
                 </strong>
                 <span style={{ fontSize: "11px", color: "#64748b" }}>
                   {isSupportOnline ? "Merchants see 'Online & Available'" : "Merchants see 'Offline - Leave Message'"}
@@ -770,6 +1151,162 @@ export default function AdminPage() {
           </discountFetcher.Form>
         </div>
 
+        {/* Growth Pro VIP Free Offer Console Card */}
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid #e2e8f0",
+            borderTop: `3px solid ${autoGrantFirst10 ? "#d97706" : "#94a3b8"}`,
+            borderRadius: "14px",
+            padding: "20px 22px",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+              <div style={{ width: "30px", height: "30px", background: "#fef3c7", color: "#d97706", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 12v10H4V12"></path>
+                  <path d="M22 7H2v5h20V7z"></path>
+                  <path d="M12 22V7"></path>
+                  <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path>
+                  <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>
+                </svg>
+              </div>
+              <h2 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>
+                Growth Pro VIP Free Offer
+              </h2>
+            </div>
+            <p style={{ margin: "0 0 14px", color: "#64748b", fontSize: "12px", lineHeight: "1.4" }}>
+              Specify free offer duration (months) and number of eligible initial stores.
+            </p>
+          </div>
+
+          <autoGrantFetcher.Form method="post">
+            <input type="hidden" name="intent" value="saveVipFreeOfferConfig" />
+            <input type="hidden" name="autoGrantFirst10" value={autoGrantToggle ? "true" : "false"} />
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {/* Free Months Input */}
+                <div style={{ display: "flex", flex: 1, borderRadius: "8px", border: "1px solid #cbd5e1", overflow: "hidden", height: "36px" }}>
+                  <input
+                    type="number"
+                    name="vipFreeOfferMonths"
+                    min="1"
+                    max="24"
+                    value={vipMonthsInput}
+                    onChange={(e) => setVipMonthsInput(e.target.value)}
+                    style={{
+                      width: "45px",
+                      border: "none",
+                      padding: "0 6px",
+                      fontSize: "13px",
+                      fontWeight: "800",
+                      color: "#0f172a",
+                      outline: "none",
+                      textAlign: "center",
+                    }}
+                  />
+                  <div style={{ background: "#f1f5f9", padding: "0 6px", display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "700", color: "#475569", borderLeft: "1px solid #cbd5e1", flex: 1 }}>
+                    Months Free
+                  </div>
+                </div>
+
+                {/* Eligible Stores Input */}
+                <div style={{ display: "flex", flex: 1, borderRadius: "8px", border: "1px solid #cbd5e1", overflow: "hidden", height: "36px" }}>
+                  <div style={{ background: "#f1f5f9", padding: "0 6px", display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "700", color: "#475569" }}>
+                    First
+                  </div>
+                  <input
+                    type="number"
+                    name="vipFreeOfferStoreLimit"
+                    min="1"
+                    max="1000"
+                    value={vipStoreLimitInput}
+                    onChange={(e) => setVipStoreLimitInput(e.target.value)}
+                    style={{
+                      width: "45px",
+                      border: "none",
+                      padding: "0 4px",
+                      fontSize: "13px",
+                      fontWeight: "800",
+                      color: "#0f172a",
+                      outline: "none",
+                      textAlign: "center",
+                    }}
+                  />
+                  <div style={{ background: "#f1f5f9", padding: "0 6px", display: "flex", alignItems: "center", fontSize: "11px", fontWeight: "700", color: "#475569", borderLeft: "1px solid #cbd5e1", flex: 1 }}>
+                    Stores
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = !autoGrantToggle;
+                    setAutoGrantToggle(nextVal);
+                    autoGrantFetcher.submit(
+                      {
+                        intent: "toggleAutoGrantFirst10",
+                        currentAutoGrantFirst10: autoGrantToggle ? "true" : "false",
+                      },
+                      { method: "post" }
+                    );
+                  }}
+                  disabled={isAutoGrantSubmitting}
+                  style={{
+                    height: "34px",
+                    background: autoGrantToggle ? "#fffbe6" : "#f1f5f9",
+                    color: autoGrantToggle ? "#b45309" : "#475569",
+                    border: `1px solid ${autoGrantToggle ? "#fde68a" : "#cbd5e1"}`,
+                    borderRadius: "8px",
+                    padding: "0 10px",
+                    fontSize: "11px",
+                    fontWeight: "800",
+                    cursor: isAutoGrantSubmitting ? "not-allowed" : "pointer",
+                    flex: 1,
+                    whiteSpace: "nowrap",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {isAutoGrantSubmitting
+                    ? "Updating..."
+                    : autoGrantToggle
+                    ? "AUTO: ENABLED"
+                    : "AUTO: DISABLED"}
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isAutoGrantSubmitting}
+                  style={{
+                    height: "34px",
+                    background: isAutoGrantSubmitting ? "#94a3b8" : "#d97706",
+                    color: "#ffffff",
+                    border: "none",
+                    padding: "0 14px",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    fontWeight: "800",
+                    cursor: isAutoGrantSubmitting ? "not-allowed" : "pointer",
+                    boxShadow: "0 2px 6px rgba(217, 119, 6, 0.2)",
+                    transition: "all 0.15s ease-in-out",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {isAutoGrantSubmitting ? "Saving..." : "Save Config"}
+                </button>
+              </div>
+            </div>
+          </autoGrantFetcher.Form>
+        </div>
+
         {/* System Diagnostics & Operations Card */}
         <div
           style={{
@@ -800,58 +1337,202 @@ export default function AdminPage() {
             </p>
           </div>
 
-          <logsFetcher.Form method="post">
-            <input type="hidden" name="intent" value="clearLogs" />
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <div
-                style={{
-                  flex: 1,
-                  height: "38px",
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  padding: "0 12px",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                  color: "#475569",
-                  fontWeight: "600",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  boxSizing: "border-box",
-                }}
-              >
-                <span>Logged Queries:</span>
-                <strong style={{ color: "#0f172a", fontWeight: "800" }}>{totalSearches.toLocaleString()}</strong>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLogsSubmitting || totalSearches === 0}
-                style={{
-                  height: "38px",
-                  background: isLogsSubmitting || totalSearches === 0 ? "#cbd5e1" : "#ef4444",
-                  color: "#ffffff",
-                  border: "none",
-                  padding: "0 18px",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  fontWeight: "700",
-                  cursor: isLogsSubmitting || totalSearches === 0 ? "not-allowed" : "pointer",
-                  boxShadow: totalSearches > 0 ? "0 2px 6px rgba(239, 68, 68, 0.15)" : "none",
-                  transition: "all 0.15s ease-in-out",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {isLogsSubmitting ? "Clearing..." : "Purge Search Logs"}
-              </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div
+              style={{
+                flex: 1,
+                height: "38px",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                padding: "0 12px",
+                borderRadius: "8px",
+                fontSize: "12px",
+                color: "#475569",
+                fontWeight: "600",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                boxSizing: "border-box",
+              }}
+            >
+              <span>Logged Queries:</span>
+              <strong style={{ color: "#0f172a", fontWeight: "800" }}>{totalSearches.toLocaleString()}</strong>
             </div>
-          </logsFetcher.Form>
+
+            <button
+              type="button"
+              disabled={isLogsSubmitting || totalSearches === 0}
+              onClick={() => setShowPurgeConfirmModal(true)}
+              style={{
+                height: "38px",
+                background: isLogsSubmitting || totalSearches === 0 ? "#cbd5e1" : "#ef4444",
+                color: "#ffffff",
+                border: "none",
+                padding: "0 18px",
+                borderRadius: "8px",
+                fontSize: "13px",
+                fontWeight: "700",
+                cursor: isLogsSubmitting || totalSearches === 0 ? "not-allowed" : "pointer",
+                boxShadow: totalSearches > 0 ? "0 2px 6px rgba(239, 68, 68, 0.15)" : "none",
+                transition: "all 0.15s ease-in-out",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {isLogsSubmitting ? "Clearing..." : "Purge Search Logs"}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Executive User-Friendly Purge Search Logs Modal Popup */}
+      {showPurgeConfirmModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(4px)",
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowPurgeConfirmModal(false);
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              maxWidth: "480px",
+              width: "100%",
+              padding: "28px",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              border: "1px solid #e2e8f0",
+              position: "relative",
+            }}
+          >
+            {/* Modal Header Icon */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "12px",
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#dc2626",
+                }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPurgeConfirmModal(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#64748b",
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Title & Text */}
+            <h3 style={{ margin: "0 0 8px", fontSize: "20px", fontWeight: "800", color: "#0f172a", letterSpacing: "-0.5px" }}>
+              Purge All Customer Search Logs?
+            </h3>
+            <p style={{ margin: "0 0 18px", fontSize: "14px", color: "#475569", lineHeight: "1.5" }}>
+              You are about to permanently delete <strong>{totalSearches.toLocaleString()} customer search query logs</strong> across all merchant accounts.
+            </p>
+
+            {/* Warning Callout Box */}
+            <div
+              style={{
+                background: "#fff5f5",
+                border: "1px solid #fed7d7",
+                borderRadius: "12px",
+                padding: "14px 16px",
+                marginBottom: "24px",
+                fontSize: "13px",
+                color: "#9b2c2c",
+                lineHeight: "1.5",
+              }}
+            >
+              <strong style={{ display: "block", marginBottom: "4px", color: "#c53030", fontWeight: "700" }}>
+                Critical Warning: Permanent Data Loss
+              </strong>
+              This action cannot be undone. All storefront customer search queries and analytics data will be permanently cleared from the database.
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setShowPurgeConfirmModal(false)}
+                disabled={isLogsSubmitting}
+                style={{
+                  background: "#ffffff",
+                  color: "#475569",
+                  border: "1px solid #cbd5e1",
+                  padding: "10px 18px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isLogsSubmitting}
+                onClick={() => {
+                  logsFetcher.submit({ intent: "clearLogs" }, { method: "post" });
+                  setShowPurgeConfirmModal(false);
+                }}
+                style={{
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  border: "none",
+                  padding: "10px 22px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  cursor: isLogsSubmitting ? "not-allowed" : "pointer",
+                  opacity: isLogsSubmitting ? 0.7 : 1,
+                  boxShadow: "0 4px 12px rgba(220, 38, 38, 0.3)",
+                }}
+              >
+                {isLogsSubmitting ? "Deleting Logs…" : "Yes, Purge Search Logs"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Installed Merchant Accounts Table Card */}
       <div
         style={{
+          display: activeTab === "merchants" ? "block" : "none",
           background: "#ffffff",
           border: "1px solid #e2e8f0",
           borderRadius: "14px",
@@ -922,9 +1603,10 @@ export default function AdminPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #e2e8f0", background: "#f8fafc" }}>
-                <th style={{ padding: "10px 14px", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>Merchant Store Domain</th>
+                <th style={{ padding: "10px 14px", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>Merchant & Store Name</th>
                 <th style={{ padding: "10px 14px", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>Contact Email</th>
                 <th style={{ padding: "10px 14px", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>Active Plan</th>
+                <th style={{ padding: "10px 14px", textAlign: "center", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>VIP {vipMonthsInput || initialVipFreeOfferMonths}-Mo Free Offer</th>
                 <th style={{ padding: "10px 14px", textAlign: "center", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>Fitment Stats</th>
                 <th style={{ padding: "10px 14px", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase", minWidth: "260px" }}>
                   User Discount Option (%)
@@ -935,7 +1617,7 @@ export default function AdminPage() {
             <tbody>
               {filteredShops.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ padding: "28px", textAlign: "center", color: "#94a3b8" }}>
+                  <td colSpan="7" style={{ padding: "28px", textAlign: "center", color: "#94a3b8" }}>
                     No matching merchant accounts found.
                   </td>
                 </tr>
@@ -944,6 +1626,10 @@ export default function AdminPage() {
                   const isCurrent = merchant.shop === currentShop;
                   const currentInputValue =
                     userDiscountInputs[merchant.shop] ?? merchant.merchantDiscountPercent;
+                  const currentLimit = parseInt(vipStoreLimitInput, 10) || 10;
+                  const currentMonths = parseInt(vipMonthsInput, 10) || initialVipFreeOfferMonths;
+                  const isStoreEligible = merchant.storeIndex < currentLimit;
+                  const isDynamicVipActive = merchant.isVipExplicit || (autoGrantToggle && isStoreEligible);
 
                   return (
                     <tr
@@ -953,9 +1639,16 @@ export default function AdminPage() {
                         background: isCurrent ? "#f0fdf4" : "transparent",
                       }}
                     >
-                      {/* Shop Domain */}
+                      {/* Merchant Store Name & Domain */}
                       <td style={{ padding: "12px 14px", verticalAlign: "middle" }}>
-                        <div style={{ fontWeight: "700", color: "#0f172a", fontSize: "13px" }}>
+                        <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                          </svg>
+                          {merchant.name || merchant.shop}
+                        </div>
+                        <div style={{ color: "#64748b", fontSize: "11px", marginTop: "2px", fontWeight: "600" }}>
                           {merchant.shop}
                         </div>
                         <div style={{ display: "flex", gap: "6px", marginTop: "4px", flexWrap: "wrap" }}>
@@ -1026,6 +1719,40 @@ export default function AdminPage() {
                         >
                           {merchant.activePlan}
                         </span>
+                      </td>
+
+                      {/* VIP Free Offer Control */}
+                      <td style={{ padding: "12px 14px", textAlign: "center", verticalAlign: "middle" }}>
+                        <vipOfferFetcher.Form method="post" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                          <input type="hidden" name="intent" value="toggleMerchantVipOffer" />
+                          <input type="hidden" name="targetShop" value={merchant.shop} />
+                          <input type="hidden" name="currentOfferActive" value={isDynamicVipActive ? "true" : "false"} />
+
+                          <button
+                            type="submit"
+                            disabled={isVipOfferSubmitting}
+                            style={{
+                              height: "30px",
+                              background: isDynamicVipActive ? "#d97706" : "#f1f5f9",
+                              color: isDynamicVipActive ? "#ffffff" : "#475569",
+                              border: `1px solid ${isDynamicVipActive ? "#b45309" : "#cbd5e1"}`,
+                              padding: "0 10px",
+                              borderRadius: "6px",
+                              fontSize: "11px",
+                              fontWeight: "700",
+                              cursor: isVipOfferSubmitting ? "not-allowed" : "pointer",
+                              whiteSpace: "nowrap",
+                              boxShadow: isDynamicVipActive ? "0 2px 4px rgba(217, 119, 6, 0.2)" : "none",
+                              transition: "all 0.15s ease",
+                            }}
+                          >
+                            {isDynamicVipActive ? `${currentMonths} Mo Free Active` : `+ Grant ${currentMonths} Mo Free`}
+                          </button>
+
+                          <span style={{ fontSize: "10px", color: merchant.vipFreeOfferClaimed ? "#059669" : isDynamicVipActive ? "#d97706" : "#64748b", fontWeight: "600" }}>
+                            {merchant.vipFreeOfferClaimed ? "✓ Claimed by Store" : isDynamicVipActive ? "Active in Merchant App" : "Standard Pricing"}
+                          </span>
+                        </vipOfferFetcher.Form>
                       </td>
 
                       {/* Fitment Stats */}

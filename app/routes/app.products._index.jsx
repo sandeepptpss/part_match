@@ -1,6 +1,6 @@
 const json = (data, init) => Response.json(data, init);
-import { useState } from "react";
-import { useLoaderData, Link, Form, useNavigation, useFetcher } from "react-router";
+import { useState, useMemo } from "react";
+import { useLoaderData, Link, Form, useNavigation, useFetcher, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -132,7 +132,67 @@ export async function action({ request }) {
 export default function ProductsIndex() {
   const { mappedProducts, totalCount, page, search, pageSize } = useLoaderData();
   const navigation = useNavigation();
+  const navigate = useNavigate();
+
+  const [searchTerm, setSearchTerm] = useState(search || "");
+  const [selectedMake, setSelectedMake] = useState("all");
+  const [selectedYear, setSelectedYear] = useState("all");
+
+  // Dynamically derive unique vehicle Makes & Years from loaded data
+  const uniqueMakes = useMemo(() => {
+    const makes = new Set();
+    mappedProducts.forEach((item) => {
+      if (item.fitment?.make) makes.add(item.fitment.make);
+    });
+    return Array.from(makes).sort();
+  }, [mappedProducts]);
+
+  const uniqueYears = useMemo(() => {
+    const years = new Set();
+    mappedProducts.forEach((item) => {
+      if (item.fitment?.year) years.add(item.fitment.year);
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [mappedProducts]);
+
+  // Filter products in real-time without requiring button click
+  const filteredProducts = useMemo(() => {
+    return mappedProducts.filter((item) => {
+      const title = (item.productTitle || "").toLowerCase();
+      const handle = (item.shopifyHandle || "").toLowerCase();
+      const year = (item.fitment?.year || "").toString().toLowerCase();
+      const make = (item.fitment?.make || "").toLowerCase();
+      const model = (item.fitment?.model || "").toLowerCase();
+      const trim = (item.fitment?.trim || "").toLowerCase();
+      const q = searchTerm.toLowerCase().trim();
+
+      const matchesSearch =
+        !q ||
+        title.includes(q) ||
+        handle.includes(q) ||
+        year.includes(q) ||
+        make.includes(q) ||
+        model.includes(q) ||
+        trim.includes(q);
+
+      const matchesMake = selectedMake === "all" || make === selectedMake.toLowerCase();
+      const matchesYear = selectedYear === "all" || year === selectedYear.toLowerCase();
+
+      return matchesSearch && matchesMake && matchesYear;
+    });
+  }, [mappedProducts, searchTerm, selectedMake, selectedYear]);
+
   const totalPages = Math.ceil(totalCount / pageSize);
+  const hasActiveFilters = Boolean(searchTerm.trim()) || selectedMake !== "all" || selectedYear !== "all";
+
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setSelectedMake("all");
+    setSelectedYear("all");
+    if (search) {
+      navigate("/app/products");
+    }
+  };
 
   return (
     <div style={{ padding: "28px 24px 60px", maxWidth: "1240px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
@@ -145,7 +205,7 @@ export default function ProductsIndex() {
               Product Fitment Directory
             </h1>
             <span style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "2px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "700" }}>
-              {totalCount.toLocaleString()} Mapped Link{totalCount === 1 ? "" : "s"}
+              {filteredProducts.length.toLocaleString()} Mapped Link{filteredProducts.length === 1 ? "" : "s"}
             </span>
           </div>
           <p style={{ color: "#64748b", margin: 0, fontSize: "14px" }}>
@@ -164,27 +224,184 @@ export default function ProductsIndex() {
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
-      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "16px 20px", marginBottom: "24px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
-        <Form method="get" style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: "260px" }}>
+      {/* Real-time Search & Filter Controls */}
+      <div
+        style={{
+          background: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: "16px",
+          padding: "18px 22px",
+          marginBottom: "24px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+        }}
+      >
+        {/* Search Input Bar */}
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "14px" }}>
+          <div style={{ flex: 1, position: "relative" }}>
+            <div
+              style={{
+                position: "absolute",
+                left: "14px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "#64748b",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </div>
             <input
               type="text"
-              name="q"
-              defaultValue={search}
-              placeholder="Search by Product Name, SKU/Handle, or Vehicle (e.g. Brake Pad, Ford, 2025)..."
-              style={searchInputStyle}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search products by title, handle, or vehicle (e.g. Brake Pad, Tata, 2025)..."
+              style={{
+                width: "100%",
+                padding: "11px 40px 11px 42px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "10px",
+                fontSize: "14px",
+                outline: "none",
+                boxSizing: "border-box",
+                background: "#f8fafc",
+                transition: "all 0.15s ease",
+              }}
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                style={{
+                  position: "absolute",
+                  right: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "#e2e8f0",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "22px",
+                  height: "22px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#475569",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                }}
+                title="Clear search query"
+              >
+                ✕
+              </button>
+            )}
           </div>
-          <button type="submit" style={primaryBtn}>
-            Search Products
-          </button>
-          {search && (
-            <Link to="/app/products" style={outlineBtn}>
-              ✕ Clear Search
-            </Link>
-          )}
-        </Form>
+        </div>
+
+        {/* Filter Toolbar Row */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", paddingTop: "12px", borderTop: "1px solid #f1f5f9" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "13px", fontWeight: "700", color: "#475569", display: "flex", alignItems: "center", gap: "6px" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+              </svg>
+              Filter Products:
+            </span>
+
+            {/* Filter by Make Dropdown */}
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <select
+                value={selectedMake}
+                onChange={(e) => setSelectedMake(e.target.value)}
+                style={{
+                  padding: "8px 32px 8px 14px",
+                  border: selectedMake !== "all" ? "1px solid #2563eb" : "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  color: selectedMake !== "all" ? "#1d4ed8" : "#334155",
+                  background: selectedMake !== "all" ? "#eff6ff" : "#ffffff",
+                  cursor: "pointer",
+                  outline: "none",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                }}
+              >
+                <option value="all">Vehicle Make: All ({uniqueMakes.length})</option>
+                {uniqueMakes.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: selectedMake !== "all" ? "#1d4ed8" : "#64748b", fontSize: "10px" }}>
+                ▼
+              </span>
+            </div>
+
+            {/* Filter by Year Dropdown */}
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                style={{
+                  padding: "8px 32px 8px 14px",
+                  border: selectedYear !== "all" ? "1px solid #2563eb" : "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  color: selectedYear !== "all" ? "#1d4ed8" : "#334155",
+                  background: selectedYear !== "all" ? "#eff6ff" : "#ffffff",
+                  cursor: "pointer",
+                  outline: "none",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                }}
+              >
+                <option value="all">Vehicle Year: All ({uniqueYears.length})</option>
+                {uniqueYears.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+              <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: selectedYear !== "all" ? "#1d4ed8" : "#64748b", fontSize: "10px" }}>
+                ▼
+              </span>
+            </div>
+          </div>
+
+          {/* Status Count & Reset Button */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
+              Showing <strong>{filteredProducts.length}</strong> of <strong>{totalCount}</strong> items
+            </span>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  color: "#dc2626",
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+              >
+                <span>✕</span> Reset All Filters
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Product Mappings Table Card */}
@@ -199,7 +416,7 @@ export default function ProductsIndex() {
             </tr>
           </thead>
           <tbody>
-            {mappedProducts.length === 0 ? (
+            {filteredProducts.length === 0 ? (
               <tr>
                 <td colSpan={4} style={{ padding: "48px 24px", textAlign: "center", color: "#64748b" }}>
                   <div style={{ maxWidth: "420px", margin: "0 auto" }}>
@@ -207,19 +424,27 @@ export default function ProductsIndex() {
                       <BoxIcon size={36} color="#94a3b8" />
                     </div>
                     <strong style={{ display: "block", color: "#0f172a", fontSize: "16px", marginBottom: "6px" }}>
-                      {search ? `No product mappings matched "${search}"` : "No Product Mappings Found"}
+                      {hasActiveFilters ? "No products matched your search or filters" : "No Product Mappings Found"}
                     </strong>
                     <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 16px", lineHeight: "1.5" }}>
-                      Map store products to vehicle fitments so customers can find compatible parts on your storefront.
+                      {hasActiveFilters
+                        ? "Try clearing your search query or vehicle make/year filter selections."
+                        : "Map store products to vehicle fitments so customers can find compatible parts on your storefront."}
                     </p>
-                    <Link to="/app/fitment" style={primaryBtn}>
-                      Go to Fitment Catalog to Map Products →
-                    </Link>
+                    {hasActiveFilters ? (
+                      <button type="button" onClick={clearAllFilters} style={primaryBtn}>
+                        Reset Search & Filters
+                      </button>
+                    ) : (
+                      <Link to="/app/fitment" style={primaryBtn}>
+                        Go to Fitment Catalog to Map Products →
+                      </Link>
+                    )}
                   </div>
                 </td>
               </tr>
             ) : (
-              mappedProducts.map((item) => {
+              filteredProducts.map((item) => {
                 const fitment = item.fitment;
                 return (
                   <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.15s ease" }}>
@@ -435,6 +660,19 @@ const searchInputStyle = {
   fontSize: "14px",
   outline: "none",
   boxSizing: "border-box",
+};
+
+const filterSelectStyle = {
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "8px",
+  fontSize: "13px",
+  fontWeight: "600",
+  color: "#0f172a",
+  background: "#ffffff",
+  cursor: "pointer",
+  outline: "none",
+  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
 };
 
 const thStyle = {

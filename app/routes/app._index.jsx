@@ -15,6 +15,8 @@ export const loader = async ({ request }) => {
   let recentSearches = [];
   let topVehicles = [];
 
+  let vipFreeOfferNotification = false;
+  let vipFreeOfferMonths = 2;
   try {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -40,7 +42,11 @@ export const loader = async ({ request }) => {
         orderBy: { _count: { id: "desc" } },
         take: 5,
       }) ?? [],
+      prisma.appSettings?.findFirst({ where: { shop } }),
+      prisma.appSettings?.findFirst({ where: { shop: "__GLOBAL__" } }),
+      prisma.appSettings?.findMany({ select: { shop: true, id: true }, orderBy: { id: "asc" } }),
     ]);
+
     [
       fitmentCount,
       productMappingCount,
@@ -50,6 +56,24 @@ export const loader = async ({ request }) => {
       recentSearches,
       topVehicles,
     ] = res;
+
+    const appSettings = res[7];
+    const globalSettings = res[8];
+    const allStores = res[9] ?? [];
+
+    const autoGrantFirst10 = globalSettings?.autoGrantFirst10 ?? false;
+    vipFreeOfferMonths = globalSettings?.vipFreeOfferMonths ?? 2;
+    const vipFreeOfferStoreLimit = globalSettings?.vipFreeOfferStoreLimit ?? 10;
+    const shopIndex = allStores.findIndex((s) => s.shop === shop);
+    const isFirstNStore = shopIndex !== -1 && shopIndex < vipFreeOfferStoreLimit;
+
+    const isVipFreeOfferExplicit = appSettings?.vipFreeOfferActive ?? false;
+    const isVipFreeOfferClaimed = appSettings?.vipFreeOfferClaimed ?? false;
+    const isVipFreeOfferActive = isVipFreeOfferExplicit || (autoGrantFirst10 && isFirstNStore);
+
+    if (isVipFreeOfferActive && !isVipFreeOfferClaimed) {
+      vipFreeOfferNotification = true;
+    }
   } catch (err) {
     console.error("[Dashboard loader error]", err);
   }
@@ -59,11 +83,13 @@ export const loader = async ({ request }) => {
     stats: { fitmentCount, productMappingCount, universalCount, monthSearches, noResultSearches },
     recentSearches,
     topVehicles,
+    vipFreeOfferNotification,
+    vipFreeOfferMonths,
   });
 };
 
 export default function Dashboard() {
-  const { shop, stats, recentSearches, topVehicles } = useLoaderData();
+  const { shop, stats, recentSearches, topVehicles, vipFreeOfferNotification, vipFreeOfferMonths = 2 } = useLoaderData();
 
   const cards = [
     {
@@ -121,6 +147,62 @@ export default function Dashboard() {
   return (
     <div style={{ padding: "28px 24px 60px", maxWidth: "1240px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
       
+      {/* VIP Free Offer Merchant Notification Banner */}
+      {vipFreeOfferNotification && (
+        <div
+          style={{
+            background: "linear-gradient(135deg, #064e3b 0%, #047857 100%)",
+            borderRadius: "14px",
+            padding: "16px 22px",
+            color: "#ffffff",
+            marginBottom: "24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "14px",
+            boxShadow: "0 6px 18px rgba(4, 120, 87, 0.25)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{ width: "36px", height: "36px", background: "rgba(255, 255, 255, 0.2)", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 12 20 22 4 22 4 12"></polyline>
+                <rect x="2" y="7" width="20" height="5"></rect>
+                <line x1="12" y1="22" x2="12" y2="7"></line>
+                <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path>
+                <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>
+              </svg>
+            </div>
+            <div>
+              <strong style={{ fontSize: "15px", display: "block", color: "#ffffff", fontWeight: "800" }}>
+                VIP Offer Unlocked: Admin Granted Your Store {vipFreeOfferMonths} Months FREE Growth Pro!
+              </strong>
+              <span style={{ fontSize: "13px", color: "#a7f3d0" }}>
+                Enjoy 20,000 Fitments, 250 VIN Lookups/mo, ACES/PIES XML & AI Voice Search for $0/mo for {vipFreeOfferMonths * 30} days.
+              </span>
+            </div>
+          </div>
+
+          <Link
+            to="/app/plans"
+            style={{
+              background: "#ffffff",
+              color: "#047857",
+              padding: "10px 18px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: "800",
+              textDecoration: "none",
+              boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Claim 2 Mo FREE Offer in Plans Page →
+          </Link>
+        </div>
+      )}
+
       {/* Executive Header Banner */}
       <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", borderRadius: "16px", padding: "32px", color: "#ffffff", marginBottom: "28px", boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.25)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px" }}>

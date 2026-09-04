@@ -667,7 +667,7 @@ export default function FitmentImport() {
               color: conversionStatus.type === "success" ? "#15803d" : "#991b1b"
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span>{conversionStatus.type === "success" ? "✓" : "⚠️"}</span>
+                <span>{conversionStatus.type === "success" ? "✓" : "!"}</span>
                 <span>
                   {conversionStatus.type === "success"
                     ? `Successfully converted ${conversionStatus.count} ACES records into PartMatch CSV!`

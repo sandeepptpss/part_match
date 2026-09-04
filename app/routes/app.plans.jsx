@@ -1,10 +1,12 @@
+/* global process */
+/* eslint-disable react/prop-types */
 const json = (data, init) => Response.json(data, init);
 import { useState } from "react";
-import { useLoaderData, useFetcher, useActionData, useNavigation } from "react-router";
+import { useLoaderData, useFetcher, useActionData } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { BillingInterval } from "@shopify/shopify-app-react-router/server";
-import { BILLING_PLAN_KEYS, getIsTestCharge, isTestCharge, planLimits } from "../plans.config";
+import { BILLING_PLAN_KEYS, getIsTestCharge, planLimits } from "../plans.config";
 import { syncShopPlanFromBilling } from "../plans.server";
 
 export const loader = async ({ request }) => {
@@ -59,11 +61,30 @@ export const loader = async ({ request }) => {
     appSettings?.merchantDiscountPercent != null
       ? appSettings.merchantDiscountPercent
       : appSettings?.annualDiscountPercent != null && appSettings.annualDiscountPercent !== globalAnnualDiscount
-      ? appSettings.annualDiscountPercent
-      : 0;
+        ? appSettings.annualDiscountPercent
+        : 0;
 
   const isCustomMerchantDiscount = merchantDiscount > 0;
   const totalAnnualDiscount = globalAnnualDiscount + merchantDiscount;
+
+  // VIP Free Offer logic (Growth Pro X Months Free for first N or manually granted stores)
+  const autoGrantFirst10 = globalSettings?.autoGrantFirst10 ?? false;
+  const vipFreeOfferMonths = appSettings?.vipFreeOfferMonths ?? globalSettings?.vipFreeOfferMonths ?? 2;
+  const vipFreeOfferStoreLimit = appSettings?.vipFreeOfferStoreLimit ?? globalSettings?.vipFreeOfferStoreLimit ?? 10;
+  let isEligibleStore = false;
+  try {
+    const allStores = (await prisma.appSettings.findMany({ select: { shop: true, id: true }, orderBy: { id: "asc" } })) ?? [];
+    const shopIndex = allStores.findIndex((s) => s.shop === shop);
+    if (shopIndex !== -1 && shopIndex < vipFreeOfferStoreLimit) {
+      isEligibleStore = true;
+    }
+  } catch (err) {
+    console.warn("[plans loader] Error checking store index:", err);
+  }
+
+  const isVipFreeOfferExplicit = appSettings?.vipFreeOfferActive ?? false;
+  const isVipFreeOfferClaimed = appSettings?.vipFreeOfferClaimed ?? false;
+  const isVipFreeOfferActive = isVipFreeOfferExplicit || (autoGrantFirst10 && isEligibleStore);
 
   const shopPlan = await syncShopPlanFromBilling(billing, shop);
   const limits = planLimits(shopPlan.plan);
@@ -81,6 +102,10 @@ export const loader = async ({ request }) => {
     merchantDiscount,
     totalAnnualDiscount,
     isCustomMerchantDiscount,
+    isVipFreeOfferActive,
+    isVipFreeOfferClaimed,
+    vipFreeOfferMonths,
+    vipFreeOfferStoreLimit,
     activePlan: shopPlan.plan,
     activeBillingCycle: shopPlan.billingCycle || "monthly",
     recordsLimit: Number.isFinite(limits.fitmentLimit) ? limits.fitmentLimit : null,
@@ -94,6 +119,47 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  if (intent === "claimVipFreeOffer") {
+    try {
+      await prisma.shopPlan.upsert({
+        where: { shop },
+        update: { plan: "growth", billingCycle: "monthly" },
+        create: { shop, plan: "growth", billingCycle: "monthly" },
+      });
+    } catch (err) {
+      console.warn("[claimVipFreeOffer] Error upserting shopPlan:", err?.message);
+    }
+
+    try {
+      await prisma.appSettings.upsert({
+        where: { shop },
+        update: {
+          vipFreeOfferActive: true,
+          vipFreeOfferClaimed: true,
+          vipFreeOfferGrantedAt: new Date(),
+        },
+        create: {
+          shop,
+          vipFreeOfferActive: true,
+          vipFreeOfferClaimed: true,
+          vipFreeOfferGrantedAt: new Date(),
+        },
+      });
+    } catch (err) {
+      console.warn("[claimVipFreeOffer] Error upserting appSettings:", err?.message);
+    }
+
+    const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+    const appSettings = await prisma.appSettings.findFirst({ where: { shop } });
+    const vipMonths = appSettings?.vipFreeOfferMonths ?? globalSettings?.vipFreeOfferMonths ?? 2;
+    const vipDays = vipMonths * 30;
+
+    return json({
+      success: true,
+      message: `Growth Pro ${vipMonths}-Months FREE Offer activated successfully! All Growth Pro features unlocked for ${vipDays} days.`,
+    });
+  }
 
   if (intent === "selectPlan") {
     const selectedPlan = formData.get("plan");
@@ -138,8 +204,11 @@ export const action = async ({ request }) => {
         : 0;
     const totalAnnualDiscount = globalAnnualDiscount + merchantDiscount;
 
-    // High conversion pricing strategy: $19.99 for Growth, $79.99 for Enterprise
-    const baseMonthlyPrice = selectedPlan === "growth" ? 19.99 : 79.99;
+    // High conversion pricing strategy: $19 Starter, $49 Growth Pro, $99 Enterprise
+    let baseMonthlyPrice = 19.0;
+    if (selectedPlan === "growth") baseMonthlyPrice = 49.0;
+    if (selectedPlan === "enterprise") baseMonthlyPrice = 99.0;
+
     let dynamicLineItem;
 
     if (billingCycle === "annual") {
@@ -173,9 +242,10 @@ export const action = async ({ request }) => {
           update: { plan: selectedPlan, billingCycle, subscriptionId: null },
           create: { shop, plan: selectedPlan, billingCycle, subscriptionId: null },
         });
+        const planTitle = selectedPlan === "starter" ? "Starter Pro" : selectedPlan === "growth" ? "Growth Pro" : "Enterprise Unlimited";
         return json({
           success: true,
-          message: `14-Day Free Trial activated for ${selectedPlan === "growth" ? "Growth Pro" : "Enterprise Unlimited"}!`,
+          message: `14-Day Free Trial activated for ${planTitle}!`,
         });
       }
     } catch (error) {
@@ -187,7 +257,7 @@ export const action = async ({ request }) => {
       }
 
       console.error("[plans action] Error requesting billing:", error);
-      
+
       // Fallback for custom dev stores
       await prisma.shopPlan.upsert({
         where: { shop },
@@ -195,7 +265,7 @@ export const action = async ({ request }) => {
         create: { shop, plan: selectedPlan, billingCycle, subscriptionId: null },
       });
 
-      const planName = selectedPlan === "growth" ? "Growth Professional" : "Enterprise Unlimited";
+      const planName = selectedPlan === "starter" ? "Starter Pro" : selectedPlan === "growth" ? "Growth Pro" : "Enterprise Unlimited";
       return json({
         success: true,
         message: `Plan activated: ${planName}! (Development/Custom Mode: Live Shopify Billing active).`,
@@ -213,13 +283,18 @@ export default function PlansPage() {
     merchantDiscount,
     totalAnnualDiscount,
     isCustomMerchantDiscount,
+    isVipFreeOfferActive,
+    isVipFreeOfferClaimed,
+    vipFreeOfferMonths = 2,
     activePlan,
     activeBillingCycle,
     recordsLimit,
   } = useLoaderData();
 
   const actionData = useActionData();
-  const navigation = useNavigation();
+  const vipClaimFetcher = useFetcher();
+  const isVipClaiming = vipClaimFetcher.state !== "idle";
+
   const [billingCycle, setBillingCycle] = useState("monthly");
 
   const calcMonthly = (basePrice) => {
@@ -240,16 +315,17 @@ export default function PlansPage() {
     return `$${total.toFixed(2)}`;
   };
 
-  // High conversion pricing strategy tailored for Shopify Auto Parts Merchants
+  // High conversion $19 / $49 / $99 pricing strategy tailored for Shopify Auto Parts Merchants
   const plans = [
     {
       id: "free",
       name: "Starter Free",
       priceMonthly: "$0",
       priceAnnual: "$0",
-      priceAnnualNote: "Free forever, no credit card required",
-      period: "Forever Free",
-      description: "Ideal for testing & small specialty auto catalogs. Risk-free setup.",
+      priceAnnualNote: "Free Forever · No Credit Card Required",
+      period: "forever",
+      dailyCost: "$0/day · 100 fitments limit",
+      description: "For brand new stores testing basic fitment search functionality.",
       recordsLimit: "100 Mapped Vehicle Records",
       badge: null,
       trialBadge: "Instant Setup",
@@ -259,41 +335,80 @@ export default function PlansPage() {
         "Up to 100 Fitment Records",
         "Year / Make / Model Search Widget",
         "Single Page & Collection Results Grid",
+        "Product Page Fitment Checker Badge",
         "Local Storage Vehicle Garage",
         "Standard Email Support",
       ],
       disabledFeatures: [
+        "Sub-Model & Trim Level Filtering",
         "VIN Lookup & Auto-Decoder",
         "ACES / PIES XML Export & Import",
-        "Sub-Model & Trim Level Filtering",
-        "Universal Products Support",
-        "Product Page Fitment Checker Badge",
+        "1-Click Competitor Importer",
+        "AI Voice Search Assistant",
         "CSV Bulk Import & Export",
         "Search Analytics & Gap Intelligence",
-        "AI-Powered Fitment Suggestions",
+        "AI Catalog Auto-Fitter",
+      ],
+    },
+    {
+      id: "starter",
+      name: "Starter Pro",
+      priceMonthly: calcMonthly(19.0),
+      priceAnnual: calcAnnualMonthlyEq(19.0),
+      priceAnnualNote: `Billed annually at ${calcAnnualTotal(19.0)}/year (${totalAnnualDiscount}% OFF)`,
+      period: "per month",
+      dailyCost: "~$0.63/day · 1 saved return pays for full month",
+      description: "Essential fitment & YMM tools for boutique auto parts shops.",
+      recordsLimit: "3,000 Mapped Vehicle Records",
+      badge: null,
+      trialBadge: "14-Day Free Trial",
+      highlight: false,
+      ctaText: "Start 14-Day Free Trial →",
+      features: [
+        "14-Day Risk-Free Trial",
+        "Up to 3,000 Fitment Records",
+        "Sub-Model & Trim Level Filtering",
+        "25 Free VIN Lookups/mo ($0.08 after)",
+        "Product Page Fitment Checker Badge",
+        "Unlimited Universal Products",
+        "Standard CSV Import & Export",
+        "Standard Analytics & Logging",
+        "Email Support",
+      ],
+      disabledFeatures: [
+        "ACES / PIES XML Export & Import",
+        "1-Click Competitor Importer",
+        "AI Voice Search Assistant",
+        "AI Catalog Auto-Fitter",
       ],
     },
     {
       id: "growth",
-      name: "Growth Professional",
-      priceMonthly: calcMonthly(19.99),
-      priceAnnual: calcAnnualMonthlyEq(19.99),
-      priceAnnualNote: `Billed annually at ${calcAnnualTotal(19.99)}/year (${totalAnnualDiscount}% OFF)`,
-      period: "per month",
-      dailyCost: "~$0.66/day · 1 saved return pays for full month",
-      description: "Complete fitment solution for growing auto parts retailers.",
-      recordsLimit: "5,000 Mapped Vehicle Records",
-      badge: "MOST POPULAR — BEST VALUE",
-      trialBadge: "14-Day Free Trial",
+      name: "Growth Pro",
+      priceMonthly: isVipFreeOfferActive ? `$0.00 (${vipFreeOfferMonths} Mo Free)` : calcMonthly(49.0),
+      priceAnnual: isVipFreeOfferActive ? `$0.00 (${vipFreeOfferMonths} Mo Free)` : calcAnnualMonthlyEq(49.0),
+      priceAnnualNote: isVipFreeOfferActive
+        ? `Growth Pro ${vipFreeOfferMonths}-Months FREE Offer Granted by Admin ($0 for ${vipFreeOfferMonths * 30} Days)`
+        : `Billed annually at ${calcAnnualTotal(49.0)}/year (${totalAnnualDiscount}% OFF)`,
+      period: isVipFreeOfferActive ? `for ${vipFreeOfferMonths * 30} days` : "per month",
+      dailyCost: isVipFreeOfferActive ? `$0/day for ${vipFreeOfferMonths * 30} days · Admin VIP Special` : "~$1.63/day · High ROI for growing retailers",
+      description: "Complete fitment solution with ACES/PIES & AI Voice for growing stores.",
+      recordsLimit: "20,000 Mapped Vehicle Records",
+      badge: isVipFreeOfferActive ? `VIP ${vipFreeOfferMonths}-MONTHS FREE OFFER UNLOCKED` : "MOST POPULAR — BEST VALUE",
+      trialBadge: isVipFreeOfferActive ? `${vipFreeOfferMonths * 30} Days Free ($0)` : "14-Day Free Trial",
       highlight: true,
-      ctaText: "Start 14-Day Free Trial →",
+      ctaText: isVipFreeOfferActive
+        ? isVipFreeOfferClaimed
+          ? `Active Plan (${vipFreeOfferMonths} Mo Free)`
+          : `Claim ${vipFreeOfferMonths} Months FREE Growth Pro →`
+        : "Start 14-Day Free Trial →",
       features: [
-        "14-Day Risk-Free Trial",
-        "Up to 5,000 Fitment Records",
-        "100 Free VIN Lookups/mo ($0.05 after)",
-        "1-Click Competitor Data Importer (Easy YMM/Fitment Group)",
-        "AI Voice & Conversational Search Assistant",
+        isVipFreeOfferActive ? `${vipFreeOfferMonths * 30} Days Risk-Free ($0/mo)` : "14-Day Risk-Free Trial",
+        "Up to 20,000 Fitment Records",
+        "250 Free VIN Lookups/mo ($0.05 after)",
         "ACES / PIES XML & CSV Import/Export",
+        "1-Click Competitor Data Importer (Easy YMM/ACES)",
+        "AI Voice & Conversational Search Assistant",
         "Sub-Model & Trim Level Filtering",
         "Unlimited Universal Products",
         "Product Page Fitment Checker Badge",
@@ -302,17 +417,17 @@ export default function PlansPage() {
         "Search Analytics & Failed Query Logging",
         "Priority Email & Live Support",
       ],
-      disabledFeatures: ["AI-Powered Fitment Suggestions"],
+      disabledFeatures: ["AI Catalog Auto-Fitter (Beta)"],
     },
     {
       id: "enterprise",
       name: "Enterprise Unlimited",
-      priceMonthly: calcMonthly(79.99),
-      priceAnnual: calcAnnualMonthlyEq(79.99),
-      priceAnnualNote: `Billed annually at ${calcAnnualTotal(79.99)}/year (${totalAnnualDiscount}% OFF)`,
+      priceMonthly: calcMonthly(99.0),
+      priceAnnual: calcAnnualMonthlyEq(99.0),
+      priceAnnualNote: `Billed annually at ${calcAnnualTotal(99.0)}/year (${totalAnnualDiscount}% OFF)`,
       period: "per month",
-      dailyCost: "~$2.66/day · High ROI for large auto catalogs",
-      description: "Maximum scale & dedicated performance for large automotive stores.",
+      dailyCost: "~$3.30/day · Maximum scale for large catalogs",
+      description: "Maximum scale, AI auto-fitter & dedicated performance for large automotive stores.",
       recordsLimit: "Unlimited Fitment Records",
       badge: "UNLIMITED SCALE",
       trialBadge: "14-Day Free Trial",
@@ -323,21 +438,18 @@ export default function PlansPage() {
         "Unlimited Fitment Records",
         "1,000 Free VIN Lookups/mo ($0.03 after)",
         "1-Click Competitor Data Importer (Unlimited)",
-        "Advanced AI Voice & Conversational Search Engine",
+        "Advanced AI Voice & Conversational Engine",
         "Enterprise ACES / PIES Standard Engine",
-        "Advanced Sub-Model & Engine Specs",
-        "Unlimited Universal Products",
-        "All Growth Professional Features",
         "1-Click AI Catalog Auto-Fitter (Beta)",
         "Cross-Device Garage Persistence",
-        "High-Speed Proxy SLA & CDN Caching",
-        "VIP Dedicated Account Manager",
+        "High-Speed Proxy SLA & Edge Caching",
+        "VIP Dedicated 1-on-1 Account Manager",
       ],
       disabledFeatures: [],
     },
   ];
 
-  // Feature Matrix Groups
+  // Feature Matrix Groups (4 Plans: Free, Starter, Growth, Enterprise)
   const matrixGroups = [
     {
       category: "Core Scale & Capacity",
@@ -345,18 +457,21 @@ export default function PlansPage() {
         {
           name: "14-Day Risk-Free Trial",
           free: "Instant Setup",
+          starter: "✓ 14 Days Free",
           growth: "✓ 14 Days Free",
           enterprise: "✓ 14 Days Free",
         },
         {
           name: "Fitment Records Capacity",
           free: "100",
-          growth: "5,000",
+          starter: "3,000",
+          growth: "20,000",
           enterprise: "Unlimited",
         },
         {
           name: "Results Display Options",
           free: "Inline Widget & Single Page",
+          starter: "✓ Inline & Collection Grid",
           growth: "✓ Full Collections Grid, Dedicated Page & Inline Widget",
           enterprise: "✓ Multi-Layout, Custom Theme Integration & Proxy SLA",
         },
@@ -368,24 +483,28 @@ export default function PlansPage() {
         {
           name: "ACES / PIES Standard Engine (XML & CSV)",
           free: "✕",
+          starter: "✕",
           growth: "✓ Import & Export",
           enterprise: "✓ Full Enterprise Engine",
         },
         {
           name: "CSV Bulk Import & Export",
           free: "✕",
+          starter: "✓ Standard CSV",
           growth: "✓ Unlimited CSV",
           enterprise: "✓ Automated Sync",
         },
         {
           name: "1-Click Competitor Data Migration Importer",
           free: "✕",
+          starter: "✕",
           growth: "✓ Easy YMM / Fitment Group / ACES",
           enterprise: "✓ Unlimited Competitor Migration",
         },
         {
           name: "Universal Products Support",
           free: "✕",
+          starter: "✓ Unlimited",
           growth: "✓ Unlimited",
           enterprise: "✓ Unlimited",
         },
@@ -397,30 +516,35 @@ export default function PlansPage() {
         {
           name: "VIN Lookups Allowance",
           free: "✕ Disabled",
-          growth: "100 Free/mo ($0.05 after)",
+          starter: "25 Free/mo ($0.08 after)",
+          growth: "250 Free/mo ($0.05 after)",
           enterprise: "1,000 Free/mo ($0.03 after)",
         },
         {
           name: "AI Voice & Conversational Search Assistant",
           free: "✕",
+          starter: "✕",
           growth: "✓ Standard Natural Voice Search",
           enterprise: "✓ Advanced AI Conversational Engine",
         },
         {
           name: "1-Click AI Catalog Auto-Fitter (Beta)",
           free: "✕",
+          starter: "✕",
           growth: "✕",
           enterprise: "✓ Included (AI Suggestions)",
         },
         {
           name: "Sub-Model & Trim Filtering",
           free: "Basic Year/Make/Model",
+          starter: "✓ Sub-Model & Trim",
           growth: "✓ Full Trim Support",
           enterprise: "✓ Advanced Engine Specs",
         },
         {
           name: "Search Analytics & Gap Intelligence",
           free: "Basic Summary",
+          starter: "Standard Analytics",
           growth: "Detailed + Gap Logs",
           enterprise: "Realtime Export",
         },
@@ -431,13 +555,15 @@ export default function PlansPage() {
       rows: [
         {
           name: "Product Page Fitment Checker Badge",
-          free: "✕",
+          free: "✓ Basic Badge",
+          starter: "✓ Included",
           growth: "✓ Included",
-          enterprise: "✓ Included",
+          enterprise: "✓ Included (Custom Styling)",
         },
         {
           name: "My Garage Saved Vehicles Persistence",
           free: "Local Storage",
+          starter: "Local Storage",
           growth: "Local + Persistence",
           enterprise: "Cross-Device Sync",
         },
@@ -449,18 +575,21 @@ export default function PlansPage() {
         {
           name: "Storefront Proxy SLA & Performance",
           free: "Standard App Proxy",
+          starter: "Standard App Proxy",
           growth: "✓ High-Speed CDN Proxy",
           enterprise: "✓ VIP Dedicated Proxy & Edge Caching",
         },
         {
           name: "Database Backups & Safety",
           free: "Weekly Auto-Backup",
+          starter: "Weekly Auto-Backup",
           growth: "Daily Automated Backups",
           enterprise: "Hourly Realtime Backups",
         },
         {
           name: "Support SLA",
           free: "Standard Email",
+          starter: "Email Support",
           growth: "Priority Support",
           enterprise: "VIP 1-on-1 Manager",
         },
@@ -469,8 +598,8 @@ export default function PlansPage() {
   ];
 
   return (
-    <div style={{ maxWidth: "1240px", margin: "0 auto", padding: "28px 24px 60px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
-      
+    <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "28px 20px 60px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+
       {/* Toast Notification */}
       {actionData?.message && (
         <div
@@ -488,6 +617,70 @@ export default function PlansPage() {
           ✓ {actionData.message}
         </div>
       )}
+
+      {/* VIP Free 2-Months Offer Banner */}
+      {isVipFreeOfferActive && !isVipFreeOfferClaimed && (
+        <div
+          style={{
+            background: "linear-gradient(135deg, #064e3b 0%, #047857 50%, #d97706 100%)",
+            borderRadius: "16px",
+            padding: "22px 26px",
+            color: "#ffffff",
+            marginBottom: "24px",
+            boxShadow: "0 8px 24px rgba(4, 120, 87, 0.25)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
+            <div>
+              <span
+                style={{
+                  background: "#f59e0b",
+                  color: "#000000",
+                  padding: "4px 10px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: "800",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                VIP EXCLUSIVE OFFER UNLOCKED
+              </span>
+              <h2 style={{ margin: "10px 0 4px", fontSize: "20px", fontWeight: "800", color: "#ffffff" }}>
+                Growth Pro FREE for {vipFreeOfferMonths} Months ($0/mo for {vipFreeOfferMonths * 30} Days)!
+              </h2>
+              <p style={{ margin: 0, color: "#a7f3d0", fontSize: "13px", maxWidth: "650px", lineHeight: "1.4" }}>
+                You have been granted an exclusive VIP invitation by PartMatch Admin. Enjoy all Growth Pro features (20,000 Fitments, 250 VIN lookups/mo, ACES/PIES import, & AI Voice Search) completely free for {vipFreeOfferMonths * 30} days!
+              </p>
+            </div>
+
+            <vipClaimFetcher.Form method="post">
+              <input type="hidden" name="intent" value="claimVipFreeOffer" />
+              <button
+                type="submit"
+                disabled={isVipClaiming}
+                style={{
+                  background: "#ffffff",
+                  color: "#047857",
+                  border: "none",
+                  padding: "12px 24px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "800",
+                  cursor: isVipClaiming ? "not-allowed" : "pointer",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                  transition: "all 0.15s ease",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {isVipClaiming ? "Activating..." : `Claim ${vipFreeOfferMonths} Months FREE Growth Pro →`}
+              </button>
+            </vipClaimFetcher.Form>
+          </div>
+        </div>
+      )}
+
+
 
       {/* Merchant Discount Banner */}
       {isCustomMerchantDiscount && (
@@ -575,8 +768,8 @@ export default function PlansPage() {
         </div>
       </div>
 
-      {/* Pricing Cards Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px", marginBottom: "40px" }}>
+      {/* Pricing Cards Grid (4 Tiers) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "20px", marginBottom: "40px" }}>
         {plans.map((plan) => {
           const isCurrent = activePlan === plan.id && (plan.id === "free" ? true : billingCycle === (activeBillingCycle || "monthly"));
           const displayPrice = billingCycle === "annual" ? plan.priceAnnual : plan.priceMonthly;
@@ -585,7 +778,7 @@ export default function PlansPage() {
           if (isCurrent) {
             buttonLabel = "Current Active Plan";
           } else if (activePlan === plan.id) {
-            buttonLabel = billingCycle === "annual" ? `Switch to Annual Plan (Save ${totalAnnualDiscount}%) →` : "Switch to Monthly Plan →";
+            buttonLabel = billingCycle === "annual" ? `Switch to Annual (Save ${totalAnnualDiscount}%) →` : "Switch to Monthly →";
           } else if (plan.id === "free") {
             buttonLabel = "Downgrade to Free";
           }
@@ -597,7 +790,7 @@ export default function PlansPage() {
                 background: "#ffffff",
                 border: plan.highlight ? "2px solid #008060" : "1px solid #e2e8f0",
                 borderRadius: "18px",
-                padding: "30px 24px",
+                padding: "24px 20px",
                 boxShadow: plan.highlight ? "0 12px 30px -5px rgba(0, 128, 96, 0.18)" : "0 4px 16px rgba(0,0,0,0.03)",
                 position: "relative",
                 display: "flex",
@@ -606,41 +799,41 @@ export default function PlansPage() {
               }}
             >
               {plan.badge && (
-                <div style={{ position: "absolute", top: "-13px", right: "20px", background: "#008060", color: "#ffffff", padding: "4px 12px", borderRadius: "12px", fontSize: "11px", fontWeight: "800", letterSpacing: "0.5px" }}>
+                <div style={{ position: "absolute", top: "-13px", right: "16px", background: "#008060", color: "#ffffff", padding: "4px 10px", borderRadius: "12px", fontSize: "10px", fontWeight: "800", letterSpacing: "0.5px" }}>
                   {plan.badge}
                 </div>
               )}
               {isCurrent && !plan.badge && (
-                <div style={{ position: "absolute", top: "-13px", right: "20px", background: "#475569", color: "#ffffff", padding: "4px 12px", borderRadius: "12px", fontSize: "11px", fontWeight: "800" }}>
+                <div style={{ position: "absolute", top: "-13px", right: "16px", background: "#475569", color: "#ffffff", padding: "4px 10px", borderRadius: "12px", fontSize: "10px", fontWeight: "800" }}>
                   CURRENT ACTIVE PLAN
                 </div>
               )}
 
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "800", color: "#0f172a" }}>
+                  <h3 style={{ margin: 0, fontSize: "19px", fontWeight: "800", color: "#0f172a" }}>
                     {plan.name}
                   </h3>
                   <span style={{ fontSize: "11px", background: "#eff6ff", color: "#1d4ed8", padding: "2px 8px", borderRadius: "10px", fontWeight: "700" }}>
                     {plan.trialBadge}
                   </span>
                 </div>
-                <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "13px", lineHeight: "1.5", minHeight: "38px" }}>
+                <p style={{ margin: "0 0 14px", color: "#64748b", fontSize: "13px", lineHeight: "1.45", minHeight: "36px" }}>
                   {plan.description}
                 </p>
 
                 {/* Price Display */}
                 <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "4px" }}>
-                  <span style={{ fontSize: "36px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>{displayPrice}</span>
+                  <span style={{ fontSize: "34px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>{displayPrice}</span>
                   <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "600" }}>{plan.period}</span>
                 </div>
 
                 {/* Annual Billing Subtext Note */}
-                <div style={{ fontSize: "12px", color: "#059669", fontWeight: "600", minHeight: "18px", marginBottom: "8px" }}>
+                <div style={{ fontSize: "11px", color: "#059669", fontWeight: "600", minHeight: "18px", marginBottom: "8px" }}>
                   {billingCycle === "annual" && plan.priceAnnualNote ? plan.priceAnnualNote : null}
                 </div>
 
-                {/* High ROI Badge */}
+                {/* Daily Cost ROI Badge */}
                 <div style={{ minHeight: "28px", marginBottom: "14px" }}>
                   {plan.dailyCost ? (
                     <div style={{ fontSize: "11px", color: "#047857", fontWeight: "700", background: "#ecfdf5", border: "1px solid #a7f3d0", padding: "4px 8px", borderRadius: "6px", display: "inline-block", lineHeight: "1.3" }}>
@@ -653,7 +846,7 @@ export default function PlansPage() {
                   )}
                 </div>
 
-                <div style={{ display: "inline-block", background: "#f1f5f9", color: "#334155", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "700", marginBottom: "20px" }}>
+                <div style={{ display: "inline-block", background: "#f1f5f9", color: "#334155", padding: "5px 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "700", marginBottom: "18px" }}>
                   {plan.recordsLimit}
                 </div>
 
@@ -666,10 +859,10 @@ export default function PlansPage() {
                   buttonLabel={buttonLabel}
                 />
 
-                <div style={{ height: "1px", background: "#f1f5f9", margin: "20px 0" }} />
+                <div style={{ height: "1px", background: "#f1f5f9", margin: "18px 0" }} />
 
                 {/* Features list */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "9px" }}>
                   <span style={{ fontSize: "11px", fontWeight: "800", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                     Included Capabilities:
                   </span>
@@ -692,15 +885,15 @@ export default function PlansPage() {
         })}
       </div>
 
-      {/* Comprehensive Feature Comparison Matrix */}
-      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", marginBottom: "40px", boxShadow: "0 4px 16px rgba(0,0,0,0.03)" }}>
+      {/* Comprehensive Feature Comparison Matrix (4 Plans) */}
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "28px", marginBottom: "40px", boxShadow: "0 4px 16px rgba(0,0,0,0.03)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "24px" }}>
           <div>
             <h2 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: "800", color: "#0f172a" }}>
               Comprehensive Feature Comparison Matrix
             </h2>
             <p style={{ margin: 0, color: "#64748b", fontSize: "14px" }}>
-              Detailed breakdown of features, limits, data standards, and support options across all plans.
+              Detailed breakdown of features, limits, data standards, and support options across all 4 plans.
             </p>
           </div>
 
@@ -711,75 +904,96 @@ export default function PlansPage() {
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #cbd5e1", background: "#f8fafc" }}>
-                <th style={{ padding: "16px", width: "37%", color: "#334155", fontWeight: "800", fontSize: "14px" }}>
+                <th style={{ padding: "14px", width: "28%", color: "#334155", fontWeight: "800", fontSize: "13px" }}>
                   Feature Specification
                 </th>
-                
+
                 {/* Starter Free Header */}
                 <th style={{
-                  padding: "16px",
+                  padding: "14px 10px",
                   textAlign: "center",
-                  width: "21%",
+                  width: "18%",
                   background: activePlan === "free" ? "#f0fdf4" : "transparent",
                   borderLeft: activePlan === "free" ? "2px solid #10b981" : "none",
                   borderRight: activePlan === "free" ? "2px solid #10b981" : "none",
                   borderTop: activePlan === "free" ? "3px solid #10b981" : "none",
                 }}>
                   {activePlan === "free" && (
-                    <div style={{ background: "#10b981", color: "#ffffff", padding: "3px 8px", borderRadius: "10px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px", display: "inline-block" }}>
-                      YOUR ACTIVE PLAN
+                    <div style={{ background: "#10b981", color: "#ffffff", padding: "2px 6px", borderRadius: "8px", fontSize: "9px", fontWeight: "800", textTransform: "uppercase", marginBottom: "4px", display: "inline-block" }}>
+                      ACTIVE PLAN
                     </div>
                   )}
-                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "16px" }}>Starter Free</div>
+                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "15px" }}>Starter Free</div>
                   <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "500", marginTop: "2px" }}>$0 / month</div>
+                </th>
+
+                {/* Starter Pro Header */}
+                <th style={{
+                  padding: "14px 10px",
+                  textAlign: "center",
+                  width: "18%",
+                  background: activePlan === "starter" ? "#f0fdf4" : "transparent",
+                  borderLeft: activePlan === "starter" ? "2px solid #10b981" : "none",
+                  borderRight: activePlan === "starter" ? "2px solid #10b981" : "none",
+                  borderTop: activePlan === "starter" ? "3px solid #10b981" : "none",
+                }}>
+                  {activePlan === "starter" && (
+                    <div style={{ background: "#10b981", color: "#ffffff", padding: "2px 6px", borderRadius: "8px", fontSize: "9px", fontWeight: "800", textTransform: "uppercase", marginBottom: "4px", display: "inline-block" }}>
+                      ACTIVE PLAN
+                    </div>
+                  )}
+                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "15px" }}>Starter Pro</div>
+                  <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "500", marginTop: "2px" }}>
+                    {billingCycle === "annual" ? `${calcAnnualMonthlyEq(19.0)} / mo` : `${calcMonthly(19.0)} / mo`}
+                  </div>
                 </th>
 
                 {/* Growth Pro Header */}
                 <th style={{
-                  padding: "16px",
+                  padding: "14px 10px",
                   textAlign: "center",
-                  width: "21%",
+                  width: "18%",
                   background: activePlan === "growth" ? "#ecfdf5" : "#f0fdf4",
                   borderLeft: activePlan === "growth" ? "2px solid #10b981" : "none",
                   borderRight: activePlan === "growth" ? "2px solid #10b981" : "none",
                   borderTop: activePlan === "growth" ? "3px solid #10b981" : "none",
                 }}>
                   {activePlan === "growth" ? (
-                    <div style={{ background: "#10b981", color: "#ffffff", padding: "3px 8px", borderRadius: "10px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px", display: "inline-block" }}>
-                      YOUR ACTIVE PLAN
+                    <div style={{ background: "#10b981", color: "#ffffff", padding: "2px 6px", borderRadius: "8px", fontSize: "9px", fontWeight: "800", textTransform: "uppercase", marginBottom: "4px", display: "inline-block" }}>
+                      ACTIVE PLAN
                     </div>
                   ) : (
-                    <div style={{ background: "#059669", color: "#ffffff", padding: "3px 8px", borderRadius: "10px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px", display: "inline-block" }}>
+                    <div style={{ background: "#059669", color: "#ffffff", padding: "2px 6px", borderRadius: "8px", fontSize: "9px", fontWeight: "800", textTransform: "uppercase", marginBottom: "4px", display: "inline-block" }}>
                       MOST POPULAR
                     </div>
                   )}
-                  <div style={{ fontWeight: "800", color: "#047857", fontSize: "16px" }}>Growth Pro</div>
+                  <div style={{ fontWeight: "800", color: "#047857", fontSize: "15px" }}>Growth Pro</div>
                   <div style={{ fontSize: "12px", color: "#047857", fontWeight: "600", marginTop: "2px" }}>
-                    {billingCycle === "annual" ? `${calcAnnualMonthlyEq(19.99)} / mo` : `${calcMonthly(19.99)} / mo`}
+                    {billingCycle === "annual" ? `${calcAnnualMonthlyEq(49.0)} / mo` : `${calcMonthly(49.0)} / mo`}
                   </div>
                 </th>
 
                 {/* Enterprise Header */}
                 <th style={{
-                  padding: "16px",
+                  padding: "14px 10px",
                   textAlign: "center",
-                  width: "21%",
+                  width: "18%",
                   background: activePlan === "enterprise" ? "#f0fdf4" : "transparent",
                   borderLeft: activePlan === "enterprise" ? "2px solid #10b981" : "none",
                   borderRight: activePlan === "enterprise" ? "2px solid #10b981" : "none",
                   borderTop: activePlan === "enterprise" ? "3px solid #10b981" : "none",
                 }}>
                   {activePlan === "enterprise" && (
-                    <div style={{ background: "#10b981", color: "#ffffff", padding: "3px 8px", borderRadius: "10px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px", display: "inline-block" }}>
-                      YOUR ACTIVE PLAN
+                    <div style={{ background: "#10b981", color: "#ffffff", padding: "2px 6px", borderRadius: "8px", fontSize: "9px", fontWeight: "800", textTransform: "uppercase", marginBottom: "4px", display: "inline-block" }}>
+                      ACTIVE PLAN
                     </div>
                   )}
-                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "16px" }}>Enterprise</div>
+                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "15px" }}>Enterprise</div>
                   <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "500", marginTop: "2px" }}>
-                    {billingCycle === "annual" ? `${calcAnnualMonthlyEq(79.99)} / mo` : `${calcMonthly(79.99)} / mo`}
+                    {billingCycle === "annual" ? `${calcAnnualMonthlyEq(99.0)} / mo` : `${calcMonthly(99.0)} / mo`}
                   </div>
                 </th>
               </tr>
@@ -795,47 +1009,62 @@ export default function PlansPage() {
 
               {/* Bottom CTA Actions Row in Matrix */}
               <tr style={{ background: "#f8fafc", borderTop: "2px solid #e2e8f0" }}>
-                <td style={{ padding: "20px 16px", fontWeight: "800", color: "#0f172a" }}>
+                <td style={{ padding: "16px 14px", fontWeight: "800", color: "#0f172a" }}>
                   Select Plan
                 </td>
-                
+
                 {/* Starter Free CTA */}
-                <td style={{ padding: "16px", textAlign: "center", background: activePlan === "free" ? "#f0fdf4" : "transparent" }}>
+                <td style={{ padding: "12px", textAlign: "center", background: activePlan === "free" ? "#f0fdf4" : "transparent" }}>
                   <PlanCardForm
                     plan={plans[0]}
                     billingCycle={billingCycle}
                     isCurrent={activePlan === "free"}
                     activePlan={activePlan}
-                    buttonLabel={activePlan === "free" ? "Active Plan" : "Downgrade to Free"}
+                    buttonLabel={activePlan === "free" ? "Active Plan" : "Free"}
+                  />
+                </td>
+
+                {/* Starter Pro CTA */}
+                <td style={{ padding: "12px", textAlign: "center", background: activePlan === "starter" ? "#f0fdf4" : "transparent" }}>
+                  <PlanCardForm
+                    plan={plans[1]}
+                    billingCycle={billingCycle}
+                    isCurrent={activePlan === "starter" && billingCycle === (activeBillingCycle || "monthly")}
+                    activePlan={activePlan}
+                    buttonLabel={
+                      activePlan === "starter" && billingCycle === (activeBillingCycle || "monthly")
+                        ? "Active Plan"
+                        : "Starter $19 →"
+                    }
                   />
                 </td>
 
                 {/* Growth Pro CTA */}
-                <td style={{ padding: "16px", textAlign: "center", background: activePlan === "growth" ? "#ecfdf5" : "#f0fdf4" }}>
+                <td style={{ padding: "12px", textAlign: "center", background: activePlan === "growth" ? "#ecfdf5" : "#f0fdf4" }}>
                   <PlanCardForm
-                    plan={plans[1]}
+                    plan={plans[2]}
                     billingCycle={billingCycle}
                     isCurrent={activePlan === "growth" && billingCycle === (activeBillingCycle || "monthly")}
                     activePlan={activePlan}
                     buttonLabel={
                       activePlan === "growth" && billingCycle === (activeBillingCycle || "monthly")
                         ? "Active Plan"
-                        : "Choose Growth Pro →"
+                        : "Growth $49 →"
                     }
                   />
                 </td>
 
                 {/* Enterprise CTA */}
-                <td style={{ padding: "16px", textAlign: "center", background: activePlan === "enterprise" ? "#f0fdf4" : "transparent" }}>
+                <td style={{ padding: "12px", textAlign: "center", background: activePlan === "enterprise" ? "#f0fdf4" : "transparent" }}>
                   <PlanCardForm
-                    plan={plans[2]}
+                    plan={plans[3]}
                     billingCycle={billingCycle}
                     isCurrent={activePlan === "enterprise" && billingCycle === (activeBillingCycle || "monthly")}
                     activePlan={activePlan}
                     buttonLabel={
                       activePlan === "enterprise" && billingCycle === (activeBillingCycle || "monthly")
                         ? "Active Plan"
-                        : "Choose Enterprise →"
+                        : "Enterprise $99 →"
                     }
                   />
                 </td>
@@ -854,11 +1083,11 @@ function MatrixGroupSection({ group, activePlan }) {
       {/* Category Section Header */}
       <tr style={{ background: "#f1f5f9", borderBottom: "1px solid #cbd5e1" }}>
         <td
-          colSpan={4}
+          colSpan={5}
           style={{
-            padding: "10px 16px",
+            padding: "8px 14px",
             fontWeight: "800",
-            fontSize: "12px",
+            fontSize: "11px",
             color: "#334155",
             textTransform: "uppercase",
             letterSpacing: "0.8px",
@@ -877,14 +1106,14 @@ function MatrixGroupSection({ group, activePlan }) {
             background: "#ffffff",
           }}
         >
-          <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>
+          <td style={{ padding: "12px 14px", fontWeight: "700", color: "#0f172a" }}>
             {row.name}
           </td>
 
           {/* Starter Free Cell */}
           <td
             style={{
-              padding: "14px 16px",
+              padding: "12px 14px",
               textAlign: "center",
               color: row.free === "✕" ? "#cbd5e1" : "#334155",
               fontWeight: row.free.startsWith("✓") ? "700" : "500",
@@ -896,10 +1125,25 @@ function MatrixGroupSection({ group, activePlan }) {
             {formatMatrixCell(row.free)}
           </td>
 
+          {/* Starter Pro Cell */}
+          <td
+            style={{
+              padding: "12px 14px",
+              textAlign: "center",
+              color: row.starter === "✕" ? "#cbd5e1" : "#334155",
+              fontWeight: row.starter.startsWith("✓") ? "700" : "500",
+              background: activePlan === "starter" ? "#f0fdf4" : "transparent",
+              borderLeft: activePlan === "starter" ? "2px solid #10b981" : "none",
+              borderRight: activePlan === "starter" ? "2px solid #10b981" : "none",
+            }}
+          >
+            {formatMatrixCell(row.starter)}
+          </td>
+
           {/* Growth Pro Cell */}
           <td
             style={{
-              padding: "14px 16px",
+              padding: "12px 14px",
               textAlign: "center",
               fontWeight: row.growth.startsWith("✓") ? "800" : "600",
               color: row.growth.startsWith("✓") ? "#047857" : (row.growth === "✕" ? "#cbd5e1" : "#0f172a"),
@@ -914,7 +1158,7 @@ function MatrixGroupSection({ group, activePlan }) {
           {/* Enterprise Cell */}
           <td
             style={{
-              padding: "14px 16px",
+              padding: "12px 14px",
               textAlign: "center",
               fontWeight: row.enterprise.startsWith("✓") ? "800" : "600",
               color: row.enterprise.startsWith("✓") ? "#047857" : (row.enterprise === "✕" ? "#cbd5e1" : "#0f172a"),
@@ -960,12 +1204,12 @@ function PlanCardForm({ plan, billingCycle, isCurrent, activePlan, buttonLabel }
         disabled={isCurrent || isCardSubmitting}
         style={{
           width: "100%",
-          padding: "12px 18px",
+          padding: "11px 14px",
           borderRadius: "10px",
           border: plan.highlight || (!isCurrent && activePlan === plan.id) ? "none" : "1px solid #cbd5e1",
           background: isCurrent ? "#f1f5f9" : (plan.highlight || activePlan === plan.id) ? "#008060" : "#ffffff",
           color: isCurrent ? "#94a3b8" : (plan.highlight || activePlan === plan.id) ? "#ffffff" : "#1e293b",
-          fontSize: "14px",
+          fontSize: "13px",
           fontWeight: "700",
           cursor: isCurrent || isCardSubmitting ? "default" : "pointer",
           boxShadow: !isCurrent && (plan.highlight || activePlan === plan.id) ? "0 4px 12px rgba(0, 128, 96, 0.25)" : "none",

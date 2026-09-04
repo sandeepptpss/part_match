@@ -225,6 +225,17 @@ model AppSettings {
   merchantDiscountPercent Int @default(0)
   isSupportOnline     Boolean @default(true)
 
+  // ─── Special VIP Offers & Volume Discounts ──────────────────────────────
+  vipFreeOfferActive      Boolean   @default(false)
+  vipFreeOfferMonths      Int       @default(2)
+  vipFreeOfferStoreLimit  Int       @default(10)
+  vipFreeOfferGrantedAt   DateTime?
+  vipFreeOfferClaimed     Boolean   @default(false)
+  autoGrantFirst10        Boolean   @default(false)
+  volumeDiscountThreshold Int       @default(10)
+  volumeDiscountPercent   Int       @default(25)
+  isVolumeDiscountActive  Boolean   @default(true)
+
   @@index([shop])
 }
 

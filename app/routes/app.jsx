@@ -46,8 +46,8 @@ export default function App() {
         <s-link href="/app/products">Products</s-link>
         <s-link href="/app/widget">Search Widget</s-link>
         <s-link href="/app/analytics">Analytics</s-link>
-        <s-link href="/app/plans">Plans & Pricing</s-link>
         <s-link href="/app/settings">Settings</s-link>
+        <s-link href="/app/plans">Plans & Pricing</s-link>
         <s-link href="/app/support">Help & Support</s-link>
         {isAdmin && <s-link href="/app/admin">App Admin</s-link>}
       </s-app-nav>

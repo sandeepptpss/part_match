@@ -388,7 +388,7 @@ export default function FitmentProducts() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "18px", fontWeight: "bold" }}>⚠️</span>
+            <span style={{ fontSize: "16px", fontWeight: "bold" }}>!</span>
             <span>{actionData.error}</span>
           </div>
           <button
@@ -647,7 +647,7 @@ export default function FitmentProducts() {
                     <div key={c.id} style={productRow}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a", display: "flex", alignItems: "center", gap: "6px" }}>
-                          📁 {displayTitle}
+                          {displayTitle}
                         </div>
                         <div style={{ color: "#64748b", fontSize: "12px" }}>handle: {c.shopifyHandle}</div>
                       </div>

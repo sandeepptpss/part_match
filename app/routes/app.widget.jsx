@@ -238,7 +238,7 @@ export default function WidgetSettings() {
 
       {actionData?.error && (
         <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "14px 18px", borderRadius: "12px", marginBottom: "24px", fontWeight: "700", fontSize: "14px" }}>
-          ⚠️ {actionData.error}
+          ! {actionData.error}
         </div>
       )}
 

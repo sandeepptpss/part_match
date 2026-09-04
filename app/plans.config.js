@@ -31,7 +31,7 @@ export const PLAN_TIERS = {
     label: "Starter Free",
     fitmentLimit: 100,
     universalProducts: false,
-    fitmentChecker: false,
+    fitmentChecker: true,
     csvImportExport: false,
     garageSync: false,
     analyticsDetail: "basic",
@@ -43,9 +43,25 @@ export const PLAN_TIERS = {
     competitorMigration: false,
     voiceSearchAssistant: false,
   },
+  starter: {
+    label: "Starter Pro",
+    fitmentLimit: 3000,
+    universalProducts: true,
+    fitmentChecker: true,
+    csvImportExport: true,
+    garageSync: false,
+    analyticsDetail: "standard",
+    aiFitmentSuggestions: false,
+    vinLookup: true,
+    vinMonthlyLimit: 25,
+    vinOverageRate: 0.08,
+    acesPiesSupport: false,
+    competitorMigration: false,
+    voiceSearchAssistant: false,
+  },
   growth: {
-    label: "Growth Professional",
-    fitmentLimit: 5000,
+    label: "Growth Pro",
+    fitmentLimit: 20000,
     universalProducts: true,
     fitmentChecker: true,
     csvImportExport: true,
@@ -53,7 +69,7 @@ export const PLAN_TIERS = {
     analyticsDetail: "detailed",
     aiFitmentSuggestions: false,
     vinLookup: true,
-    vinMonthlyLimit: 100,
+    vinMonthlyLimit: 250,
     vinOverageRate: 0.05,
     acesPiesSupport: true,
     competitorMigration: true,
@@ -78,6 +94,7 @@ export const PLAN_TIERS = {
 };
 
 export const BILLING_PLAN_KEYS = {
+  starter: { monthly: "starter_monthly", annual: "starter_annual" },
   growth: { monthly: "growth_monthly", annual: "growth_annual" },
   enterprise: { monthly: "enterprise_monthly", annual: "enterprise_annual" },
 };
