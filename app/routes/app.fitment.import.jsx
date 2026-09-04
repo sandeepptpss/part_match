@@ -293,6 +293,80 @@ export default function FitmentImport() {
   const [fileName, setFileName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
 
+  const [acesInput, setAcesInput] = useState("");
+  const [convertedCsv, setConvertedCsv] = useState("");
+  const [conversionStatus, setConversionStatus] = useState(null);
+
+  const convertAcesToCsv = () => {
+    if (!acesInput.trim()) {
+      setConversionStatus({ type: "error", message: "Please paste ACES/PIES XML or CSV data to convert." });
+      return;
+    }
+
+    try {
+      let rows = [["year", "make", "model", "trim", "product_handle", "product_title", "collection_handle", "tag", "sku"]];
+      let input = acesInput.trim();
+
+      if (input.startsWith("<")) {
+        const appBlocks = input.match(/<App[\s\S]*?<\/App>/gi) || [];
+        if (appBlocks.length === 0) {
+          setConversionStatus({ type: "error", message: "No <App> XML elements found in ACES content." });
+          return;
+        }
+
+        appBlocks.forEach(appBlock => {
+          const getTag = (tag) => {
+            const match = appBlock.match(new RegExp(`<${tag}[^>]*>([^<]+)<\/${tag}>`, "i"));
+            return match ? match[1].trim() : "";
+          };
+          const year = getTag("Year") || getTag("BaseVehicleYear") || getTag("ModelYear");
+          const make = getTag("Make") || getTag("MakeName");
+          const model = getTag("Model") || getTag("ModelName");
+          const trim = getTag("SubModel") || getTag("SubModelName") || getTag("EngineBase") || getTag("Trim");
+          const part = getTag("Part") || getTag("PartNumber") || getTag("ItemNumber");
+
+          if (year && make && model) {
+            rows.push([year, make, model, trim, part, "", "", "", part]);
+          }
+        });
+      } else {
+        const lines = input.split("\n").filter(l => l.trim());
+        if (lines.length > 1) {
+          const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/["']/g, ""));
+          const yearIdx = headers.findIndex(h => ["year", "yearid", "modelyear", "basevehicleyear"].includes(h));
+          const makeIdx = headers.findIndex(h => ["make", "makename", "brand"].includes(h));
+          const modelIdx = headers.findIndex(h => ["model", "modelname"].includes(h));
+          const trimIdx = headers.findIndex(h => ["trim", "submodel", "submodelname"].includes(h));
+          const partIdx = headers.findIndex(h => ["partnumber", "part_number", "part", "sku", "itemnumber"].includes(h));
+
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(",").map(c => c.trim().replace(/^["']|["']$/g, ""));
+            const year = yearIdx >= 0 ? cols[yearIdx] : "";
+            const make = makeIdx >= 0 ? cols[makeIdx] : "";
+            const model = modelIdx >= 0 ? cols[modelIdx] : "";
+            const trim = trimIdx >= 0 ? cols[trimIdx] || "" : "";
+            const part = partIdx >= 0 ? cols[partIdx] || "" : "";
+
+            if (year && make && model) {
+              rows.push([year, make, model, trim, part, "", "", "", part]);
+            }
+          }
+        }
+      }
+
+      if (rows.length <= 1) {
+        setConversionStatus({ type: "error", message: "Could not extract valid ACES records." });
+        return;
+      }
+
+      const generatedCsv = rows.map(r => r.map(cell => `"${(cell || "").replace(/"/g, '""')}"`).join(",")).join("\n");
+      setConvertedCsv(generatedCsv);
+      setConversionStatus({ type: "success", count: rows.length - 1 });
+    } catch (err) {
+      setConversionStatus({ type: "error", message: `Conversion error: ${err.message}` });
+    }
+  };
+
   const sampleCSV = `year,make,model,trim,product_handle,product_title,collection_handle,tag,sku
 2025,Arctic Cat,Norseman 400,Base,brake-pad-arctic-cat,Brake Pad Arctic Cat,,,
 2025,Arctic Cat,Norseman 400,LX,,arctic-cat-parts,,
@@ -496,6 +570,78 @@ export default function FitmentImport() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* ACES/PIES 1-Click Interactive Converter */}
+        <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "14px", padding: "24px", marginBottom: "32px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ background: "#2563eb", color: "#ffffff", fontSize: "11px", fontWeight: "800", padding: "3px 8px", borderRadius: "6px" }}>NEW</span>
+              <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a", margin: 0 }}>ACES / PIES 1-Click Converter Tool</h3>
+            </div>
+            <span style={{ fontSize: "12px", color: "#64748b" }}>Convert raw ACES/PIES XML or CSV into PartMatch CSV format</span>
+          </div>
+
+          <p style={{ fontSize: "13px", color: "#475569", margin: "0 0 14px", lineHeight: "1.4" }}>
+            Paste raw ACES XML or ACES CSV catalog data below to instantly convert it into clean PartMatch CSV format ready for bulk import.
+          </p>
+
+          <textarea
+            rows={4}
+            value={acesInput}
+            onChange={(e) => setAcesInput(e.target.value)}
+            placeholder="Paste raw ACES XML (<App>...</App>) or ACES CSV content here..."
+            style={{
+              width: "100%",
+              padding: "12px",
+              border: "1px solid #cbd5e1",
+              borderRadius: "8px",
+              fontSize: "12px",
+              fontFamily: "monospace",
+              boxSizing: "border-box",
+              marginBottom: "12px",
+              background: "#ffffff"
+            }}
+          />
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={convertAcesToCsv}
+              style={{ background: "#0f172a", color: "#ffffff", border: "none", padding: "8px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
+            >
+              Convert ACES / PIES →
+            </button>
+            {convertedCsv && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCsvContent(convertedCsv);
+                    setFileName("converted_aces_partmatch.csv");
+                  }}
+                  style={{ background: "#166534", color: "#ffffff", border: "none", padding: "8px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
+                >
+                  Load Converted CSV into Import Editor Below ✓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadFile(convertedCsv, "converted_aces_partmatch.csv", "text/csv")}
+                  style={{ background: "#ffffff", color: "#166534", border: "1px solid #86efac", padding: "8px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}
+                >
+                  Download Converted CSV
+                </button>
+              </>
+            )}
+          </div>
+
+          {conversionStatus && (
+            <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", color: conversionStatus.type === "success" ? "#15803d" : "#b91c1c" }}>
+              {conversionStatus.type === "success"
+                ? `✓ Successfully converted ${conversionStatus.count} ACES records into PartMatch CSV!`
+                : `❌ ${conversionStatus.message}`}
+            </div>
+          )}
         </div>
 
         {!planAllowsImport && (

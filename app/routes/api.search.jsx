@@ -3,7 +3,7 @@ import { authenticate, unauthenticated } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
 
-async function getShopFromRequest(request) {
+async function getShopFromReq(request) {
   try {
     const { session } = await authenticate.public.appProxy(request);
     if (session?.shop) return session.shop;
@@ -286,7 +286,7 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
 
 // GET /apps/partmatch/api/search?year=&make=&model=&trim=
 export async function loader({ request }) {
-  const shop = await getShopFromRequest(request);
+  const shop = await getShopFromReq(request);
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
   const make = url.searchParams.get("make");
@@ -302,7 +302,7 @@ export async function loader({ request }) {
 
 // POST /apps/partmatch/api/search  body: { year, make, model, trim?, sessionId? }
 export async function action({ request }) {
-  const shop = await getShopFromRequest(request);
+  const shop = await getShopFromReq(request);
 
   let body = {};
   try {

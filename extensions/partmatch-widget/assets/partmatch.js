@@ -896,8 +896,24 @@
 
   // ─── Active Vehicle Bar ──────────────────────────────────────────────────────
   function initVehicleBar() {
-    const bars = document.querySelectorAll('[data-partmatch-bar]');
-    if (!bars.length) return;
+    let bars = document.querySelectorAll('[data-partmatch-bar]');
+    if (!bars.length) {
+      // Auto-inject persistent vehicle bar if vehicle is saved and enabled
+      const autoBar = document.createElement('div');
+      autoBar.className = 'pm-bar pm-bar--auto';
+      autoBar.setAttribute('data-partmatch-bar', '');
+      autoBar.style.cssText = 'display:none; position:fixed; bottom:16px; right:16px; z-index:999999; background:#0f172a; color:#ffffff; padding:10px 16px; border-radius:30px; box-shadow:0 8px 24px rgba(0,0,0,0.25); font-family:inherit; font-size:13px; align-items:center; gap:10px; border:1px solid rgba(255,255,255,0.15);';
+      autoBar.innerHTML = `
+        <span class="pm-bar__label" style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:15px;">🚗</span> Active: <strong class="pm-bar__vehicle" data-partmatch-bar-label style="color:#60a5fa; font-weight:700;"></strong>
+        </span>
+        <button class="pm-bar__change" data-partmatch-bar-change style="background:rgba(255,255,255,0.15); color:#ffffff; border:none; padding:4px 10px; border-radius:14px; font-weight:600; font-size:11px; cursor:pointer; transition:background 0.2s;">
+          Change
+        </button>
+      `;
+      (document.body || document.documentElement).appendChild(autoBar);
+      bars = [autoBar];
+    }
     bars.forEach(bar => updateBar(bar));
 
     document.addEventListener('partmatch:vehicleChanged', () => {
