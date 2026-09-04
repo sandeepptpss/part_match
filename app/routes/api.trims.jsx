@@ -9,15 +9,7 @@ export async function loader({ request }) {
     const { session } = await authenticate.public.appProxy(request);
     if (session?.shop) shop = session.shop;
   } catch (err) {
-    // Ignore proxy auth error and fallback to query params/database
-  }
-
-  if (!shop) {
-    const url = new URL(request.url);
-    const paramShop = url.searchParams.get("shop");
-    if (paramShop && typeof paramShop === "string") {
-      shop = paramShop.trim();
-    }
+    // App Proxy signature missing or invalid
   }
 
   if (!shop) {

@@ -8,15 +8,8 @@ async function getShopFromReq(request) {
     const { session } = await authenticate.public.appProxy(request);
     if (session?.shop) return session.shop;
   } catch (err) {
-    // Ignore proxy auth error and fallback to query params/database
+    // App Proxy signature missing or invalid
   }
-
-  const url = new URL(request.url);
-  const paramShop = url.searchParams.get("shop");
-  if (paramShop && typeof paramShop === "string") {
-    return paramShop.trim();
-  }
-
   return null;
 }
 
