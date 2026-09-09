@@ -1,8 +1,8 @@
 // POST or GET /apps/partmatch/api/ai-voice-search?query=
 export async function action({ request }) {
-  const { authenticate, unauthenticated } = await import("../shopify.server");
-  const { default: prisma } = await import("../db.server");
-  const { getShopPlan, planLimits } = await import("../plans.server");
+  const { authenticate, unauthenticated } = await import("../app/shopify.server.js");
+  const { default: prisma } = await import("../app/db.server.js");
+  const { getShopPlan, planLimits } = await import("../app/plans.server.js");
 
   async function getShopFromRequest(req) {
     try {
