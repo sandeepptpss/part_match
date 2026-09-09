@@ -377,7 +377,7 @@
     // Initial state
     makeSel.disabled  = true;
     modelSel.disabled = true;
-    searchBtn.disabled = true;
+    // searchBtn remains enabled to provide instant validation feedback upon click
 
     // Load years
     try {
@@ -536,7 +536,10 @@
     if (voiceBtn && voiceInput) {
       voiceBtn.addEventListener('click', async () => {
         const queryText = voiceInput.value ? voiceInput.value.trim() : '';
-        if (!queryText) return;
+        if (!queryText) {
+          showBannerFeedback(voiceFeedback, 'Please enter or speak a vehicle query (e.g. 2025 Ford F-150 brake pads).', 'error');
+          return;
+        }
 
         showBannerFeedback(voiceFeedback, 'AI is searching fitments...', 'info');
 
@@ -739,10 +742,79 @@
       setTimeout(restoreVehicle, 300);
     }
 
+    // Validation helper functions
+    function clearValidationError(sel) {
+      if (sel) {
+        sel.classList.remove('pm-select--error');
+        sel.style.removeProperty('border-color');
+        sel.style.removeProperty('box-shadow');
+      } else {
+        [yearSel, makeSel, modelSel].forEach(s => {
+          if (s) {
+            s.classList.remove('pm-select--error');
+            s.style.removeProperty('border-color');
+            s.style.removeProperty('box-shadow');
+          }
+        });
+      }
+      const valEl = widget.querySelector('[data-partmatch-validation]');
+      if (valEl && !widget.querySelector('.pm-select--error')) {
+        valEl.style.display = 'none';
+        valEl.innerHTML = '';
+      }
+    }
+
+    function showValidationError(sel, message) {
+      // Clear previous error styles from other selects
+      [yearSel, makeSel, modelSel].forEach(s => {
+        if (s && s !== sel) {
+          s.classList.remove('pm-select--error');
+          s.style.removeProperty('border-color');
+          s.style.removeProperty('box-shadow');
+        }
+      });
+
+      if (sel) {
+        sel.classList.add('pm-select--error');
+        sel.style.setProperty('border-color', '#ef4444', 'important');
+        sel.style.setProperty('box-shadow', '0 0 0 3px rgba(239, 68, 68, 0.25)', 'important');
+        try { sel.focus(); } catch (_) {}
+      }
+
+      let valEl = widget.querySelector('[data-partmatch-validation]');
+      if (!valEl) {
+        valEl = document.createElement('div');
+        valEl.setAttribute('data-partmatch-validation', '');
+        valEl.className = 'pm-validation-msg';
+        const formEl = widget.querySelector('.pm-widget__form') || widget.querySelector('[data-pm-ymm-panel]') || widget;
+        if (formEl && formEl.parentNode) {
+          formEl.parentNode.insertBefore(valEl, formEl.nextSibling);
+        } else {
+          widget.appendChild(valEl);
+        }
+      }
+
+      valEl.className = 'pm-validation-msg';
+      valEl.style.display = 'flex';
+      valEl.innerHTML = `
+        <span style="font-size: 15px; line-height: 1;">⚠️</span>
+        <span style="flex: 1; font-weight: 600; font-size: 13px;">${message}</span>
+        <button type="button" aria-label="Close" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #991b1b; padding: 0 4px; line-height: 1;">✕</button>
+      `;
+
+      const closeBtn = valEl.querySelector('button');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          clearValidationError();
+        });
+      }
+    }
+
     // Year change
     yearSel.addEventListener('change', async () => {
+      clearValidationError(yearSel);
       const year = yearSel.value;
-      makeSel.disabled = true; modelSel.disabled = true; searchBtn.disabled = true;
+      makeSel.disabled = true; modelSel.disabled = true;
       if (!year) return;
       setLoading(makeSel, true);
       const makes = await fetchMakes(year);
@@ -753,8 +825,9 @@
 
     // Make change
     makeSel.addEventListener('change', async () => {
+      clearValidationError(makeSel);
       const year = yearSel.value; const make = makeSel.value;
-      modelSel.disabled = true; searchBtn.disabled = true;
+      modelSel.disabled = true;
       if (!year || !make) return;
       setLoading(modelSel, true);
       const models = await fetchModels(year, make);
@@ -764,13 +837,33 @@
 
     // Model change
     modelSel.addEventListener('change', () => {
-      searchBtn.disabled = !modelSel.value;
+      clearValidationError(modelSel);
     });
 
-    // Search click
-    searchBtn.addEventListener('click', async () => {
-      const year = yearSel.value; const make = makeSel.value; const model = modelSel.value;
-      if (!year || !make || !model) return;
+    // Search click with validation
+    searchBtn.addEventListener('click', async (e) => {
+      if (e) e.preventDefault();
+
+      const year = yearSel.value;
+      const make = makeSel.value;
+      const model = modelSel.value;
+
+      // Validate Year, Make, Model selection
+      if (!year) {
+        showValidationError(yearSel, 'Please select a Year to search compatible parts.');
+        return;
+      }
+      if (!make) {
+        showValidationError(makeSel, 'Please select a Make to search compatible parts.');
+        return;
+      }
+      if (!model) {
+        showValidationError(modelSel, 'Please select a Model to search compatible parts.');
+        return;
+      }
+
+      // Valid: clear any existing validation error
+      clearValidationError();
 
       searchBtn.disabled = true;
       if (spinner) spinner.style.display = 'inline-block';
@@ -829,10 +922,11 @@
     // Clear click
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
+        clearValidationError();
         yearSel.value = '';
         populateSelect(makeSel, [], makeSel.dataset.placeholder || 'MAKE');
         populateSelect(modelSel, [], modelSel.dataset.placeholder || 'MODEL');
-        makeSel.disabled = true; modelSel.disabled = true; searchBtn.disabled = true;
+        makeSel.disabled = true; modelSel.disabled = true;
         if (resultsEl) resultsEl.innerHTML = '';
         clearVehicle();
       });
@@ -1290,12 +1384,13 @@
           <select data-partmatch-model data-placeholder="MODEL" disabled style="flex: 1; min-width: 130px; padding: 10px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 13px; background: #fff;">
             <option value="" disabled selected>MODEL</option>
           </select>
-          <button type="button" data-partmatch-search disabled style="padding: 10px 24px; border-radius: 6px; background: #0f172a; color: #fff; border: none; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+          <button type="button" data-partmatch-search style="padding: 10px 24px; border-radius: 6px; background: #0f172a; color: #fff; border: none; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
             <span>SEARCH</span>
             <span class="pm-spinner" data-partmatch-spinner style="display: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: pm-spin 0.8s linear infinite;"></span>
           </button>
           <button type="button" data-partmatch-clear style="padding: 10px 16px; border-radius: 6px; background: #ffffff; color: #475569; border: 1px solid #cbd5e1; font-weight: 600; font-size: 13px; cursor: pointer;">CLEAR</button>
         </div>
+        <div class="pm-validation-msg" data-partmatch-validation style="display: none;"></div>
 
         <div data-pm-vin-panel style="display: none; margin-top: 10px;">
           <div style="display: flex; gap: 8px;">

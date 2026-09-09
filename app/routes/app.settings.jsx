@@ -165,7 +165,7 @@ export default function Settings() {
   };
 
   return (
-    <div style={{ padding: "28px 24px 60px", maxWidth: "1140px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+    <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
       
       {/* Executive Header Banner */}
       <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", borderRadius: "16px", padding: "32px", color: "#ffffff", marginBottom: "24px", boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.25)" }}>

@@ -111,8 +111,9 @@ export default function Onboarding() {
   const pct = Math.round((completed / steps.length) * 100);
 
   return (
-    <div style={{ padding: "40px 20px", maxWidth: "700px", margin: "0 auto" }}>
-      {/* Hero */}
+    <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+      <div style={{ maxWidth: "860px", margin: "0 auto" }}>
+        {/* Hero */}
       <div style={{ textAlign: "center", marginBottom: "40px" }}>
         <h1 style={{ fontSize: "28px", fontWeight: "800", margin: "0 0 8px" }}>Welcome to PartMatch</h1>
         <p style={{ color: "#6d7175", fontSize: "16px", margin: 0 }}>
@@ -202,6 +203,59 @@ export default function Onboarding() {
                   {s.action} →
                 </Link>
               )}
+              {s.step === 2 && (
+                <div style={{ width: "100%", marginTop: "10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px 14px" }}>
+                  <div style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span>📥 Ready-to-Use Catalog Templates (Zero Friction)</span>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "10px" }}>
+                    Download a pre-formatted template with sample vehicles and products, fill in your data, and upload:
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+                    <a
+                      href="/partmatch_sample_template.csv"
+                      download="partmatch_sample_template.csv"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#ffffff",
+                        border: "1px solid #cbd5e1",
+                        color: "#0f172a",
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        textDecoration: "none",
+                      }}
+                    >
+                      📄 Download Standard PartMatch CSV
+                    </a>
+                    <a
+                      href="/aces_sample_template.csv"
+                      download="aces_sample_template.csv"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#ffffff",
+                        border: "1px solid #86efac",
+                        color: "#166534",
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        textDecoration: "none",
+                      }}
+                    >
+                      🚗 Download ACES Industry CSV
+                    </a>
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#64748b" }}>
+                    <strong>Supported columns:</strong> <code style={{ background: "#e2e8f0", padding: "2px 5px", borderRadius: "4px" }}>year</code>, <code style={{ background: "#e2e8f0", padding: "2px 5px", borderRadius: "4px" }}>make</code>, <code style={{ background: "#e2e8f0", padding: "2px 5px", borderRadius: "4px" }}>model</code>, <code style={{ background: "#e2e8f0", padding: "2px 5px", borderRadius: "4px" }}>trim</code>, <code style={{ background: "#e2e8f0", padding: "2px 5px", borderRadius: "4px" }}>product_handle</code>, <code style={{ background: "#e2e8f0", padding: "2px 5px", borderRadius: "4px" }}>sku</code>
+                  </div>
+                </div>
+              )}
               {s.action2 && (
                 <Link
                   to={s.href2}
@@ -243,22 +297,23 @@ export default function Onboarding() {
         </div>
       ))}
 
-      <div style={{ textAlign: "center", marginTop: "28px" }}>
-        <Link
-          to="/app"
-          style={{
-            display: "inline-block",
-            background: "#fff",
-            border: "1px solid #c9cccf",
-            padding: "10px 24px",
-            borderRadius: "6px",
-            textDecoration: "none",
-            color: "#333",
-            fontSize: "14px",
-          }}
-        >
-          Skip to Dashboard
-        </Link>
+        <div style={{ textAlign: "center", marginTop: "28px" }}>
+          <Link
+            to="/app"
+            style={{
+              display: "inline-block",
+              background: "#fff",
+              border: "1px solid #c9cccf",
+              padding: "10px 24px",
+              borderRadius: "6px",
+              textDecoration: "none",
+              color: "#333",
+              fontSize: "14px",
+            }}
+          >
+            Skip to Dashboard
+          </Link>
+        </div>
       </div>
     </div>
   );

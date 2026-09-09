@@ -151,7 +151,7 @@ export default function Analytics() {
   const gridSteps = [maxDailyCount, Math.round(maxDailyCount * 0.75), Math.round(maxDailyCount * 0.5), Math.round(maxDailyCount * 0.25), 0];
 
   return (
-    <div style={{ padding: "28px 24px 60px", maxWidth: "1280px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+    <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
       
       {/* Header & Date Filter Controls */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>

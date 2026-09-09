@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ACES version="3.2">
+  <Header>
+    <Company>AutoParts Enterprise</Company>
+    <SenderName>PartMatch Catalog Export</SenderName>
+    <DocumentTitle>ACES Standard Fitment Sample</DocumentTitle>
+    <EffectiveDate>2026-01-01</EffectiveDate>
+  </Header>
+  <App action="A" id="1">
+    <BaseVehicleYear>2025</BaseVehicleYear>
+    <MakeName>Ford</MakeName>
+    <ModelName>F-150</ModelName>
+    <SubModelName>XL 3.5L V6</SubModelName>
+    <PartNumber>BP-FORD-F150-2025</PartNumber>
+  </App>
+  <App action="A" id="2">
+    <BaseVehicleYear>2024</BaseVehicleYear>
+    <MakeName>BMW</MakeName>
+    <ModelName>M3</ModelName>
+    <SubModelName>Competition 3.0L</SubModelName>
+    <PartNumber>bmw-m3-brake-rotors</PartNumber>
+  </App>
+  <App action="A" id="3">
+    <BaseVehicleYear>2026</BaseVehicleYear>
+    <MakeName>Toyota</MakeName>
+    <ModelName>Camry</ModelName>
+    <SubModelName>SE 2.5L</SubModelName>
+    <PartNumber>OIL-TOY-CAMRY-2026</PartNumber>
+  </App>
+</ACES>

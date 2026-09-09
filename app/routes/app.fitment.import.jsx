@@ -75,28 +75,32 @@ export const action = async ({ request }) => {
       });
     }
 
-    const appRegex = /<App[\s\S]*?<\/App>/gi;
+    // Support ACES <App>, <Vehicle>, and PIES <Item> XML tags (with or without XML namespace prefix)
+    const appRegex = /<(?:[a-zA-Z0-9_]+:)?(?:App|Vehicle|Item)[\s\S]*?<\/(?:[a-zA-Z0-9_]+:)?(?:App|Vehicle|Item)>/gi;
     const matches = rawInput.match(appRegex) || [];
 
     if (matches.length === 0) {
       return json({
-        error: "Invalid ACES XML format. No <App> fitment records found.",
+        error: "Invalid ACES/PIES XML format. No <App>, <Vehicle>, or <Item> fitment records found.",
         results: null,
       });
     }
 
     for (let i = 0; i < matches.length; i++) {
       const appBlock = matches[i];
-      const getXmlTag = (tag) => {
-        const match = appBlock.match(new RegExp(`<${tag}[^>]*>([^<]+)<\/${tag}>`, "i"));
-        return match ? match[1].trim() : "";
+      const getXmlTag = (...tags) => {
+        for (const tag of tags) {
+          const match = appBlock.match(new RegExp(`<(?:[a-zA-Z0-9_]+:)?${tag}[^>]*>([^<]+)<\\/(?:[a-zA-Z0-9_]+:)?${tag}>`, "i"));
+          if (match && match[1]?.trim()) return match[1].trim();
+        }
+        return "";
       };
 
-      const year = getXmlTag("Year") || getXmlTag("BaseVehicleYear") || getXmlTag("ModelYear");
-      const make = getXmlTag("Make") || getXmlTag("MakeName");
-      const model = getXmlTag("Model") || getXmlTag("ModelName");
-      const trim = getXmlTag("SubModel") || getXmlTag("SubModelName") || getXmlTag("EngineBase") || getXmlTag("Trim");
-      const partNumber = getXmlTag("Part") || getXmlTag("PartNumber") || getXmlTag("ItemNumber");
+      const year = getXmlTag("Year", "BaseVehicleYear", "ModelYear", "FromYear", "YearID");
+      const make = getXmlTag("Make", "MakeName", "Brand", "Manufacturer");
+      const model = getXmlTag("Model", "ModelName", "VehicleModel");
+      const trim = getXmlTag("SubModel", "SubModelName", "EngineBase", "Trim", "Sub_Model", "DriveType");
+      const partNumber = getXmlTag("Part", "PartNumber", "ItemNumber", "SKU", "PartTerminologyName");
 
       if (!year || !make || !model) {
         results.errors.push(`XML Record ${i + 1}: Missing Year, Make, or Model`);
@@ -158,7 +162,7 @@ export const action = async ({ request }) => {
   }
 
   // Parse CSV format
-  const lines = rawInput.trim().split("\n").filter((l) => l.trim());
+  const lines = rawInput.trim().split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) {
     return json({
       error: "The uploaded CSV file contains only a header row without any fitment data rows. Please add fitment data rows below the header line.",
@@ -166,8 +170,14 @@ export const action = async ({ request }) => {
     });
   }
 
+  // Auto-detect delimiter (comma, semicolon, or tab)
+  const firstLine = lines[0];
+  let delimiter = ",";
+  if (!firstLine.includes(",") && firstLine.includes(";")) delimiter = ";";
+  else if (!firstLine.includes(",") && firstLine.includes("\t")) delimiter = "\t";
+
   // Parse header - 1-Click Competitor Auto-Detection (Easy YMM, Fitment Group, Smart Search, Simple YMM, ACES)
-  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/["']/g, ""));
+  const headers = lines[0].split(delimiter).map((h) => h.trim().toLowerCase().replace(/["']/g, ""));
   let yearIdx = headers.findIndex((h) => ["year", "yearid", "modelyear", "model_year", "yyyy"].includes(h));
   let makeIdx = headers.findIndex((h) => ["make", "makename", "make_name", "manufacturer", "brand"].includes(h));
   let modelIdx = headers.findIndex((h) => ["model", "modelname", "model_name", "vehicle_model"].includes(h));
@@ -185,7 +195,7 @@ export const action = async ({ request }) => {
   }
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
+    const cols = lines[i].split(delimiter).map((c) => c.trim().replace(/^["']|["']$/g, ""));
     const year = cols[yearIdx];
     const make = cols[makeIdx];
     const model = cols[modelIdx];
@@ -319,32 +329,40 @@ export default function FitmentImport() {
       let rows = [["year", "make", "model", "trim", "product_handle", "product_title", "collection_handle", "tag", "sku"]];
       let input = acesInput.trim();
 
-      if (input.startsWith("<") || input.includes("<ACES") || input.includes("<App")) {
-        const appBlocks = input.match(/<App[\s\S]*?<\/App>/gi) || [];
+      if (input.startsWith("<") || input.includes("<ACES") || input.includes("<App") || input.includes("<Vehicle") || input.includes("<Item")) {
+        const appBlocks = input.match(/<(?:[a-zA-Z0-9_]+:)?(?:App|Vehicle|Item)[\s\S]*?<\/(?:[a-zA-Z0-9_]+:)?(?:App|Vehicle|Item)>/gi) || [];
         if (appBlocks.length === 0) {
-          setConversionStatus({ type: "error", message: "No <App> XML elements found in ACES content." });
+          setConversionStatus({ type: "error", message: "No <App>, <Vehicle>, or <Item> XML elements found in ACES/PIES content." });
           return;
         }
 
         appBlocks.forEach(appBlock => {
-          const getTag = (tag) => {
-            const match = appBlock.match(new RegExp(`<${tag}[^>]*>([^<]+)<\/${tag}>`, "i"));
-            return match ? match[1].trim() : "";
+          const getTag = (...tags) => {
+            for (const tag of tags) {
+              const match = appBlock.match(new RegExp(`<(?:[a-zA-Z0-9_]+:)?${tag}[^>]*>([^<]+)<\\/(?:[a-zA-Z0-9_]+:)?${tag}>`, "i"));
+              if (match && match[1]?.trim()) return match[1].trim();
+            }
+            return "";
           };
-          const year = getTag("Year") || getTag("BaseVehicleYear") || getTag("ModelYear");
-          const make = getTag("Make") || getTag("MakeName");
-          const model = getTag("Model") || getTag("ModelName");
-          const trim = getTag("SubModel") || getTag("SubModelName") || getTag("EngineBase") || getTag("Trim");
-          const part = getTag("Part") || getTag("PartNumber") || getTag("ItemNumber");
+          const year = getTag("Year", "BaseVehicleYear", "ModelYear", "FromYear", "YearID");
+          const make = getTag("Make", "MakeName", "Brand", "Manufacturer");
+          const model = getTag("Model", "ModelName", "VehicleModel");
+          const trim = getTag("SubModel", "SubModelName", "EngineBase", "Trim", "Sub_Model", "DriveType");
+          const part = getTag("Part", "PartNumber", "ItemNumber", "SKU", "PartTerminologyName");
 
           if (year && make && model) {
             rows.push([year, make, model, trim, part, "", "", "", part]);
           }
         });
       } else {
-        const lines = input.split("\n").filter(l => l.trim());
+        const lines = input.split(/\r?\n/).filter(l => l.trim());
         if (lines.length > 1) {
-          const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/["']/g, ""));
+          const firstLine = lines[0];
+          let delimiter = ",";
+          if (!firstLine.includes(",") && firstLine.includes(";")) delimiter = ";";
+          else if (!firstLine.includes(",") && firstLine.includes("\t")) delimiter = "\t";
+
+          const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase().replace(/["']/g, ""));
           const yearIdx = headers.findIndex(h => ["year", "yearid", "modelyear", "basevehicleyear", "model_year", "yyyy"].includes(h));
           const makeIdx = headers.findIndex(h => ["make", "makename", "make_name", "brand", "manufacturer"].includes(h));
           const modelIdx = headers.findIndex(h => ["model", "modelname", "model_name", "vehicle_model"].includes(h));
@@ -352,7 +370,7 @@ export default function FitmentImport() {
           const partIdx = headers.findIndex(h => ["partnumber", "part_number", "part", "partno", "sku", "itemnumber", "product_sku", "handle"].includes(h));
 
           for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(",").map(c => c.trim().replace(/^["']|["']$/g, ""));
+            const cols = lines[i].split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ""));
             const year = yearIdx >= 0 ? cols[yearIdx] : "";
             const make = makeIdx >= 0 ? cols[makeIdx] : "";
             const model = modelIdx >= 0 ? cols[modelIdx] : "";
@@ -455,7 +473,7 @@ export default function FitmentImport() {
   };
 
   return (
-    <div style={{ padding: "32px 24px 60px", maxWidth: "920px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+    <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
       {/* Top Breadcrumb Navigation */}
       <div style={{ marginBottom: "20px" }}>
         <Link to="/app/fitment" style={{ color: "#475569", fontSize: "14px", fontWeight: "600", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
@@ -556,30 +574,48 @@ export default function FitmentImport() {
             <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <div>
                 <div style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>Standard PartMatch CSV</div>
-                <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "14px" }}>Default 9-column fitment catalog format</div>
+                <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "14px" }}>Default 9-column fitment catalog format (Universal & SKU compatible)</div>
               </div>
-              <button
-                type="button"
-                onClick={() => downloadFile(sampleCSV, "partmatch_sample.csv", "text/csv")}
-                style={{ background: "#ffffff", color: "#0f172a", border: "1px solid #cbd5e1", padding: "9px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", width: "100%", textAlign: "center" }}
-              >
-                Download Standard CSV
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <button
+                  type="button"
+                  onClick={() => downloadFile(sampleCSV, "partmatch_sample.csv", "text/csv")}
+                  style={{ background: "#0f172a", color: "#ffffff", border: "none", padding: "9px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", width: "100%", textAlign: "center" }}
+                >
+                  Download Standard CSV
+                </button>
+                <a
+                  href="/partmatch_sample_template.csv"
+                  download="partmatch_sample_template.csv"
+                  style={{ fontSize: "11px", color: "#2563eb", textDecoration: "none", textAlign: "center", fontWeight: "600" }}
+                >
+                  Direct link (.csv) ↗
+                </a>
+              </div>
             </div>
 
             {/* Template Card 2 */}
             <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <div>
                 <div style={{ fontSize: "14px", fontWeight: "700", color: "#166534", marginBottom: "4px" }}>ACES Standard CSV</div>
-                <div style={{ fontSize: "12px", color: "#15803d", marginBottom: "14px" }}>North American ACES vehicle mappings</div>
+                <div style={{ fontSize: "12px", color: "#15803d", marginBottom: "14px" }}>North American ACES vehicle & part mappings</div>
               </div>
-              <button
-                type="button"
-                onClick={() => downloadFile(sampleACES, "aces_fitment_sample.csv", "text/csv")}
-                style={{ background: "#ffffff", color: "#15803d", border: "1px solid #86efac", padding: "9px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", width: "100%", textAlign: "center" }}
-              >
-                Download ACES CSV
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <button
+                  type="button"
+                  onClick={() => downloadFile(sampleACES, "aces_fitment_sample.csv", "text/csv")}
+                  style={{ background: "#166534", color: "#ffffff", border: "none", padding: "9px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", width: "100%", textAlign: "center" }}
+                >
+                  Download ACES CSV
+                </button>
+                <a
+                  href="/aces_sample_template.csv"
+                  download="aces_sample_template.csv"
+                  style={{ fontSize: "11px", color: "#166534", textDecoration: "none", textAlign: "center", fontWeight: "600" }}
+                >
+                  Direct link (.csv) ↗
+                </a>
+              </div>
             </div>
 
             {/* Template Card 3 */}
@@ -588,13 +624,22 @@ export default function FitmentImport() {
                 <div style={{ fontSize: "14px", fontWeight: "700", color: "#1e40af", marginBottom: "4px" }}>ACES Enterprise XML</div>
                 <div style={{ fontSize: "12px", color: "#1d4ed8", marginBottom: "14px" }}>Industry ACES 3.2 XML catalog specification</div>
               </div>
-              <button
-                type="button"
-                onClick={() => downloadFile(sampleACESXML, "aces_catalog_sample.xml", "application/xml")}
-                style={{ background: "#ffffff", color: "#1d4ed8", border: "1px solid #93c5fd", padding: "9px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", width: "100%", textAlign: "center" }}
-              >
-                Download ACES XML
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <button
+                  type="button"
+                  onClick={() => downloadFile(sampleACESXML, "aces_catalog_sample.xml", "application/xml")}
+                  style={{ background: "#1d4ed8", color: "#ffffff", border: "none", padding: "9px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", width: "100%", textAlign: "center" }}
+                >
+                  Download ACES XML
+                </button>
+                <a
+                  href="/aces_sample_template.xml"
+                  download="aces_sample_template.xml"
+                  style={{ fontSize: "11px", color: "#1d4ed8", textDecoration: "none", textAlign: "center", fontWeight: "600" }}
+                >
+                  Direct link (.xml) ↗
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -705,6 +750,67 @@ export default function FitmentImport() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Enterprise ACES & PIES Integration Concierge ($200+/mo Enterprise Custom Tier) */}
+        <div style={{
+          background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
+          border: "1px solid #312e81",
+          borderRadius: "14px",
+          padding: "22px 26px",
+          color: "#ffffff",
+          marginBottom: "32px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "16px"
+        }}>
+          <div style={{ maxWidth: "620px" }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "rgba(129, 140, 248, 0.2)", border: "1px solid rgba(129, 140, 248, 0.4)", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px", color: "#c7d2fe", marginBottom: "8px" }}>
+              Enterprise Custom Feeds ($200+/mo Custom Tier)
+            </div>
+            <h3 style={{ fontSize: "16px", fontWeight: "800", margin: "0 0 6px", color: "#ffffff" }}>
+              Have Large ACES 3.2 / 4.0 XML, SEMA Data Co-op (SDC), or WHI Nexpart Feeds?
+            </h3>
+            <p style={{ margin: 0, fontSize: "13px", color: "#cbd5e1", lineHeight: "1.5" }}>
+              For enterprise catalogs with 50,000+ to 1,000,000+ fitments, our dedicated automotive engineering team provides automated daily SFTP feed synchronization, custom XML validation, and 1-on-1 catalog mapping concierge.
+            </p>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: "180px" }}>
+            <Link
+              to="/app/support"
+              style={{
+                background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+                color: "#ffffff",
+                padding: "10px 18px",
+                borderRadius: "8px",
+                fontWeight: "700",
+                fontSize: "13px",
+                textAlign: "center",
+                textDecoration: "none",
+                boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)"
+              }}
+            >
+              Request Enterprise Concierge →
+            </Link>
+            <Link
+              to="/app/plans"
+              style={{
+                background: "rgba(255, 255, 255, 0.1)",
+                color: "#cbd5e1",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                fontWeight: "600",
+                fontSize: "12px",
+                textAlign: "center",
+                textDecoration: "none"
+              }}
+            >
+              View Enterprise Plans
+            </Link>
+          </div>
         </div>
 
         {!planAllowsImport && (

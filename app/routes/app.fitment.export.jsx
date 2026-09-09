@@ -174,8 +174,8 @@ export default function FitmentExport() {
 
   if (!data?.allowed) {
     return (
-      <div style={{ padding: "32px 24px", maxWidth: "700px", margin: "40px auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
-        <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", color: "#78350f", padding: "24px", borderRadius: "12px" }}>
+      <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+        <div style={{ maxWidth: "800px", margin: "40px auto", background: "#fffbe6", border: "1px solid #ffe58f", color: "#78350f", padding: "24px", borderRadius: "12px" }}>
           <strong style={{ color: "#b45309", fontSize: "16px", display: "block", marginBottom: "6px" }}>Growth Professional Feature</strong>
           <p style={{ margin: "0 0 16px", fontSize: "14px" }}>{data?.message}</p>
           <Link to="/app/plans" style={{ color: "#2563eb", fontWeight: "700", textDecoration: "none" }}>Upgrade Plan →</Link>
@@ -185,8 +185,8 @@ export default function FitmentExport() {
   }
 
   return (
-    <div style={{ padding: "32px 24px", maxWidth: "700px", margin: "40px auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", color: "#202223" }}>
-      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", textAlign: "center", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)" }}>
+    <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+      <div style={{ maxWidth: "800px", margin: "0 auto", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", textAlign: "center", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)" }}>
         <div style={{ width: "56px", height: "56px", background: "#ecfdf5", color: "#10b981", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: "28px", fontWeight: "bold" }}>
           ✓
         </div>

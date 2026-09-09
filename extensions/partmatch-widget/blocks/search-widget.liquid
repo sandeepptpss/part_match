@@ -208,19 +208,21 @@
       </div>
 
       <button
+        type="button"
         class="pm-btn pm-btn--search"
         data-partmatch-search
-        disabled
       >
         {{ pm_search_text }}
         <span class="pm-spinner" data-partmatch-spinner></span>
       </button>
 
-      <button class="pm-btn pm-btn--clear" data-partmatch-clear>
+      <button type="button" class="pm-btn pm-btn--clear" data-partmatch-clear>
         {{ pm_clear_text }}
       </button>
     </div>
   {%- endif -%}
+
+  <div class="pm-validation-msg" data-partmatch-validation style="display: none;"></div>
 
   <div data-partmatch-results></div>
 </div>

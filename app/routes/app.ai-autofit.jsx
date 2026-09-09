@@ -152,7 +152,7 @@ export default function AiAutoFitCatalog() {
 
   if (!data.allowed) {
     return (
-      <div style={{ padding: "32px", maxWidth: "800px", margin: "0 auto", fontFamily: "sans-serif" }}>
+      <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
         <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", padding: "24px", borderRadius: "12px" }}>
           <h2 style={{ color: "#b45309", marginTop: 0 }}>Enterprise AI Feature</h2>
           <p>{data.message}</p>
@@ -226,7 +226,7 @@ export default function AiAutoFitCatalog() {
   };
 
   return (
-    <div style={{ padding: "32px 24px 60px", maxWidth: "1050px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", color: "#0f172a" }}>
+    <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
       <Link to="/app/fitment" style={{ color: "#2563eb", fontWeight: "600", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px", marginBottom: "20px" }}>
         ← Back to Fitments Management
       </Link>

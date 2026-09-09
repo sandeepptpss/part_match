@@ -635,13 +635,14 @@ export default function AdminPage() {
   return (
     <div
       style={{
-        maxWidth: "1200px",
+        width: "100%",
+        maxWidth: "100%",
+        boxSizing: "border-box",
         margin: "0 auto",
-        padding: "20px 16px",
+        padding: "28px 24px 60px",
         fontFamily:
           "-apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
         color: "#0f172a",
-        boxSizing: "border-box",
       }}
     >
       {/* Toast Notification Alert */}

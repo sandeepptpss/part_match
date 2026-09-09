@@ -84,12 +84,12 @@ export default function FitmentAdd() {
   const modelValue = values.model ?? initialModel ?? "";
 
   return (
-    <div style={{ padding: "32px 24px", maxWidth: "680px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#202223" }}>
+    <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
       <Link to="/app/fitment" style={{ color: "#2563eb", fontSize: "14px", fontWeight: "600", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px", marginBottom: "20px" }}>
         ← Back to Fitment Catalog
       </Link>
 
-      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)" }}>
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "32px", maxWidth: "780px", margin: "0 auto", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05)" }}>
         <div style={{ borderBottom: "1px solid #f1f5f9", pb: "20px", marginBottom: "24px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
             <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>Add Fitment Specification</h1>

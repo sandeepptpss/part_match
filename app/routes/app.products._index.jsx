@@ -197,17 +197,17 @@ export default function ProductsIndex() {
   };
 
   return (
-    <div style={{ padding: "28px 24px 60px", maxWidth: "1240px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+    <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
 
       {/* Page Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "16px" }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
             <h1 style={{ fontSize: "24px", fontWeight: "800", margin: 0, color: "#0f172a", letterSpacing: "-0.5px" }}>
               Product Fitment Directory
             </h1>
-            <span style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "2px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "700" }}>
-              {filteredProducts.length.toLocaleString()} Mapped Link{filteredProducts.length === 1 ? "" : "s"}
+            <span style={{ background: "#f1f5f9", color: "#475569", padding: "2px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "700" }}>
+              {totalCount.toLocaleString()} Records
             </span>
           </div>
           <p style={{ color: "#64748b", margin: 0, fontSize: "14px" }}>
@@ -215,93 +215,60 @@ export default function ProductsIndex() {
           </p>
         </div>
 
-        {/* Tab Navigation */}
-        <div style={{ display: "flex", gap: "6px", background: "#f1f5f9", borderRadius: "10px", padding: "4px" }}>
-          <Link to="/app/products" style={tabStyle(true)}>
-            Fitment Mapped Products ({totalCount})
+        {/* Action Buttons */}
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+          <Link to="/app/fitment/add" style={primaryBtn}>
+            + Add Fitment Record
           </Link>
-          <Link to="/app/products/universal" style={tabStyle(false)}>
-            Universal Products
+          <Link to="/app/fitment" style={secondaryBtn}>
+            Fitment Catalog
+          </Link>
+          <Link to="/app/fitment/import" style={outlineBtn}>
+            Import CSV
           </Link>
         </div>
       </div>
 
-      {/* Real-time Search & Filter Controls */}
+      {/* Tab Navigation */}
+      <div style={{ display: "inline-flex", gap: "6px", background: "#f1f5f9", borderRadius: "10px", padding: "4px", marginBottom: "20px" }}>
+        <Link to="/app/products" style={tabStyle(true)}>
+          Fitment Mapped Products ({totalCount})
+        </Link>
+        <Link to="/app/products/universal" style={tabStyle(false)}>
+          Universal Products
+        </Link>
+      </div>
+
+      {/* Search & Filter Card */}
       <div
         style={{
           background: "#ffffff",
           border: "1px solid #e2e8f0",
-          borderRadius: "16px",
-          padding: "18px 22px",
-          marginBottom: "24px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+          borderRadius: "14px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
         }}
       >
-        {/* Search Input Bar */}
-        <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "14px" }}>
+        {/* Search Input Bar with Server Query */}
+        <Form method="get" style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "14px" }}>
           <div style={{ flex: 1, position: "relative" }}>
-            <div
-              style={{
-                position: "absolute",
-                left: "14px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "#64748b",
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-            </div>
             <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search products by title, handle, or vehicle (e.g. Brake Pad, Tata, 2025)..."
-              style={{
-                width: "100%",
-                padding: "11px 40px 11px 42px",
-                border: "1px solid #cbd5e1",
-                borderRadius: "10px",
-                fontSize: "14px",
-                outline: "none",
-                boxSizing: "border-box",
-                background: "#f8fafc",
-                transition: "all 0.15s ease",
-              }}
+              name="q"
+              defaultValue={search}
+              placeholder="Search products by title, handle, or vehicle (e.g. Brake Pad, Tata, 2025)…"
+              style={searchInputStyle}
             />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "#e2e8f0",
-                  border: "none",
-                  borderRadius: "50%",
-                  width: "22px",
-                  height: "22px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#475569",
-                  cursor: "pointer",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                }}
-                title="Clear search query"
-              >
-                ✕
-              </button>
-            )}
           </div>
-        </div>
+          <button type="submit" style={primaryBtn}>
+            Search Products
+          </button>
+          {search && (
+            <Link to="/app/products" style={outlineBtn}>
+              ✕ Clear Search
+            </Link>
+          )}
+        </Form>
 
         {/* Filter Toolbar Row */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", paddingTop: "12px", borderTop: "1px solid #f1f5f9" }}>
@@ -310,7 +277,7 @@ export default function ProductsIndex() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
               </svg>
-              Filter Products:
+              Filter Loaded:
             </span>
 
             {/* Filter by Make Dropdown */}
@@ -381,10 +348,13 @@ export default function ProductsIndex() {
             <span style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
               Showing <strong>{filteredProducts.length}</strong> of <strong>{totalCount}</strong> items
             </span>
-            {hasActiveFilters && (
+            {(selectedMake !== "all" || selectedYear !== "all") && (
               <button
                 type="button"
-                onClick={clearAllFilters}
+                onClick={() => {
+                  setSelectedMake("all");
+                  setSelectedYear("all");
+                }}
                 style={{
                   background: "#fef2f2",
                   border: "1px solid #fecaca",
@@ -399,7 +369,7 @@ export default function ProductsIndex() {
                   gap: "4px",
                 }}
               >
-                <span>✕</span> Reset All Filters
+                <span>✕</span> Reset Vehicle Filters
               </button>
             )}
           </div>
@@ -407,7 +377,7 @@ export default function ProductsIndex() {
       </div>
 
       {/* Product Mappings Table Card */}
-      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0, 0, 0, 0.03)" }}>
+      <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", overflow: "hidden", boxShadow: "0 4px 16px rgba(0, 0, 0, 0.03)" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
             <tr>
@@ -522,10 +492,10 @@ export default function ProductsIndex() {
                         {fitment && (
                           <Link
                             to={`/app/fitment/${fitment.id}/products`}
-                            style={tableActionBtn("#2563eb", "#eff6ff")}
+                            style={tableActionBtn("#2563eb", "#dbeafe")}
                             title="Manage products for this vehicle"
                           >
-                            Manage Mappings →
+                            Manage Mappings
                           </Link>
                         )}
                         <UnlinkButton mappingId={item.id} />
@@ -747,6 +717,21 @@ const primaryBtn = {
   border: "none",
   cursor: "pointer",
   boxShadow: "0 2px 6px rgba(0, 128, 96, 0.25)",
+};
+
+const secondaryBtn = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  background: "#2563eb",
+  color: "#ffffff",
+  padding: "10px 16px",
+  borderRadius: "8px",
+  textDecoration: "none",
+  fontSize: "14px",
+  fontWeight: "600",
+  border: "none",
+  boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
 };
 
 const outlineBtn = {

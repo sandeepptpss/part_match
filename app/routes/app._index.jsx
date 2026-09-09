@@ -145,7 +145,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div style={{ padding: "28px 24px 60px", maxWidth: "1240px", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+    <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
       
       {/* VIP Free Offer Merchant Notification Banner */}
       {vipFreeOfferNotification && (

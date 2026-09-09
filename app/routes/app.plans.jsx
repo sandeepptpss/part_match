@@ -2,7 +2,7 @@
 /* eslint-disable react/prop-types */
 const json = (data, init) => Response.json(data, init);
 import { useState } from "react";
-import { useLoaderData, useFetcher, useActionData } from "react-router";
+import { useLoaderData, useFetcher, useActionData, Link } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { BillingInterval } from "@shopify/shopify-app-react-router/server";
@@ -598,7 +598,7 @@ export default function PlansPage() {
   ];
 
   return (
-    <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "20px 16px 60px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+    <div style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", padding: "28px 24px 60px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
       {/* Action Notification Banner */}
       {actionData?.message && (
         <div
@@ -902,6 +902,63 @@ export default function PlansPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* Enterprise Custom Solutions Callout ($200+/mo Custom Tiers) */}
+      <div style={{
+        background: "linear-gradient(135deg, #090d16 0%, #1e1b4b 50%, #0f172a 100%)",
+        border: "1px solid #4338ca",
+        borderRadius: "16px",
+        padding: "28px 32px",
+        color: "#ffffff",
+        marginBottom: "36px",
+        boxShadow: "0 10px 25px -5px rgba(30, 27, 75, 0.3)",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "20px"
+      }}>
+        <div style={{ maxWidth: "680px" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(99, 102, 241, 0.25)", border: "1px solid rgba(129, 140, 248, 0.5)", padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.8px", color: "#a5b4fc", marginBottom: "12px" }}>
+            <span>⚡ HIGH-VOLUME AUTO ENTERPRISE & DISTRIBUTORS ($200+ / mo)</span>
+          </div>
+          <h2 style={{ fontSize: "20px", fontWeight: "800", margin: "0 0 8px", color: "#ffffff", letterSpacing: "-0.3px" }}>
+            Need ACES 3.2 / 4.0 XML, SEMA Data Co-op (SDC), or Automated SFTP Sync?
+          </h2>
+          <p style={{ margin: 0, fontSize: "14px", color: "#cbd5e1", lineHeight: "1.6" }}>
+            Large automotive manufacturers, distributors, and multi-brand parts stores require custom database scale. Our Enterprise Custom tier provides <strong>Automated Daily ACES/PIES XML SFTP ingestion</strong>, <strong>SEMA Data Co-op & WHI Nexpart feeds</strong>, <strong>1,000,000+ SKU support</strong>, and a <strong>Dedicated Automotive Catalog Engineer</strong>.
+          </p>
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginTop: "14px", fontSize: "12px", color: "#a5b4fc", fontWeight: "600" }}>
+            <span>✓ ACES 3.2 & 4.0 Standard XML</span>
+            <span>✓ PIES 7.2 Product Data Feeds</span>
+            <span>✓ Automated SFTP / FTP Ingestion</span>
+            <span>✓ 99.99% Edge Cache SLA</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: "220px" }}>
+          <Link
+            to="/app/support?topic=enterprise_custom"
+            style={{
+              background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+              color: "#ffffff",
+              padding: "12px 22px",
+              borderRadius: "10px",
+              fontWeight: "700",
+              fontSize: "14px",
+              textAlign: "center",
+              textDecoration: "none",
+              boxShadow: "0 4px 14px rgba(99, 102, 241, 0.4)",
+              transition: "transform 0.15s ease"
+            }}
+          >
+            Request Enterprise Quote →
+          </Link>
+          <div style={{ textAlign: "center", fontSize: "12px", color: "#94a3b8" }}>
+            Custom billing & annual invoicing available
+          </div>
+        </div>
       </div>
 
       {/* Comprehensive Feature Comparison Matrix (4 Plans) */}
