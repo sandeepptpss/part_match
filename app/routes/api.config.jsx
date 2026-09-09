@@ -63,12 +63,24 @@ export async function loader({ request }) {
   const { plan } = await getShopPlan(shop);
   const limits = planLimits(plan);
 
+  const maskedWidget = widget
+    ? {
+        ...widget,
+        enableVinSearch: Boolean(widget.enableVinSearch && limits.vinLookup),
+        enableVoiceSearch: Boolean(widget.enableVoiceSearch && limits.voiceSearchAssistant),
+      }
+    : null;
+
   const settings = appSettings
-    ? { ...appSettings, showFitmentChecker: appSettings.showFitmentChecker && limits.fitmentChecker }
+    ? {
+        ...appSettings,
+        showFitmentChecker: Boolean(appSettings.showFitmentChecker && limits.fitmentChecker),
+        enableTrim: Boolean(appSettings.enableTrim !== false && limits.subModelTrim !== false),
+      }
     : null;
 
   return json({
-    widget,
+    widget: maskedWidget,
     settings,
     limits,
   });

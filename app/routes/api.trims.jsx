@@ -1,6 +1,7 @@
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getShopPlan, planLimits } from "../plans.server";
 
 // GET /apps/partmatch/api/trims?year=&make=&model= (proxied storefront request)
 export async function loader({ request }) {
@@ -13,6 +14,12 @@ export async function loader({ request }) {
   }
 
   if (!shop) {
+    return json({ trims: [], hasTrims: false });
+  }
+
+  const shopPlan = await getShopPlan(shop);
+  const limits = planLimits(shopPlan?.plan || "free");
+  if (!limits.subModelTrim) {
     return json({ trims: [], hasTrims: false });
   }
 

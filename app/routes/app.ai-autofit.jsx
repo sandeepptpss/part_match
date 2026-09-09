@@ -55,6 +55,20 @@ export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
+  const { plan } = await getShopPlan(shop);
+  const limits = planLimits(plan);
+  if (!limits.aiFitmentSuggestions) {
+    return json(
+      { error: "AI Auto-Fit is an Enterprise plan feature. Upgrade your plan to automatically map catalog fitments." },
+      { status: 403 },
+    );
+  }
+
+  let recordCount = Number.isFinite(limits.fitmentLimit)
+    ? await prisma.fitmentRecord.count({ where: { shop } })
+    : 0;
+  let limitReached = false;
+
   const formData = await request.formData();
   const selectedItemsRaw = formData.get("selectedItems")?.toString() || "[]";
 
@@ -70,12 +84,26 @@ export const action = async ({ request }) => {
     const { year, make, model, trim = "", shopifyProductId, shopifyHandle, productTitle } = item;
     if (!year || !make || !model || !shopifyProductId) continue;
 
+    if (limitReached) continue;
+
     try {
+      const existingRecord = Number.isFinite(limits.fitmentLimit)
+        ? await prisma.fitmentRecord.findUnique({
+            where: { shop_year_make_model_trim: { shop, year, make, model, trim } },
+          })
+        : null;
+
+      if (!existingRecord && Number.isFinite(limits.fitmentLimit) && recordCount >= limits.fitmentLimit) {
+        limitReached = true;
+        continue;
+      }
+
       const fitment = await prisma.fitmentRecord.upsert({
         where: { shop_year_make_model_trim: { shop, year, make, model, trim } },
         create: { shop, year, make, model, trim },
         update: {},
       });
+      if (!existingRecord) recordCount++;
 
       await prisma.fitmentProduct.upsert({
         where: {
@@ -102,7 +130,11 @@ export const action = async ({ request }) => {
     }
   }
 
-  return json({ success: true, count: createdCount });
+  return json({
+    success: true,
+    count: createdCount,
+    limitReached,
+  });
 };
 
 export default function AiAutoFitCatalog() {

@@ -34,13 +34,13 @@ export async function loader({ request }) {
   const vehicles = await prisma.savedVehicle?.findMany({
     where: { shop: session.shop, customerId },
     orderBy: { createdAt: "desc" },
-    select: { year: true, make: true, model: true },
+    select: { year: true, make: true, model: true, trim: true },
   });
 
   return json({ loggedIn: true, vehicles: vehicles ?? [] });
 }
 
-// POST /apps/partmatch/api/garage  body: { intent: "add"|"remove", year, make, model }
+// POST /apps/partmatch/api/garage  body: { intent: "add"|"remove", year, make, model, trim }
 export async function action({ request }) {
   const { session } = await authenticate.public.appProxy(request);
   if (!session) return json({ error: "Unauthorized" }, { status: 401 });
@@ -65,10 +65,12 @@ export async function action({ request }) {
     return json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { intent, year, make, model } = body;
+  const { intent, year, make, model, trim = "" } = body;
   if (!year || !make || !model) {
     return json({ error: "Missing year, make, or model" }, { status: 400 });
   }
+
+  const cleanTrim = (trim || "").toString().trim();
 
   if (intent === "add") {
     const count = await prisma.savedVehicle?.count({ where: { shop, customerId } });
@@ -76,20 +78,38 @@ export async function action({ request }) {
       return json({ error: `Garage is full (max ${MAX_VEHICLES} vehicles)` }, { status: 400 });
     }
     await prisma.savedVehicle?.upsert({
-      where: { shop_customerId_year_make_model: { shop, customerId, year, make, model } },
-      create: { shop, customerId, year, make, model },
+      where: {
+        shop_customerId_year_make_model_trim: {
+          shop,
+          customerId,
+          year,
+          make,
+          model,
+          trim: cleanTrim,
+        },
+      },
+      create: { shop, customerId, year, make, model, trim: cleanTrim },
       update: {},
     });
   }
 
   if (intent === "remove") {
-    await prisma.savedVehicle?.deleteMany({ where: { shop, customerId, year, make, model } });
+    await prisma.savedVehicle?.deleteMany({
+      where: {
+        shop,
+        customerId,
+        year,
+        make,
+        model,
+        ...(cleanTrim ? { trim: cleanTrim } : {}),
+      },
+    });
   }
 
   const vehicles = await prisma.savedVehicle?.findMany({
     where: { shop, customerId },
     orderBy: { createdAt: "desc" },
-    select: { year: true, make: true, model: true },
+    select: { year: true, make: true, model: true, trim: true },
   });
 
   return json({ loggedIn: true, vehicles: vehicles ?? [] });

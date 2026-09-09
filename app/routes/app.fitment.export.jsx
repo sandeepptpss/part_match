@@ -15,16 +15,21 @@ export async function loader({ request }) {
   const { plan } = await getShopPlan(shop);
   const limits = planLimits(plan);
   if (!limits.csvImportExport) {
+    const msg = `Bulk CSV Export requires a paid plan (Starter Pro or above). Your current plan is ${limits.label}.`;
     if (url.searchParams.get("raw") === "true") {
-      return json({
-        allowed: false,
-        message: `CSV & ACES Export requires the Growth Professional plan or above. Your current plan is ${limits.label}.`,
-      }, { status: 403 });
+      return json({ allowed: false, message: msg }, { status: 403 });
     }
-    return json({
-      allowed: false,
-      message: `CSV & ACES Export requires the Growth Professional plan or above. Your current plan is ${limits.label}.`,
-    });
+    return json({ allowed: false, message: msg });
+  }
+
+  if (format === "aces_xml" || format === "aces_csv") {
+    if (!limits.acesPiesSupport) {
+      const msg = `ACES / PIES Export is an advanced feature available on Growth Pro and Enterprise plans. Your current plan (${limits.label}) includes Standard CSV Export only.`;
+      if (url.searchParams.get("raw") === "true") {
+        return json({ allowed: false, message: msg }, { status: 403 });
+      }
+      return json({ allowed: false, message: msg });
+    }
   }
 
   const records = await prisma.fitmentRecord?.findMany({

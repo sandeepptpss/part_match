@@ -9,7 +9,11 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const { plan } = await getShopPlan(session.shop);
   const limits = planLimits(plan);
-  return json({ planAllowsImport: limits.csvImportExport, planLabel: limits.label });
+  return json({
+    planAllowsImport: limits.csvImportExport,
+    planAllowsAces: limits.acesPiesSupport,
+    planLabel: limits.label,
+  });
 };
 
 export const action = async ({ request }) => {
@@ -20,7 +24,7 @@ export const action = async ({ request }) => {
   const limits = planLimits(plan);
   if (!limits.csvImportExport) {
     return json({
-      error: `CSV & ACES/PIES Bulk Import is available on the Growth Professional plan and above. Upgrade your plan to import records.`,
+      error: `Bulk CSV Import is available on paid plans (Starter Pro and above). Upgrade your plan to import records.`,
       results: null,
     });
   }
@@ -64,6 +68,13 @@ export const action = async ({ request }) => {
 
   // Auto-detect XML format (ACES XML or PIES XML)
   if (rawInput.trim().startsWith("<")) {
+    if (!limits.acesPiesSupport) {
+      return json({
+        error: `ACES / PIES XML format import is an advanced feature available on Growth Pro and Enterprise plans. Please upgrade your plan to import ACES XML files, or upload standard PartMatch CSV.`,
+        results: null,
+      });
+    }
+
     const appRegex = /<App[\s\S]*?<\/App>/gi;
     const matches = rawInput.match(appRegex) || [];
 
@@ -698,9 +709,9 @@ export default function FitmentImport() {
 
         {!planAllowsImport && (
           <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", color: "#78350f", padding: "20px", borderRadius: "12px", marginBottom: "28px" }}>
-            <strong style={{ color: "#b45309", fontSize: "15px", display: "block", marginBottom: "4px" }}>Growth Professional Feature</strong>
+            <strong style={{ color: "#b45309", fontSize: "15px", display: "block", marginBottom: "4px" }}>Starter Pro & Growth Feature</strong>
             <p style={{ margin: "0 0 12px", fontSize: "14px" }}>
-              Bulk CSV Import requires the Growth Professional plan. Upgrade to import thousands of records at once.
+              Bulk CSV Import is available on Starter Pro and above. Upgrade to import thousands of records at once.
             </p>
             <Link to="/app/plans" style={{ color: "#2563eb", fontWeight: "700", fontSize: "14px", textDecoration: "none" }}>Upgrade Plan →</Link>
           </div>

@@ -42,6 +42,7 @@ export const PLAN_TIERS = {
     acesPiesSupport: false,
     competitorMigration: false,
     voiceSearchAssistant: false,
+    subModelTrim: false,
   },
   starter: {
     label: "Starter Pro",
@@ -58,6 +59,7 @@ export const PLAN_TIERS = {
     acesPiesSupport: false,
     competitorMigration: false,
     voiceSearchAssistant: false,
+    subModelTrim: true,
   },
   growth: {
     label: "Growth Pro",
@@ -74,6 +76,7 @@ export const PLAN_TIERS = {
     acesPiesSupport: true,
     competitorMigration: true,
     voiceSearchAssistant: true,
+    subModelTrim: true,
   },
   enterprise: {
     label: "Enterprise Unlimited",
@@ -90,6 +93,7 @@ export const PLAN_TIERS = {
     acesPiesSupport: true,
     competitorMigration: true,
     voiceSearchAssistant: true,
+    subModelTrim: true,
   },
 };
 

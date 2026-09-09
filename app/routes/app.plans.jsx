@@ -492,115 +492,114 @@ export default function PlansPage() {
           free: "✕",
           starter: "✓ Standard CSV",
           growth: "✓ Unlimited CSV",
-          enterprise: "✓ Automated Sync",
+          enterprise: "✓ Automated Sync & Unlimited",
         },
         {
           name: "1-Click Competitor Data Migration Importer",
           free: "✕",
           starter: "✕",
           growth: "✓ Easy YMM / Fitment Group / ACES",
-          enterprise: "✓ Unlimited Competitor Migration",
-        },
-        {
-          name: "Universal Products Support",
-          free: "✕",
-          starter: "✓ Unlimited",
-          growth: "✓ Unlimited",
-          enterprise: "✓ Unlimited",
+          enterprise: "✓ Unlimited Migration Tools",
         },
       ],
     },
     {
-      category: "Smart Search & AI Intelligence",
+      category: "VIN & Search AI Intelligence",
       rows: [
         {
-          name: "VIN Lookups Allowance",
-          free: "✕ Disabled",
-          starter: "25 Free/mo ($0.08 after)",
-          growth: "250 Free/mo ($0.05 after)",
-          enterprise: "1,000 Free/mo ($0.03 after)",
+          name: "VIN Lookup & Auto-Decoder",
+          free: "✕",
+          starter: "✓ 25 Free/mo ($0.08 overage)",
+          growth: "✓ 250 Free/mo ($0.05 overage)",
+          enterprise: "✓ 1,000 Free/mo ($0.03 overage)",
         },
         {
           name: "AI Voice & Conversational Search Assistant",
           free: "✕",
           starter: "✕",
-          growth: "✓ Standard Natural Voice Search",
-          enterprise: "✓ Advanced AI Conversational Engine",
+          growth: "✓ Standard Natural Voice",
+          enterprise: "✓ Advanced AI Engine",
         },
         {
           name: "1-Click AI Catalog Auto-Fitter (Beta)",
           free: "✕",
           starter: "✕",
           growth: "✕",
-          enterprise: "✓ Included (AI Suggestions)",
+          enterprise: "✓ Full Access (100% Automated)",
         },
         {
-          name: "Sub-Model & Trim Filtering",
-          free: "Basic Year/Make/Model",
-          starter: "✓ Sub-Model & Trim",
-          growth: "✓ Full Trim Support",
-          enterprise: "✓ Advanced Engine Specs",
-        },
-        {
-          name: "Search Analytics & Gap Intelligence",
-          free: "Basic Summary",
+          name: "Search Analytics & Intelligence",
+          free: "Basic Queries",
           starter: "Standard Analytics",
-          growth: "Detailed + Gap Logs",
-          enterprise: "Realtime Export",
+          growth: "Detailed + No-Result Gap Logs",
+          enterprise: "Real-Time Export & Dashboard",
         },
       ],
     },
     {
-      category: "Shopper Experience & Persistence",
+      category: "Storefront Fitment & Garage",
       rows: [
         {
+          name: "Sub-Model & Trim Level Filtering",
+          free: "Basic Year/Make/Model only",
+          starter: "✓ Sub-Model & Trim",
+          growth: "✓ Full Trim Support",
+          enterprise: "✓ Advanced Engine",
+        },
+        {
+          name: "Unlimited Universal Products Support",
+          free: "✕",
+          starter: "✓ Unlimited",
+          growth: "✓ Unlimited",
+          enterprise: "✓ Unlimited",
+        },
+        {
           name: "Product Page Fitment Checker Badge",
-          free: "✓ Basic Badge",
+          free: "✓ Basic",
           starter: "✓ Included",
           growth: "✓ Included",
-          enterprise: "✓ Included (Custom Styling)",
+          enterprise: "✓ Custom Styling",
         },
         {
           name: "My Garage Saved Vehicles Persistence",
-          free: "Local Storage",
-          starter: "Local Storage",
-          growth: "Local + Persistence",
-          enterprise: "Cross-Device Sync",
+          free: "Local Storage (5 cars)",
+          starter: "Local Storage (5 cars)",
+          growth: "✓ Cross-Device Customer DB",
+          enterprise: "✓ Cross-Device Customer DB",
         },
       ],
     },
     {
-      category: "Performance, SLA & Security",
+      category: "Performance, SLAs & Support",
       rows: [
         {
-          name: "Storefront Proxy SLA & Performance",
+          name: "Storefront Proxy SLA & Edge Caching",
           free: "Standard App Proxy",
           starter: "Standard App Proxy",
-          growth: "✓ High-Speed CDN Proxy",
-          enterprise: "✓ VIP Dedicated Proxy & Edge Caching",
+          growth: "✓ High-Speed Global CDN Proxy",
+          enterprise: "✓ Dedicated Edge Caching & SLA",
         },
         {
-          name: "Database Backups & Safety",
-          free: "Weekly Auto-Backup",
-          starter: "Weekly Auto-Backup",
-          growth: "Daily Automated Backups",
-          enterprise: "Hourly Realtime Backups",
+          name: "Daily Automated Database Backups",
+          free: "✕",
+          starter: "Weekly Backup",
+          growth: "✓ Daily Automated Backups",
+          enterprise: "✓ Real-Time Hourly Backups",
         },
         {
-          name: "Support SLA",
-          free: "Standard Email",
-          starter: "Email Support",
-          growth: "Priority Support",
-          enterprise: "VIP 1-on-1 Manager",
+          name: "Customer Support SLA",
+          free: "Standard Email (48h)",
+          starter: "Email Support (24h)",
+          growth: "✓ Priority Email & Live Desk (12h)",
+          enterprise: "✓ Dedicated 1-on-1 Account Manager",
         },
       ],
     },
   ];
 
   return (
-    <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "28px 20px 60px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
-
-      {/* Toast Notification */}
+    <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "20px 16px 60px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
+      {/* Action Notification Banner */}
       {actionData?.message && (
         <div
           style={{
@@ -619,7 +618,7 @@ export default function PlansPage() {
       )}
 
       {/* VIP Free 2-Months Offer Banner */}
-      {isVipFreeOfferActive && !isVipFreeOfferClaimed && (
+      {isVipFreeOfferActive && !isVipFreeOfferClaimed && activePlan !== "growth" && activePlan !== "enterprise" && (
         <div
           style={{
             background: "linear-gradient(135deg, #064e3b 0%, #047857 50%, #d97706 100%)",
@@ -680,41 +679,24 @@ export default function PlansPage() {
         </div>
       )}
 
-
-
-      {/* Merchant Discount Banner */}
-      {isCustomMerchantDiscount && (
-        <div
-          style={{
-            background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
-            border: "1px solid #f59e0b",
-            color: "#92400e",
-            padding: "16px 20px",
-            borderRadius: "14px",
-            marginBottom: "24px",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-          }}
-        >
-          <div style={{ background: "#f59e0b", color: "#ffffff", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase" }}>VIP</div>
+      {/* Hero Header */}
+      <div
+        style={{
+          background: "linear-gradient(135deg, #0b1329 0%, #1e293b 100%)",
+          borderRadius: "20px",
+          padding: "32px 32px 28px",
+          marginBottom: "32px",
+          color: "#ffffff",
+          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.3)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "20px", marginBottom: "24px" }}>
           <div>
-            <div style={{ fontWeight: "800", fontSize: "15px", color: "#78350f" }}>
-              Exclusive Merchant VIP Discount Active!
+            <div style={{ display: "inline-block", background: "rgba(16, 185, 129, 0.2)", border: "1px solid #10b981", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "700", color: "#34d399", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              PartMatch Automotive Fitment Plans
             </div>
-            <div style={{ fontSize: "13px", color: "#92400e" }}>
-              Special custom rate of <strong>{merchantDiscount}% OFF</strong> applied to your store (<strong>{shop}</strong>).
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Header Banner Card */}
-      <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", borderRadius: "20px", padding: "32px", marginBottom: "32px", color: "#ffffff", boxShadow: "0 12px 30px -5px rgba(15, 23, 42, 0.25)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px", marginBottom: "20px" }}>
-          <div>
-            <h1 style={{ margin: "0 0 6px", fontSize: "28px", fontWeight: "800", letterSpacing: "-0.5px" }}>
-              Simple, High-ROI Fitment Plans
+            <h1 style={{ margin: "0 0 8px", fontSize: "28px", fontWeight: "800", letterSpacing: "-0.5px" }}>
+              Transparent, Scalable Pricing for Automotive Stores
             </h1>
             <p style={{ margin: 0, color: "#94a3b8", fontSize: "15px" }}>
               Start with a 14-day free trial. Cancel or change plans anytime with 1 click.
@@ -778,7 +760,7 @@ export default function PlansPage() {
           if (isCurrent) {
             buttonLabel = "Current Active Plan";
           } else if (activePlan === plan.id) {
-            buttonLabel = billingCycle === "annual" ? `Switch to Annual (Save ${totalAnnualDiscount}%) →` : "Switch to Monthly →";
+            buttonLabel = billingCycle === "annual" ? `Switch to Annual (Save ${totalAnnualDiscount}%)` : "Switch to Monthly";
           } else if (plan.id === "free") {
             buttonLabel = "Downgrade to Free";
           }
@@ -788,52 +770,89 @@ export default function PlansPage() {
               key={plan.id}
               style={{
                 background: "#ffffff",
-                border: plan.highlight ? "2px solid #008060" : "1px solid #e2e8f0",
-                borderRadius: "18px",
-                padding: "24px 20px",
-                boxShadow: plan.highlight ? "0 12px 30px -5px rgba(0, 128, 96, 0.18)" : "0 4px 16px rgba(0,0,0,0.03)",
+                border: plan.highlight
+                  ? "2px solid #008060"
+                  : isCurrent
+                  ? "2px solid #10b981"
+                  : "1px solid #e2e8f0",
+                borderRadius: "16px",
+                padding: "26px 22px 22px",
+                boxShadow: plan.highlight
+                  ? "0 12px 30px rgba(0, 128, 96, 0.15)"
+                  : "0 2px 10px rgba(0,0,0,0.04)",
                 position: "relative",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
+                transform: plan.highlight ? "scale(1.02)" : "none",
+                transition: "all 0.2s ease",
               }}
             >
               {plan.badge && (
-                <div style={{ position: "absolute", top: "-13px", right: "16px", background: "#008060", color: "#ffffff", padding: "4px 10px", borderRadius: "12px", fontSize: "10px", fontWeight: "800", letterSpacing: "0.5px" }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "-12px",
+                    right: "20px",
+                    background: plan.highlight ? "#008060" : "#7c3aed",
+                    color: "#ffffff",
+                    padding: "3px 10px",
+                    borderRadius: "10px",
+                    fontSize: "11px",
+                    fontWeight: "800",
+                    letterSpacing: "0.5px",
+                    boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                  }}
+                >
                   {plan.badge}
                 </div>
               )}
               {isCurrent && !plan.badge && (
-                <div style={{ position: "absolute", top: "-13px", right: "16px", background: "#475569", color: "#ffffff", padding: "4px 10px", borderRadius: "12px", fontSize: "10px", fontWeight: "800" }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "-12px",
+                    right: "20px",
+                    background: "#10b981",
+                    color: "#ffffff",
+                    padding: "3px 10px",
+                    borderRadius: "10px",
+                    fontSize: "11px",
+                    fontWeight: "800",
+                    letterSpacing: "0.5px",
+                  }}
+                >
                   CURRENT ACTIVE PLAN
                 </div>
               )}
 
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
                   <h3 style={{ margin: 0, fontSize: "19px", fontWeight: "800", color: "#0f172a" }}>
                     {plan.name}
                   </h3>
-                  <span style={{ fontSize: "11px", background: "#eff6ff", color: "#1d4ed8", padding: "2px 8px", borderRadius: "10px", fontWeight: "700" }}>
+                  <span style={{ fontSize: "11px", background: "#f1f5f9", color: "#475569", padding: "2px 8px", borderRadius: "10px", fontWeight: "600" }}>
                     {plan.trialBadge}
                   </span>
                 </div>
-                <p style={{ margin: "0 0 14px", color: "#64748b", fontSize: "13px", lineHeight: "1.45", minHeight: "36px" }}>
+
+                <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: "13px", lineHeight: "1.4", minHeight: "36px" }}>
                   {plan.description}
                 </p>
 
-                {/* Price Display */}
-                <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "4px" }}>
-                  <span style={{ fontSize: "34px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>{displayPrice}</span>
-                  <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "600" }}>{plan.period}</span>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "4px", marginBottom: "4px" }}>
+                  <span style={{ fontSize: "34px", fontWeight: "800", color: "#0f172a", letterSpacing: "-1px" }}>
+                    {displayPrice}
+                  </span>
+                  <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "500" }}>
+                    / {plan.period}
+                  </span>
                 </div>
 
-                {/* Annual Billing Subtext Note */}
-                <div style={{ fontSize: "11px", color: "#059669", fontWeight: "600", minHeight: "18px", marginBottom: "8px" }}>
-                  {billingCycle === "annual" && plan.priceAnnualNote ? plan.priceAnnualNote : null}
+                <div style={{ fontSize: "11px", color: "#059669", fontWeight: "600", minHeight: "16px", marginBottom: "8px" }}>
+                  {billingCycle === "annual" && plan.priceAnnualNote ? plan.priceAnnualNote : " "}
                 </div>
 
-                {/* Daily Cost ROI Badge */}
                 <div style={{ minHeight: "28px", marginBottom: "14px" }}>
                   {plan.dailyCost ? (
                     <div style={{ fontSize: "11px", color: "#047857", fontWeight: "700", background: "#ecfdf5", border: "1px solid #a7f3d0", padding: "4px 8px", borderRadius: "6px", display: "inline-block", lineHeight: "1.3" }}>
@@ -961,18 +980,18 @@ export default function PlansPage() {
                   borderRight: activePlan === "growth" ? "2px solid #10b981" : "none",
                   borderTop: activePlan === "growth" ? "3px solid #10b981" : "none",
                 }}>
-                  {activePlan === "growth" ? (
+                  {activePlan === "growth" && (
                     <div style={{ background: "#10b981", color: "#ffffff", padding: "2px 6px", borderRadius: "8px", fontSize: "9px", fontWeight: "800", textTransform: "uppercase", marginBottom: "4px", display: "inline-block" }}>
                       ACTIVE PLAN
                     </div>
-                  ) : (
-                    <div style={{ background: "#059669", color: "#ffffff", padding: "2px 6px", borderRadius: "8px", fontSize: "9px", fontWeight: "800", textTransform: "uppercase", marginBottom: "4px", display: "inline-block" }}>
-                      MOST POPULAR
-                    </div>
                   )}
-                  <div style={{ fontWeight: "800", color: "#047857", fontSize: "15px" }}>Growth Pro</div>
-                  <div style={{ fontSize: "12px", color: "#047857", fontWeight: "600", marginTop: "2px" }}>
-                    {billingCycle === "annual" ? `${calcAnnualMonthlyEq(49.0)} / mo` : `${calcMonthly(49.0)} / mo`}
+                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "15px" }}>Growth Pro</div>
+                  <div style={{ fontSize: "12px", color: "#008060", fontWeight: "700", marginTop: "2px" }}>
+                    {isVipFreeOfferActive
+                      ? `$0.00 (${vipFreeOfferMonths} Mo Free)`
+                      : billingCycle === "annual"
+                      ? `${calcAnnualMonthlyEq(49.0)} / mo`
+                      : `${calcMonthly(49.0)} / mo`}
                   </div>
                 </th>
 
@@ -991,13 +1010,14 @@ export default function PlansPage() {
                       ACTIVE PLAN
                     </div>
                   )}
-                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "15px" }}>Enterprise</div>
+                  <div style={{ fontWeight: "800", color: "#0f172a", fontSize: "15px" }}>Enterprise Unlimited</div>
                   <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "500", marginTop: "2px" }}>
                     {billingCycle === "annual" ? `${calcAnnualMonthlyEq(99.0)} / mo` : `${calcMonthly(99.0)} / mo`}
                   </div>
                 </th>
               </tr>
             </thead>
+
             <tbody>
               {matrixGroups.map((group, gIdx) => (
                 <MatrixGroupSection
@@ -1007,13 +1027,13 @@ export default function PlansPage() {
                 />
               ))}
 
-              {/* Bottom CTA Actions Row in Matrix */}
-              <tr style={{ background: "#f8fafc", borderTop: "2px solid #e2e8f0" }}>
+              {/* Bottom CTA Row in Matrix */}
+              <tr style={{ background: "#f8fafc", borderTop: "2px solid #cbd5e1" }}>
                 <td style={{ padding: "16px 14px", fontWeight: "800", color: "#0f172a" }}>
                   Select Plan
                 </td>
 
-                {/* Starter Free CTA */}
+                {/* Free CTA */}
                 <td style={{ padding: "12px", textAlign: "center", background: activePlan === "free" ? "#f0fdf4" : "transparent" }}>
                   <PlanCardForm
                     plan={plans[0]}
@@ -1024,7 +1044,7 @@ export default function PlansPage() {
                   />
                 </td>
 
-                {/* Starter Pro CTA */}
+                {/* Starter CTA */}
                 <td style={{ padding: "12px", textAlign: "center", background: activePlan === "starter" ? "#f0fdf4" : "transparent" }}>
                   <PlanCardForm
                     plan={plans[1]}
@@ -1039,8 +1059,8 @@ export default function PlansPage() {
                   />
                 </td>
 
-                {/* Growth Pro CTA */}
-                <td style={{ padding: "12px", textAlign: "center", background: activePlan === "growth" ? "#ecfdf5" : "#f0fdf4" }}>
+                {/* Growth CTA */}
+                <td style={{ padding: "12px", textAlign: "center", background: activePlan === "growth" ? "#ecfdf5" : "transparent" }}>
                   <PlanCardForm
                     plan={plans[2]}
                     billingCycle={billingCycle}
