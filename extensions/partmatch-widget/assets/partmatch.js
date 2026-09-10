@@ -23,7 +23,7 @@
         const style = document.createElement('style');
         style.id = 'pm-prehide-style';
         style.textContent = `
-          .product-grid, #product-grid, .grid--product, ul.grid, .collection-matrix { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.25s ease; }
+          .product-grid, #product-grid, .grid--product, ul.grid, .collection-matrix, .template-collection__grid, [data-testid="product-grid"], .product-grid-container { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.25s ease; }
         `;
         (document.head || document.documentElement).appendChild(style);
       }
@@ -375,6 +375,25 @@
 
   // ─── Search Widget ───────────────────────────────────────────────────────────
   async function initSearchWidget(widget) {
+    // Auto-expand and center parent flex container (fixes Horizon theme layout-panel-flex constraints)
+    try {
+      const parent = widget.parentElement;
+      if (parent) {
+        parent.style.setProperty('width', '100%', 'important');
+        parent.style.setProperty('max-width', '100%', 'important');
+        parent.style.setProperty('align-self', 'stretch', 'important');
+        parent.style.setProperty('display', 'flex', 'important');
+        parent.style.setProperty('flex-direction', 'column', 'important');
+        parent.style.setProperty('align-items', 'center', 'important');
+        parent.style.setProperty('justify-content', 'center', 'important');
+      }
+      const flexSection = widget.closest('.section-content-wrapper, .layout-panel-flex');
+      if (flexSection) {
+        flexSection.style.setProperty('--horizontal-alignment', 'center');
+        flexSection.style.setProperty('align-items', 'center');
+      }
+    } catch (e) {}
+
     const isDesignMode = window.Shopify && window.Shopify.designMode;
     if (!isDesignMode) {
       const cfg = await loadConfig();
@@ -1029,6 +1048,7 @@
   }
 
   // ─── Active Vehicle Bar ──────────────────────────────────────────────────────
+  let vehicleBarListenerAttached = false;
   function initVehicleBar() {
     let bars = document.querySelectorAll('[data-partmatch-bar]');
     if (!bars.length) {
@@ -1050,24 +1070,31 @@
     }
     bars.forEach(bar => updateBar(bar));
 
-    document.addEventListener('partmatch:vehicleChanged', () => {
-      bars.forEach(bar => updateBar(bar));
-    });
+    if (!vehicleBarListenerAttached) {
+      vehicleBarListenerAttached = true;
+      document.addEventListener('partmatch:vehicleChanged', () => {
+        bars = document.querySelectorAll('[data-partmatch-bar]');
+        bars.forEach(bar => updateBar(bar));
+      });
+    }
   }
 
   function updateBar(bar) {
     const v = savedVehicle();
     if (!v || !v.year) { bar.style.display = 'none'; return; }
-    bar.style.display = '';
+    bar.style.display = bar.classList.contains('pm-bar--auto') ? 'flex' : '';
     const label = bar.querySelector('[data-partmatch-bar-label]');
-    if (label) label.textContent = `${v.year} ${v.make} ${v.model}`;
+    if (label) label.textContent = [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ');
     const changeBtn = bar.querySelector('[data-partmatch-bar-change]');
-    if (changeBtn) changeBtn.addEventListener('click', () => {
-      clearVehicle();
-      bar.style.display = 'none';
-      const widget = document.querySelector('[data-partmatch-widget]');
-      if (widget) widget.querySelector('[data-partmatch-clear]')?.click();
-    });
+    if (changeBtn && !changeBtn._pmBound) {
+      changeBtn._pmBound = true;
+      changeBtn.addEventListener('click', () => {
+        clearVehicle();
+        bar.style.display = 'none';
+        const widget = document.querySelector('[data-partmatch-widget]');
+        if (widget) widget.querySelector('[data-partmatch-clear]')?.click();
+      });
+    }
   }
 
   // ─── Product Page Fitment Checker ────────────────────────────────────────────
@@ -1274,117 +1301,250 @@
   }
 
   // ─── Native Collection Page Filter ───────────────────────────────────────────
-  async function filterNativeCollectionPage(year, make, model, trim = '') {
-    let matchingHandles = null;
-    let matchingTitles = null;
-    let matchingIds = null;
-    const isReset = !year || !make || !model;
+  const COLLECTION_GRID_SELECTORS = '.product-grid, #product-grid, .grid--product, ul.grid, .collection-matrix, .template-collection__grid, [data-testid="product-grid"], .product-grid-container';
 
-    if (!isReset) {
-      const searchResult = await doSearch(year, make, model, trim);
-      if (!searchResult || !searchResult.products) return;
-      matchingHandles = new Set(searchResult.products.map(p => (p.shopifyHandle || p.handle || '').toLowerCase()));
-      matchingTitles = new Set(searchResult.products.map(p => (p.productTitle || p.title || '').toLowerCase()));
-      matchingIds = new Set(searchResult.products.map(p => String(p.shopifyProductId || '')));
+  function getProductGridItem(link) {
+    if (!link) return null;
+
+    // Check if link is inside an <li> that belongs to a product list/grid
+    // Supports Dawn/Dawn 2.0 (li.grid__item), Horizon (li.product-grid__item), and standard <ul> grids
+    const li = link.closest('li');
+    if (li) {
+      if (
+        li.classList.contains('product-grid__item') ||
+        li.classList.contains('grid__item') ||
+        li.classList.contains('product-item') ||
+        li.classList.contains('product-card') ||
+        li.closest(COLLECTION_GRID_SELECTORS)
+      ) {
+        return li;
+      }
     }
 
-    const productLinks = document.querySelectorAll('a[href*="/products/"]');
-    if (!productLinks.length) return;
+    // Check for div-based or custom element-based grid items
+    let item = (
+      link.closest('.product-grid__item') ||
+      link.closest('.grid__item') ||
+      link.closest('product-card') ||
+      link.closest('.product-card') ||
+      link.closest('.card-wrapper') ||
+      link.closest('.product-item') ||
+      link.closest('.product-block') ||
+      li
+    );
 
-    const processedContainers = new Set();
-    let visibleCount = 0;
+    // If item was resolved to an inner element but is wrapped in a grid <li>, escalate to the <li>
+    if (item && item.tagName !== 'LI') {
+      const parentLi = item.closest('li');
+      if (parentLi && (
+        parentLi.classList.contains('product-grid__item') ||
+        parentLi.classList.contains('grid__item') ||
+        parentLi.closest(COLLECTION_GRID_SELECTORS)
+      )) {
+        return parentLi;
+      }
+    }
 
-    productLinks.forEach(link => {
-      const container = link.closest('li.grid__item') || link.closest('.grid__item') || link.closest('.card-wrapper') || link.closest('.product-card') || link.closest('li');
-      if (!container || processedContainers.has(container)) return;
-      processedContainers.add(container);
+    return item;
+  }
 
-      if (container.closest('.pm-standalone-results') || container.closest('.pm-widget')) return;
+  let collectionObserver = null;
+  let isCollectionFiltering = false;
 
-      if (isReset) {
-        container.style.display = '';
-        const badge = container.querySelector('.pm-collection-fitment-badge');
-        if (badge) badge.remove();
-      } else {
-        const href = link.getAttribute('href') || '';
-        let handle = '';
-        if (href.includes('/products/')) {
-          const parts = href.split('/products/')[1];
-          if (parts) handle = parts.split('?')[0].split('#')[0].replace(/\/$/, '').toLowerCase();
-        }
+  function observeGridMutations(year, make, model, trim) {
+    if (collectionObserver) {
+      collectionObserver.disconnect();
+      collectionObserver = null;
+    }
+    if (!year || !make || !model) return;
 
-        const titleEl = container.querySelector('.card__heading, .full-unstyled-link, .product-card__title, h3, h2, a');
-        const title = titleEl ? titleEl.textContent.trim().toLowerCase() : '';
-        const prodId = container.dataset.productId || link.dataset.productId || '';
+    const gridContainers = document.querySelectorAll(COLLECTION_GRID_SELECTORS);
+    if (!gridContainers.length) return;
 
-        const isMatch = (handle && matchingHandles.has(handle)) || 
-                        (title && matchingTitles.has(title)) || 
-                        (prodId && matchingIds.has(prodId));
-
-        if (isMatch) {
-          container.style.display = '';
-          visibleCount++;
-
-          if (!container.querySelector('.pm-collection-fitment-badge')) {
-            const badge = document.createElement('div');
-            badge.className = 'pm-collection-fitment-badge';
-            badge.style.cssText = 'display: inline-block; margin: 6px 0; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 12px; background: #e6f4ea; color: #137333;';
-            badge.textContent = `✓ Fits ${year} ${make} ${model}`;
-            if (titleEl && titleEl.parentNode) {
-              titleEl.parentNode.insertBefore(badge, titleEl.nextSibling);
+    let debounceTimer = null;
+    collectionObserver = new MutationObserver((mutations) => {
+      if (isCollectionFiltering) return;
+      let hasNewNodes = false;
+      for (const m of mutations) {
+        if (m.addedNodes && m.addedNodes.length > 0) {
+          for (const n of m.addedNodes) {
+            if (n.nodeType === 1 && !n.classList?.contains('pm-collection-fitment-badge')) {
+              hasNewNodes = true;
+              break;
             }
           }
-        } else {
-          container.style.display = 'none';
         }
+        if (hasNewNodes) break;
+      }
+      if (hasNewNodes) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          filterNativeCollectionPage(year, make, model, trim);
+        }, 150);
       }
     });
 
-    // Update Collection Heading if available
-    const pageTitle = document.querySelector('.collection-hero__title, h1.title, h1.collection-title, h1');
-    if (pageTitle && !isReset) {
-      pageTitle.textContent = `Results for ${year} ${make} ${model}`;
-    }
-
-    // Reveal grid after filtering completes
-    const prehideStyle = document.getElementById('pm-prehide-style');
-    if (prehideStyle) prehideStyle.remove();
-
-    const gridContainers = document.querySelectorAll('.product-grid, #product-grid, .grid--product, ul.grid, .collection-matrix, .template-collection__grid');
     gridContainers.forEach(grid => {
-      grid.style.opacity = '1';
-      grid.style.visibility = 'visible';
+      collectionObserver.observe(grid, { childList: true, subtree: false });
     });
+  }
 
-    // Handle 0 results empty state cleanly
-    let emptyStateEl = document.getElementById('pm-empty-results-banner');
-    if (!isReset && visibleCount === 0) {
-      if (!emptyStateEl) {
-        emptyStateEl = document.createElement('div');
-        emptyStateEl.id = 'pm-empty-results-banner';
-        emptyStateEl.style.cssText = 'background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:36px 24px; text-align:center; margin: 30px auto; max-width: 600px; font-family: inherit;';
-        emptyStateEl.innerHTML = `
-          <div style="font-size: 32px; margin-bottom: 8px;">🔍</div>
-          <h3 style="margin:0 0 8px; color:#0f172a; font-size:18px; font-weight:800;">No Matching Parts Found</h3>
-          <p style="color:#64748b; font-size:14px; margin:0 0 20px; line-height: 1.5;">We currently do not have matching parts in stock for <strong>${year} ${make} ${model}</strong>.</p>
-          <a href="/collections/all" style="display:inline-block; padding:10px 22px; background:#0f172a; color:#ffffff; text-decoration:none; border-radius:8px; font-weight:700; font-size:13px; transition: background 0.2s ease;">View All Store Catalog →</a>
-        `;
-        const firstGrid = gridContainers[0] || document.querySelector('main, #MainContent');
-        if (firstGrid && firstGrid.parentNode) {
-          firstGrid.parentNode.insertBefore(emptyStateEl, firstGrid);
+  async function filterNativeCollectionPage(year, make, model, trim = '') {
+    if (isCollectionFiltering) return;
+    isCollectionFiltering = true;
+
+    try {
+      let matchingHandles = null;
+      let matchingTitles = null;
+      let matchingIds = null;
+      const isReset = !year || !make || !model;
+      const vehicleTitle = [year, make, model, trim].filter(Boolean).join(' ');
+
+      if (!isReset) {
+        const searchResult = await doSearch(year, make, model, trim);
+        if (!searchResult || !searchResult.products) return;
+        matchingHandles = new Set(searchResult.products.map(p => (p.shopifyHandle || p.handle || '').toLowerCase()));
+        matchingTitles = new Set(searchResult.products.map(p => (p.productTitle || p.title || '').toLowerCase()));
+        matchingIds = new Set(searchResult.products.map(p => String(p.shopifyProductId || '')));
+      }
+
+      // Query product links within collection grids first, or fallback to main content
+      const gridContainers = document.querySelectorAll(COLLECTION_GRID_SELECTORS);
+      let productLinks = [];
+      if (gridContainers.length > 0) {
+        gridContainers.forEach(grid => {
+          productLinks.push(...grid.querySelectorAll('a[href*="/products/"]'));
+        });
+      }
+      if (!productLinks.length) {
+        const mainContent = document.querySelector('main, #MainContent, .main-content, .shopify-section--collection, .template-collection');
+        if (mainContent) {
+          productLinks = Array.from(mainContent.querySelectorAll('a[href*="/products/"]'));
+        } else {
+          productLinks = Array.from(document.querySelectorAll('a[href*="/products/"]'));
         }
       }
-    } else if (emptyStateEl) {
-      emptyStateEl.remove();
-    }
 
-    const countLabel = document.getElementById('ProductCount') || document.querySelector('.product-count') || document.getElementById('ProductCountDesktop');
-    if (countLabel) {
-      if (isReset) {
-        countLabel.textContent = '';
-      } else {
-        countLabel.textContent = `${visibleCount} products matching ${year} ${make} ${model}`;
+      if (!productLinks.length) return;
+
+      const processedContainers = new Set();
+      let visibleCount = 0;
+
+      productLinks.forEach(link => {
+        const container = getProductGridItem(link);
+        if (!container || processedContainers.has(container)) return;
+        processedContainers.add(container);
+
+        // Ignore standalone search widgets or header/nav/footer/cart-drawers
+        if (
+          container.closest('.pm-standalone-results') ||
+          container.closest('.pm-widget') ||
+          container.closest('header, nav, footer, #shopify-section-header, #shopify-section-footer, [id*="cart-drawer"], [id*="CartDrawer"], [class*="cart-drawer"], [class*="mini-cart"]')
+        ) return;
+
+        if (isReset) {
+          container.style.display = '';
+          container.removeAttribute('data-pm-hidden');
+          const badge = container.querySelector('.pm-collection-fitment-badge');
+          if (badge) badge.remove();
+          const innerCard = container.querySelector('product-card, .product-card');
+          if (innerCard) innerCard.style.display = '';
+        } else {
+          const href = link.getAttribute('href') || '';
+          let handle = '';
+          if (href.includes('/products/')) {
+            const parts = href.split('/products/')[1];
+            if (parts) handle = parts.split('?')[0].split('#')[0].replace(/\/$/, '').toLowerCase();
+          }
+
+          // Prioritize actual product title elements; exclude full-card overlay links (Horizon's .product-card__link)
+          const titleEl = container.querySelector('.card__heading, .full-unstyled-link, .product-card__title, [ref="productTitleLink"], [data-block-type="product-title"], .product-title, [role="heading"], h3, h2, a:not(.product-card__link)');
+          const title = titleEl ? titleEl.textContent.trim().toLowerCase() : '';
+          const prodId = container.dataset.productId || link.dataset.productId || (container.querySelector('[data-product-id]')?.dataset.productId) || '';
+
+          const isMatch = (handle && matchingHandles.has(handle)) || 
+                          (title && matchingTitles.has(title)) || 
+                          (prodId && matchingIds.has(prodId));
+
+          if (isMatch) {
+            container.style.display = '';
+            container.removeAttribute('data-pm-hidden');
+            const innerCard = container.querySelector('product-card, .product-card');
+            if (innerCard) innerCard.style.display = '';
+            visibleCount++;
+
+            if (!container.querySelector('.pm-collection-fitment-badge')) {
+              const badge = document.createElement('div');
+              badge.className = 'pm-collection-fitment-badge';
+              badge.textContent = `✓ Fits ${vehicleTitle}`;
+              if (titleEl && titleEl.parentNode) {
+                titleEl.parentNode.insertBefore(badge, titleEl.nextSibling);
+              } else {
+                container.appendChild(badge);
+              }
+            }
+          } else {
+            container.style.display = 'none';
+            container.setAttribute('data-pm-hidden', 'true');
+          }
+        }
+      });
+
+      // Update Collection Heading if available
+      const pageTitle = document.querySelector('.collection-hero__title, h1.title, h1.collection-title, h1');
+      if (pageTitle && !isReset) {
+        pageTitle.textContent = `Results for ${vehicleTitle}`;
       }
+
+      // Reveal grid after filtering completes
+      const prehideStyle = document.getElementById('pm-prehide-style');
+      if (prehideStyle) prehideStyle.remove();
+
+      gridContainers.forEach(grid => {
+        grid.style.opacity = '1';
+        grid.style.visibility = 'visible';
+      });
+
+      // Handle 0 results empty state cleanly
+      let emptyStateEl = document.getElementById('pm-empty-results-banner');
+      if (!isReset && visibleCount === 0) {
+        if (!emptyStateEl) {
+          emptyStateEl = document.createElement('div');
+          emptyStateEl.id = 'pm-empty-results-banner';
+          emptyStateEl.style.cssText = 'background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:36px 24px; text-align:center; margin: 30px auto; max-width: 600px; font-family: inherit;';
+          emptyStateEl.innerHTML = `
+            <div style="font-size: 32px; margin-bottom: 8px;">🔍</div>
+            <h3 style="margin:0 0 8px; color:#0f172a; font-size:18px; font-weight:800;">No Matching Parts Found</h3>
+            <p style="color:#64748b; font-size:14px; margin:0 0 20px; line-height: 1.5;">We currently do not have matching parts in stock for <strong>${vehicleTitle}</strong>.</p>
+            <a href="/collections/all" style="display:inline-block; padding:10px 22px; background:#0f172a; color:#ffffff; text-decoration:none; border-radius:8px; font-weight:700; font-size:13px; transition: background 0.2s ease;">View All Store Catalog →</a>
+          `;
+          const firstGrid = gridContainers[0] || document.querySelector('main, #MainContent');
+          if (firstGrid && firstGrid.parentNode) {
+            firstGrid.parentNode.insertBefore(emptyStateEl, firstGrid);
+          }
+        }
+      } else if (emptyStateEl) {
+        emptyStateEl.remove();
+      }
+
+      const countLabel = document.getElementById('ProductCount') || document.querySelector('.product-count') || document.getElementById('ProductCountDesktop');
+      if (countLabel) {
+        if (isReset) {
+          countLabel.textContent = '';
+        } else {
+          countLabel.textContent = `${visibleCount} products matching ${vehicleTitle}`;
+        }
+      }
+
+      // Manage infinite scroll observer
+      if (!isReset) {
+        observeGridMutations(year, make, model, trim);
+      } else if (collectionObserver) {
+        collectionObserver.disconnect();
+        collectionObserver = null;
+      }
+    } finally {
+      isCollectionFiltering = false;
     }
   }
 
@@ -1414,7 +1574,7 @@
     if (container.querySelector('[data-partmatch-year]')) return;
 
     container.innerHTML = `
-      <div class="pm-widget" data-partmatch-widget style="max-width: 1000px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.08); box-sizing: border-box; font-family: inherit;">
+      <div class="pm-widget" data-partmatch-widget style="width: 100%; max-width: 1000px; align-self: center; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.08); box-sizing: border-box; font-family: inherit;">
         <div class="pm-widget__header" style="text-align: center; margin-bottom: 16px;">
           <h2 class="pm-widget__heading" style="font-size: 20px; font-weight: 800; margin: 0 0 4px; color: #0f172a;">FIND YOUR PART</h2>
           <div class="pm-widget__heading-small" style="font-size: 13px; color: #64748b;">SEARCH BY APPLICATION</div>
@@ -1522,6 +1682,12 @@
     });
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
   }
+
+  // Handle Shopify OS 2.0 Theme Editor dynamic reload & Turbo / View Transition navigation
+  document.addEventListener('shopify:section:load', () => init());
+  document.addEventListener('shopify:section:select', () => init());
+  document.addEventListener('turbo:load', () => init());
+  document.addEventListener('page:loaded', () => init());
 
   // Public API
   window.PartMatch = { savedVehicle, saveVehicle, clearVehicle, getGarage, addToGarage };

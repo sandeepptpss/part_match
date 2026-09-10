@@ -68,6 +68,7 @@
     assign pm_enable_full_width = false
   endif
 
+  assign pm_widget_alignment = block.settings.widget_alignment | default: 'center'
   assign pm_widget_max_width = block.settings.widget_max_width | default: 1200
   assign pm_banner_min_height = block.settings.banner_min_height | default: 220
   assign pm_banner_padding = block.settings.banner_padding_vertical | default: 30
@@ -96,14 +97,23 @@
     --pm-text: {{ pm_text_color }};
     --pm-radius: {{ pm_border_radius }}px;
     --pm-btn-radius: {{ pm_border_radius }}px;
+    width: 100%;
     {% if pm_enable_full_width %}
-      width: 100%;
       max-width: 100%;
     {% else %}
       max-width: {{ pm_widget_max_width }}px;
     {% endif %}
-    margin-left: auto;
-    margin-right: auto;
+    align-self: {{ pm_widget_alignment }};
+    {% if pm_widget_alignment == 'center' %}
+      margin-left: auto;
+      margin-right: auto;
+    {% elsif pm_widget_alignment == 'flex-start' %}
+      margin-left: 0;
+      margin-right: auto;
+    {% elsif pm_widget_alignment == 'flex-end' %}
+      margin-left: auto;
+      margin-right: 0;
+    {% endif %}
     min-height: {{ pm_banner_min_height }}px;
     padding-top: {{ pm_banner_padding }}px;
     padding-bottom: {{ pm_banner_padding }}px;
@@ -243,6 +253,17 @@
       "id": "enable_full_width",
       "label": "Full Width Banner (100% Edge-to-Edge)",
       "default": false
+    },
+    {
+      "type": "select",
+      "id": "widget_alignment",
+      "label": "Widget Horizontal Alignment",
+      "options": [
+        { "value": "center", "label": "Center (Recommended)" },
+        { "value": "flex-start", "label": "Left" },
+        { "value": "flex-end", "label": "Right" }
+      ],
+      "default": "center"
     },
     {
       "type": "range",

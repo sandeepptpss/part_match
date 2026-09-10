@@ -5,10 +5,20 @@
 
 {{ 'partmatch.css' | asset_url | stylesheet_tag }}
 
+{%- assign bar_pos = block.settings.bar_position | default: 'bottom' -%}
+
 <div
-  class="pm-bar"
+  class="pm-bar pm-bar--{{ bar_pos }}"
   data-partmatch-bar
-  style="display:none; background: {{ block.settings.bg_color | default: '#1a1a1a' }};"
+  style="
+    display: none;
+    {% if bar_pos == 'bottom' %}
+      position: fixed; bottom: 0; left: 0; right: 0; width: 100%; z-index: 999999; box-shadow: 0 -2px 10px rgba(0,0,0,0.15);
+    {% elsif bar_pos == 'top' %}
+      position: fixed; top: 0; left: 0; right: 0; width: 100%; z-index: 999999; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    {% endif %}
+    background: {{ block.settings.bg_color | default: '#1a1a1a' }};
+  "
   {{ block.shopify_attributes }}
 >
   <span class="pm-bar__label">
@@ -26,6 +36,17 @@
   "name": "PartMatch Vehicle Bar",
   "target": "body",
   "settings": [
+    {
+      "type": "select",
+      "id": "bar_position",
+      "label": "Bar Position",
+      "options": [
+        { "value": "bottom", "label": "Fixed Bottom (Floating on all pages)" },
+        { "value": "top", "label": "Fixed Top (Header Banner)" },
+        { "value": "static", "label": "Static (Normal flow)" }
+      ],
+      "default": "bottom"
+    },
     {
       "type": "color",
       "id": "bg_color",

@@ -1,8 +1,37 @@
 /* PartMatch – Storefront Widget CSS */
 
-/* ─── Widget Container ─────────────────────────────────────────────────────── */
+/* ─── Horizon & Flexbox Section Parent Layout Fix ──────────────────────────── */
+.section-content-wrapper:has(#partmatch-widget),
+.section-content-wrapper:has(.pm-widget),
+.layout-panel-flex:has(#partmatch-widget),
+.layout-panel-flex:has(.pm-widget) {
+  --horizontal-alignment: center !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.shopify-block:has(> #partmatch-widget),
+.shopify-block:has(> .pm-widget),
+.shopify-app-block:has(> #partmatch-widget),
+.shopify-app-block:has(> .pm-widget),
+div:has(> #partmatch-widget),
+div:has(> .pm-widget) {
+  width: 100% !important;
+  max-width: 100% !important;
+  align-self: stretch !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
 .pm-widget {
   position: relative;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  align-self: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
   background-color: var(--pm-bg, #ffffff);
   color: var(--pm-text, #0f172a);
   padding: 32px 24px;
@@ -425,6 +454,26 @@
 
 .pm-bar__change:hover { border-color: var(--pm-primary, #008060); color: var(--pm-primary, #008060); }
 
+.pm-bar--bottom {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  z-index: 999999 !important;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.15) !important;
+}
+
+.pm-bar--top {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  z-index: 999999 !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15) !important;
+}
+
 /* ─── Fitment Checker ───────────────────────────────────────────────────────── */
 .pm-checker {
   display: flex;
@@ -526,4 +575,24 @@
   .pm-results__grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ─── Collection Page Filter & Badges ───────────────────────────────────────── */
+[data-pm-hidden="true"],
+li.product-grid__item[data-pm-hidden="true"],
+li.grid__item[data-pm-hidden="true"] {
+  display: none !important;
+}
+
+.pm-collection-fitment-badge {
+  display: inline-block;
+  margin: 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: #e6f4ea;
+  color: #137333;
+  width: fit-content;
+  line-height: 1.3;
 }
