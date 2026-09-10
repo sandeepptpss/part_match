@@ -1,5 +1,5 @@
 const json = (data, init) => Response.json(data, init);
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useLoaderData, Link, Form, useNavigation, useFetcher, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -20,19 +20,26 @@ export const loader = async ({ request }) => {
   let totalCount = 0;
 
   try {
+    const tokens = search ? search.trim().split(/\s+/).filter(Boolean) : [];
+    const searchFilter =
+      tokens.length > 0
+        ? {
+            AND: tokens.map((token) => ({
+              OR: [
+                { productTitle: { contains: token } },
+                { shopifyHandle: { contains: token } },
+                { fitment: { year: { contains: token } } },
+                { fitment: { make: { contains: token } } },
+                { fitment: { model: { contains: token } } },
+                { fitment: { trim: { contains: token } } },
+              ],
+            })),
+          }
+        : {};
+
     const where = {
       fitment: { shop },
-      ...(search
-        ? {
-          OR: [
-            { productTitle: { contains: search } },
-            { shopifyHandle: { contains: search } },
-            { fitment: { year: { contains: search } } },
-            { fitment: { make: { contains: search } } },
-            { fitment: { model: { contains: search } } },
-          ],
-        }
-        : {}),
+      ...searchFilter,
     };
 
     const [items, count] = await Promise.all([
@@ -140,6 +147,81 @@ export default function ProductsIndex() {
   const [selectedMake, setSelectedMake] = useState("all");
   const [selectedYear, setSelectedYear] = useState("all");
 
+  const inputRef = useRef(null);
+  const debounceTimerRef = useRef(null);
+
+  // Sync searchTerm with URL search param if navigation happened externally
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setSearchTerm(search || "");
+    }
+  }, [search]);
+
+  // Clean up debounce timer on component unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  const triggerServerSearch = (queryVal) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    const trimmed = (queryVal || "").trim();
+    const currentParams = new URLSearchParams(window.location.search);
+    const currentQ = (currentParams.get("q") || "").trim();
+
+    if (trimmed !== currentQ) {
+      const newParams = new URLSearchParams();
+      if (trimmed) {
+        newParams.set("q", trimmed);
+      }
+      const limitParam = currentParams.get("limit");
+      if (limitParam) {
+        newParams.set("limit", limitParam);
+      }
+      // Reset page to 1 on new search query
+      const qs = newParams.toString();
+      navigate(qs ? `/app/products?${qs}` : "/app/products", { replace: true });
+    }
+  };
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchTerm(val);
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Debounce server search by 350ms so typing performs automatic search without clicking
+    debounceTimerRef.current = setTimeout(() => {
+      triggerServerSearch(val);
+    }, 350);
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    triggerServerSearch(searchTerm);
+  };
+
+  const handleClearSearch = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    setSearchTerm("");
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+    triggerServerSearch("");
+  };
+
   // Dynamically derive unique vehicle Makes & Years from loaded data
   const uniqueMakes = useMemo(() => {
     const makes = new Set();
@@ -159,6 +241,9 @@ export default function ProductsIndex() {
 
   // Filter products in real-time without requiring button click
   const filteredProducts = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
+
     return mappedProducts.filter((item) => {
       const title = (item.productTitle || "").toLowerCase();
       const handle = (item.shopifyHandle || "").toLowerCase();
@@ -166,16 +251,16 @@ export default function ProductsIndex() {
       const make = (item.fitment?.make || "").toLowerCase();
       const model = (item.fitment?.model || "").toLowerCase();
       const trim = (item.fitment?.trim || "").toLowerCase();
-      const q = searchTerm.toLowerCase().trim();
+
+      // Full vehicle combination: e.g. "2025 Tata Nova LX"
+      const vehicleCombined = `${year} ${make} ${model} ${trim}`.trim().toLowerCase();
+      // Combined product and vehicle searchable text
+      const fullText = `${title} ${handle} ${vehicleCombined}`.trim().toLowerCase();
 
       const matchesSearch =
         !q ||
-        title.includes(q) ||
-        handle.includes(q) ||
-        year.includes(q) ||
-        make.includes(q) ||
-        model.includes(q) ||
-        trim.includes(q);
+        fullText.includes(q) ||
+        (tokens.length > 0 && tokens.every((tok) => fullText.includes(tok)));
 
       const matchesMake = selectedMake === "all" || make === selectedMake.toLowerCase();
       const matchesYear = selectedYear === "all" || year === selectedYear.toLowerCase();
@@ -188,11 +273,16 @@ export default function ProductsIndex() {
   const hasActiveFilters = Boolean(searchTerm.trim()) || selectedMake !== "all" || selectedYear !== "all";
 
   const clearAllFilters = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
     setSearchTerm("");
     setSelectedMake("all");
     setSelectedYear("all");
     if (search) {
-      navigate("/app/products");
+      const currentParams = new URLSearchParams(window.location.search);
+      const limitParam = currentParams.get("limit");
+      navigate(limitParam ? `/app/products?limit=${limitParam}` : "/app/products", { replace: true });
     }
   };
 
@@ -250,25 +340,72 @@ export default function ProductsIndex() {
           boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
         }}
       >
-        {/* Search Input Bar with Server Query */}
-        <Form method="get" style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "14px" }}>
+        {/* Search Input Bar with Instant Auto Search and Server Query */}
+        <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "14px" }}>
           <div style={{ flex: 1, position: "relative" }}>
             <input
+              ref={inputRef}
               name="q"
-              defaultValue={search}
+              value={searchTerm}
+              onChange={handleSearchChange}
               placeholder="Search products by title, handle, or vehicle (e.g. Brake Pad, Tata, 2025)…"
-              style={searchInputStyle}
+              style={{
+                ...searchInputStyle,
+                paddingRight: searchTerm ? "38px" : "16px",
+              }}
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                title="Clear search"
+                style={{
+                  position: "absolute",
+                  right: "10px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "#e2e8f0",
+                  border: "none",
+                  color: "#475569",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "20px",
+                  height: "20px",
+                  borderRadius: "50%",
+                  lineHeight: 1,
+                  padding: 0,
+                  transition: "background 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#cbd5e1";
+                  e.currentTarget.style.color = "#0f172a";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#e2e8f0";
+                  e.currentTarget.style.color = "#475569";
+                }}
+              >
+                ✕
+              </button>
+            )}
           </div>
           <button type="submit" style={primaryBtn}>
-            Search Products
+            {navigation.state === "loading" && navigation.location?.search ? "Searching…" : "Search Products"}
           </button>
-          {search && (
-            <Link to="/app/products" style={outlineBtn}>
+          {(search || searchTerm) && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              style={outlineBtn}
+            >
               ✕ Clear Search
-            </Link>
+            </button>
           )}
-        </Form>
+        </form>
 
         {/* Filter Toolbar Row */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", paddingTop: "12px", borderTop: "1px solid #f1f5f9" }}>

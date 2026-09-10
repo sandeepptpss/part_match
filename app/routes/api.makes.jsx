@@ -24,23 +24,31 @@ export async function loader({ request }) {
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
 
-  if (!shop || !year) {
+  if (!shop) {
+    return json({ makes: [] });
+  }
+
+  const appSettings = await prisma.appSettings?.findUnique({ where: { shop } });
+  const requireYear = appSettings?.requireYear !== false;
+
+  if (requireYear && !year) {
     return json({ makes: [] });
   }
 
   try {
     // Only return Makes for fitments that have at least 1 mapped product, collection, tag, or SKU
+    const whereClause = {
+      shop,
+      ...(year ? { year } : {}),
+      OR: [
+        { products: { some: {} } },
+        { collections: { some: {} } },
+        { tags: { some: {} } },
+        { skus: { some: {} } },
+      ],
+    };
     const records = await prisma.fitmentRecord?.findMany({
-      where: {
-        shop,
-        year,
-        OR: [
-          { products: { some: {} } },
-          { collections: { some: {} } },
-          { tags: { some: {} } },
-          { skus: { some: {} } },
-        ],
-      },
+      where: whereClause,
       select: { make: true },
     });
 

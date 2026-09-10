@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 const json = (data, init) => Response.json(data, init);
 import { useLoaderData, Form, useFetcher, useSearchParams, Link, useNavigation, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -14,18 +14,24 @@ export const loader = async ({ request }) => {
   const search = url.searchParams.get("q") || "";
   const skip = (page - 1) * pageSize;
 
+  const tokens = search ? search.trim().split(/\s+/).filter(Boolean) : [];
+  const searchFilter =
+    tokens.length > 0
+      ? {
+          AND: tokens.map((token) => ({
+            OR: [
+              { year: { contains: token } },
+              { make: { contains: token } },
+              { model: { contains: token } },
+              { trim: { contains: token } },
+            ],
+          })),
+        }
+      : {};
+
   const where = {
     shop,
-    ...(search
-      ? {
-          OR: [
-            { year: { contains: search } },
-            { make: { contains: search } },
-            { model: { contains: search } },
-            { trim: { contains: search } },
-          ],
-        }
-      : {}),
+    ...searchFilter,
   };
 
   const [records, total] = await Promise.all([
@@ -65,6 +71,78 @@ export default function FitmentIndex() {
   const loading = navigation.state !== "idle";
   const exportFetcher = useFetcher();
   const exporting = exportFetcher.state !== "idle";
+
+  const [searchTerm, setSearchTerm] = useState(search || "");
+  const inputRef = useRef(null);
+  const debounceTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setSearchTerm(search || "");
+    }
+  }, [search]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  const triggerServerSearch = (queryVal) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    const trimmed = (queryVal || "").trim();
+    const currentParams = new URLSearchParams(window.location.search);
+    const currentQ = (currentParams.get("q") || "").trim();
+
+    if (trimmed !== currentQ) {
+      const newParams = new URLSearchParams();
+      if (trimmed) {
+        newParams.set("q", trimmed);
+      }
+      const limitParam = currentParams.get("limit");
+      if (limitParam) {
+        newParams.set("limit", limitParam);
+      }
+      const qs = newParams.toString();
+      navigate(qs ? `/app/fitment?${qs}` : "/app/fitment", { replace: true });
+    }
+  };
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchTerm(val);
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      triggerServerSearch(val);
+    }, 350);
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    triggerServerSearch(searchTerm);
+  };
+
+  const handleClearSearch = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    setSearchTerm("");
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+    triggerServerSearch("");
+  };
 
   const handleExportCSV = () => {
     exportFetcher.load("/app/fitment/export");
@@ -130,22 +208,71 @@ export default function FitmentIndex() {
 
       {/* Search & Filter Card */}
       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "16px 20px", marginBottom: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
-        <Form method="get" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+        <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <div style={{ position: "relative", flex: 1 }}>
             <input
+              ref={inputRef}
               name="q"
-              defaultValue={search}
+              value={searchTerm}
+              onChange={handleSearchChange}
               placeholder="Search by Year, Make, or Model (e.g. 2025 Ford F-150)…"
-              style={searchInputStyle}
+              style={{
+                ...searchInputStyle,
+                paddingRight: searchTerm ? "38px" : "16px",
+              }}
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                title="Clear search"
+                style={{
+                  position: "absolute",
+                  right: "10px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "#e2e8f0",
+                  border: "none",
+                  color: "#475569",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "20px",
+                  height: "20px",
+                  borderRadius: "50%",
+                  lineHeight: 1,
+                  padding: 0,
+                  transition: "background 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#cbd5e1";
+                  e.currentTarget.style.color = "#0f172a";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#e2e8f0";
+                  e.currentTarget.style.color = "#475569";
+                }}
+              >
+                ✕
+              </button>
+            )}
           </div>
-          <button type="submit" style={primaryBtn}>Search Catalog</button>
-          {search && (
-            <Link to="/app/fitment" style={outlineBtn}>
+          <button type="submit" style={primaryBtn}>
+            {navigation.state === "loading" && navigation.location?.search ? "Searching…" : "Search Catalog"}
+          </button>
+          {(search || searchTerm) && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              style={outlineBtn}
+            >
               ✕ Clear Search
-            </Link>
+            </button>
           )}
-        </Form>
+        </form>
       </div>
 
       {/* Main Records Table Card */}

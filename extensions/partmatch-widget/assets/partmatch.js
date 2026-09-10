@@ -394,7 +394,8 @@
     if (!yearSel || !makeSel || !modelSel || !searchBtn) return;
 
     // Initial state
-    makeSel.disabled  = true;
+    const requireYearFirst = settingsAllow('requireYear');
+    makeSel.disabled  = requireYearFirst;
     modelSel.disabled = true;
     // searchBtn remains enabled to provide instant validation feedback upon click
 
@@ -405,6 +406,16 @@
       populateSelect(yearSel, years, yearSel.dataset.placeholder || 'YEAR');
       yearSel.disabled = false;
     } catch { yearSel.disabled = false; }
+
+    // If requireYear is false, pre-populate makes immediately
+    if (!requireYearFirst) {
+      try {
+        setLoading(makeSel, true);
+        const makes = await fetchMakes('');
+        populateSelect(makeSel, makes, makeSel.dataset.placeholder || 'MAKE');
+        makeSel.disabled = false;
+      } catch { makeSel.disabled = false; }
+    }
 
     // Tab Switching (BY VEHICLE YMM vs BY VIN LOOKUP vs AI VOICE SEARCH)
     const tabs = widget.querySelectorAll('[data-pm-tab]');
@@ -563,10 +574,13 @@
         showBannerFeedback(voiceFeedback, 'AI is searching fitments...', 'info');
 
         try {
-          const res = await fetch(`${PROXY_BASE}/api/ai-voice-search`, {
+          const res = await fetch(withShop(`${PROXY_BASE}/api/ai-voice-search`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: queryText })
+            body: JSON.stringify({
+              query: queryText,
+              shop: (window.Shopify && window.Shopify.shop) ? window.Shopify.shop : ''
+            })
           });
           const data = await res.json();
 
@@ -628,7 +642,7 @@
         showBannerFeedback(vinFeedback, 'Decoding VIN with vehicle registry...', 'info');
 
         try {
-          const res = await fetch(`${PROXY_BASE}/api/vin-lookup?vin=${encodeURIComponent(rawVin)}`);
+          const res = await fetch(withShop(`${PROXY_BASE}/api/vin-lookup?vin=${encodeURIComponent(rawVin)}`));
           const data = await res.json();
 
           if (!res.ok || !data.success) {
@@ -872,6 +886,7 @@
       const trim = trimSel ? trimSel.value : '';
 
       // Validate Year, Make, Model selection
+      const requireAll = settingsAllow('requireAllFields');
       if (!year) {
         showValidationError(yearSel, 'Please select a Year to search compatible parts.');
         return;
@@ -880,7 +895,7 @@
         showValidationError(makeSel, 'Please select a Make to search compatible parts.');
         return;
       }
-      if (!model) {
+      if (requireAll && !model) {
         showValidationError(modelSel, 'Please select a Model to search compatible parts.');
         return;
       }

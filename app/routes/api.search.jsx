@@ -28,10 +28,6 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
     return { error: "Could not resolve shop for search request", status: 400 };
   }
 
-  if (!year || !make || !model) {
-    return { error: "Missing required fields: year, make, model", status: 400 };
-  }
-
   try {
     const [appSettings, shopPlan] = await Promise.all([
       prisma.appSettings?.findUnique({ where: { shop } }),
@@ -40,6 +36,14 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
     const limits = planLimits(shopPlan?.plan || "FREE");
     const includeUniversal = (appSettings?.includeUniversal ?? true) && limits.universalProducts;
     const logNoResults = appSettings?.logNoResults ?? true;
+    const requireAll = appSettings?.requireAllFields !== false;
+
+    if (!year || !make || (requireAll && !model)) {
+      return {
+        error: requireAll ? "Missing required fields: year, make, model" : "Missing required fields: year, make",
+        status: 400,
+      };
+    }
 
     // Fetch fitments for shop and year
     const fitments = await prisma.fitmentRecord?.findMany({
@@ -81,7 +85,7 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
       const mModel = (f.model || "").trim().toLowerCase();
       const mTrim = (f.trim || "").trim().toLowerCase();
       const makeMatch = mMake === targetMake;
-      const modelMatch = mModel === targetModel;
+      const modelMatch = !targetModel || mModel === targetModel;
       const trimMatch = !targetTrim || mTrim === targetTrim;
       return makeMatch && modelMatch && trimMatch;
     });
@@ -253,7 +257,7 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
           shop,
           year,
           make,
-          model,
+          model: model || "",
           trim: trim || "",
           resultCount: allProducts.length,
           hasResults,
@@ -267,7 +271,7 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
         fitmentId: (matchedFitments && matchedFitments[0])?.id ?? null,
         year,
         make,
-        model,
+        model: model || "",
         trim: trim || "",
         products: allProducts,
         collections: fitmentCollections,

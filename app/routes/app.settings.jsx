@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS = {
   showFitmentChecker: true,
   vinCapEnabled: true,
   vinMonthlyCapLimit: 50,
-  vinAlertEmail: "sandeepptpss@gmail.com",
+  vinAlertEmail: "",
 };
 
 export const loader = async ({ request }) => {
@@ -42,7 +42,7 @@ export const loader = async ({ request }) => {
     });
     if (!settings) {
       settings = await prisma.appSettings.create({
-        data: { shop, ...DEFAULT_SETTINGS },
+        data: { shop, ...DEFAULT_SETTINGS, vinAlertEmail: sessionEmail },
       });
     }
   } catch (err) {
@@ -67,7 +67,7 @@ export const loader = async ({ request }) => {
 
   return json({
     shop,
-    settings: settings || DEFAULT_SETTINGS,
+    settings: settings || { ...DEFAULT_SETTINGS, vinAlertEmail: sessionEmail },
     planAllowsFitmentChecker: limits.fitmentChecker,
     planLabel: limits.label,
     vinMonthlyLimit: limits.vinMonthlyLimit,
@@ -86,7 +86,7 @@ export const action = async ({ request }) => {
   const limits = planLimits(plan);
 
   const redirectOnSearch = formData.get("redirect_on_search") === "true";
-  const resultsUrl = formData.get("results_url")?.toString() || "/collections/all";
+  const resultsUrl = formData.get("results_url")?.toString()?.trim() || "/collections/all";
 
   const data = {
     requireYear: formData.get("require_year") === "true",
@@ -99,8 +99,8 @@ export const action = async ({ request }) => {
     enableGarage: formData.get("enable_garage") === "true",
     showFitmentChecker: formData.get("show_fitment_checker") === "true" && limits.fitmentChecker,
     vinCapEnabled: formData.get("vin_cap_enabled") === "true",
-    vinMonthlyCapLimit: parseInt(formData.get("vin_monthly_cap_limit") || "50", 10),
-    vinAlertEmail: formData.get("vin_alert_email")?.toString() || "",
+    vinMonthlyCapLimit: Math.max(1, parseInt(formData.get("vin_monthly_cap_limit") || "50", 10)),
+    vinAlertEmail: formData.get("vin_alert_email")?.toString()?.trim() || "",
   };
 
   let savedSettings = null;
@@ -112,6 +112,11 @@ export const action = async ({ request }) => {
     });
   } catch (err) {
     console.error("[settings action error]", err);
+    return json({ saved: false, error: err?.message || "Failed to update settings" }, { status: 500 });
+  }
+
+  if (!savedSettings) {
+    return json({ saved: false, error: "Settings could not be persisted to the database." }, { status: 500 });
   }
 
   return json({ saved: true, settings: savedSettings });
@@ -137,7 +142,7 @@ export default function Settings() {
     showFitmentChecker: initial.showFitmentChecker ?? true,
     vinCapEnabled: initial.vinCapEnabled ?? true,
     vinMonthlyCapLimit: initial.vinMonthlyCapLimit ?? 50,
-    vinAlertEmail: initial.vinAlertEmail || "sandeepptpss@gmail.com",
+    vinAlertEmail: initial.vinAlertEmail ?? "",
   }));
 
   useEffect(() => {
@@ -155,7 +160,7 @@ export default function Settings() {
         showFitmentChecker: current.showFitmentChecker,
         vinCapEnabled: current.vinCapEnabled ?? true,
         vinMonthlyCapLimit: current.vinMonthlyCapLimit ?? 50,
-        vinAlertEmail: current.vinAlertEmail || "sandeepptpss@gmail.com",
+        vinAlertEmail: current.vinAlertEmail ?? "",
       });
     }
   }, [settings, actionData]);
@@ -218,6 +223,19 @@ export default function Settings() {
           <div>
             <strong style={{ fontSize: "15px", display: "block" }}>Settings Saved Successfully</strong>
             <span style={{ fontSize: "13px", opacity: 0.9 }}>Your updated configuration is now active across your storefront.</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error Notification Alert */}
+      {actionData?.error && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "16px 20px", borderRadius: "12px", marginBottom: "28px", display: "flex", alignItems: "center", gap: "12px", boxShadow: "0 4px 12px rgba(239, 68, 68, 0.06)" }}>
+          <div style={{ background: "#dc2626", color: "#ffffff", width: "24px", height: "24px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: "13px" }}>
+            ✕
+          </div>
+          <div>
+            <strong style={{ fontSize: "15px", display: "block" }}>Error Saving Settings</strong>
+            <span style={{ fontSize: "13px", opacity: 0.9 }}>{actionData.error}</span>
           </div>
         </div>
       )}
@@ -521,43 +539,51 @@ export default function Settings() {
                 desc="Automatically alert or pause VIN API searches once your defined monthly safety limit is reached."
               />
 
-              {formState.vinCapEnabled && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", background: "#fff5f5", border: "1px solid #fed7d7", borderRadius: "12px", padding: "16px" }}>
-                  <div>
-                    <label style={{ fontSize: "12px", fontWeight: "800", color: "#792828", display: "block", marginBottom: "6px" }}>
-                      Max Monthly VIN Cap
-                    </label>
-                    <input
-                      type="number"
-                      name="vin_monthly_cap_limit"
-                      value={formState.vinMonthlyCapLimit}
-                      onChange={(e) => handleChange("vinMonthlyCapLimit", parseInt(e.target.value || "50", 10))}
-                      style={{ ...inputStyle, borderColor: "#fca5a5" }}
-                      min="1"
-                    />
-                    <span style={{ fontSize: "11px", color: "#9b2c2c", marginTop: "4px", display: "block" }}>
-                      Prevents searches over this count.
-                    </span>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: "12px", fontWeight: "800", color: "#792828", display: "block", marginBottom: "6px" }}>
-                      Alert Notification Email
-                    </label>
-                    <input
-                      type="email"
-                      name="vin_alert_email"
-                      value={formState.vinAlertEmail}
-                      onChange={(e) => handleChange("vinAlertEmail", e.target.value)}
-                      style={{ ...inputStyle, borderColor: "#fca5a5" }}
-                      placeholder="merchant@example.com"
-                    />
-                    <span style={{ fontSize: "11px", color: "#9b2c2c", marginTop: "4px", display: "block" }}>
-                      Receives alert at 80% usage.
-                    </span>
-                  </div>
+              <div
+                style={{
+                  display: formState.vinCapEnabled ? "grid" : "none",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "14px",
+                  background: "#fff5f5",
+                  border: "1px solid #fed7d7",
+                  borderRadius: "12px",
+                  padding: "16px",
+                }}
+              >
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: "800", color: "#792828", display: "block", marginBottom: "6px" }}>
+                    Max Monthly VIN Cap
+                  </label>
+                  <input
+                    type="number"
+                    name="vin_monthly_cap_limit"
+                    value={formState.vinMonthlyCapLimit}
+                    onChange={(e) => handleChange("vinMonthlyCapLimit", parseInt(e.target.value || "50", 10))}
+                    style={{ ...inputStyle, borderColor: "#fca5a5" }}
+                    min="1"
+                  />
+                  <span style={{ fontSize: "11px", color: "#9b2c2c", marginTop: "4px", display: "block" }}>
+                    Prevents searches over this count.
+                  </span>
                 </div>
-              )}
+
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: "800", color: "#792828", display: "block", marginBottom: "6px" }}>
+                    Alert Notification Email
+                  </label>
+                  <input
+                    type="email"
+                    name="vin_alert_email"
+                    value={formState.vinAlertEmail}
+                    onChange={(e) => handleChange("vinAlertEmail", e.target.value)}
+                    style={{ ...inputStyle, borderColor: "#fca5a5" }}
+                    placeholder="merchant@example.com"
+                  />
+                  <span style={{ fontSize: "11px", color: "#9b2c2c", marginTop: "4px", display: "block" }}>
+                    Receives alert at 80% usage.
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
