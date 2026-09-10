@@ -1,4 +1,4 @@
-import prisma from "./db.server";
+import prisma from "./db.server.js";
 import {
   PLAN_TIERS,
   BILLING_PLAN_KEYS,
@@ -7,7 +7,7 @@ import {
   resolveTierFromBillingName,
   getIsTestCharge,
   isTestCharge,
-} from "./plans.config";
+} from "./plans.config.js";
 
 export {
   PLAN_TIERS,

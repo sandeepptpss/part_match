@@ -203,12 +203,13 @@ assert(fs.existsSync(asoFilePath), 'SHOPIFY_APP_STORE_ASO.md exists');
 if (fs.existsSync(asoFilePath)) {
   const asoContent = fs.readFileSync(asoFilePath, 'utf8');
 
-  // Character Limit Check
-  const appTitle = "PartMatch: Year Make Model YMM";
-  assert(appTitle.length <= 30, `App Title length is ${appTitle.length} chars (Shopify limit: <= 30 chars)`);
-
-  const appSubtitle = "Year Make Model Search, VIN Lookup & Automotive Fitment";
-  assert(appSubtitle.length <= 60, `App Subtitle length is ${appSubtitle.length} chars (Shopify limit: <= 60 chars)`);
+  // Character Limit Check dynamically extracted from ASO Document
+  const titleMatch = asoContent.match(/`([^`]+)`\s*\|\s*Captures/i);
+  const subtitleMatch = asoContent.match(/`([^`]+)`\s*\|\s*Hits all/i);
+  const appTitle = titleMatch ? titleMatch[1] : "PartMatch: Year Make Model YMM";
+  const appSubtitle = subtitleMatch ? subtitleMatch[1] : "Year Make Model Search, VIN Lookup & Automotive Fitment";
+  assert(appTitle.length <= 30, `App Title "${appTitle}" length is ${appTitle.length} chars (Shopify limit: <= 30 chars)`);
+  assert(appSubtitle.length <= 60, `App Subtitle "${appSubtitle}" length is ${appSubtitle.length} chars (Shopify limit: <= 60 chars)`);
 
   // Target Keyword Presence Check
   const keywords = [

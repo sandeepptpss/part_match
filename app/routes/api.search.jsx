@@ -211,8 +211,8 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
       }
     }
 
-    // 3. Universal Products
-    if (includeUniversal) {
+    // 3. Universal Products (Appended only when vehicle fitments exist in store catalog)
+    if (includeUniversal && matchedFitments.length > 0) {
       const universalProducts = await prisma.universalProduct?.findMany({
         where: { shop },
         select: {

@@ -1,8 +1,20 @@
 // POST or GET /apps/partmatch/api/ai-voice-search?query=
 export async function action({ request }) {
-  const { authenticate, unauthenticated } = await import("../app/shopify.server.js");
+  let authenticate = null;
+  try {
+    const s = await import("../app/shopify.server.js");
+    authenticate = s?.authenticate;
+  } catch (err) {
+    // shopify.server not loadable in standalone node ESM simulation
+  }
   const { default: prisma } = await import("../app/db.server.js");
-  const { getShopPlan, planLimits } = await import("../app/plans.server.js");
+  const { getShopPlan, planLimits } = await import("../app/plans.server.js").catch(async () => {
+    const { planLimits } = await import("../app/plans.config.js");
+    return {
+      getShopPlan: async (s) => (await prisma.shopPlan?.findUnique({ where: { shop: s } })) || { shop: s, plan: "free" },
+      planLimits,
+    };
+  });
 
   async function getShopFromRequest(req) {
     try {
@@ -160,9 +172,10 @@ export async function action({ request }) {
   let { year, make, model, trim, keyword } = parsed;
 
   // Check if store models match afterMake or query
-  if (make && (!model || model.length < 2) && distinctDbModels.length > 0) {
-    const qLower = queryText.toLowerCase();
-    for (const dm of distinctDbModels) {
+  const qLower = queryText.toLowerCase();
+  if (make && distinctDbModels.length > 0) {
+    const sortedDbModels = [...distinctDbModels].sort((a, b) => b.length - a.length);
+    for (const dm of sortedDbModels) {
       if (qLower.includes(dm.toLowerCase())) {
         model = dm;
         break;
@@ -242,6 +255,9 @@ export async function action({ request }) {
     });
   });
 
+  const vehicleQueried = Boolean(year || make || model);
+  const fitmentProductCount = productMap.size;
+
   // Include Universal Products if query matches or is general
   if (includeUniversal) {
     const universal = await prisma.universalProduct?.findMany({
@@ -273,7 +289,11 @@ export async function action({ request }) {
     });
     if (matchedKws.length > 0) {
       products = matchedKws;
+    } else if (vehicleQueried && fitmentProductCount === 0) {
+      products = [];
     }
+  } else if (vehicleQueried && fitmentProductCount === 0) {
+    products = [];
   }
 
   const resultCount = products.length;
@@ -290,13 +310,13 @@ export async function action({ request }) {
 
   // Log voice / conversational search
   try {
-    if (year && make && model) {
+    if (make || model || year) {
       await prisma.searchLog?.create({
         data: {
           shop,
-          year,
-          make,
-          model,
+          year: year || "ANY",
+          make: make || "ANY",
+          model: model || "ANY",
           trim: trim || "",
           resultCount,
           hasResults: resultCount > 0,

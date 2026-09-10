@@ -556,7 +556,8 @@
             return;
           }
 
-          showBannerFeedback(voiceFeedback, data.speechResponse || 'Found matching fitment records.', 'success');
+          const feedbackType = data.hasResults ? 'success' : 'info';
+          showBannerFeedback(voiceFeedback, data.speechResponse || 'Found matching fitment records.', feedbackType);
 
           if (data.parsedVehicle && data.parsedVehicle.year && data.parsedVehicle.make && data.parsedVehicle.model) {
             saveVehicle({
