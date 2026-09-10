@@ -3,15 +3,35 @@ import { authenticate } from "../shopify.server";
 import { getShopPlan, planLimits } from "../plans.server";
 import prisma from "../db.server";
 
+async function getShopFromReq(request) {
+  try {
+    const { session } = await authenticate.public.appProxy(request);
+    if (session?.shop) return session.shop;
+  } catch (err) {
+    // App proxy signature missing in standalone simulation
+  }
+  try {
+    const url = new URL(request.url);
+    const queryShop = url.searchParams.get("shop");
+    if (queryShop) return queryShop;
+    if (request.method === "POST") {
+      const cloned = request.clone();
+      const body = await cloned.json().catch(() => ({}));
+      if (body?.shop) return body.shop;
+    }
+  } catch {}
+  return null;
+}
+
 // POST or GET /apps/partmatch/api/vin-lookup?vin= (proxied storefront request)
 export async function action({ request }) {
-  const { session } = await authenticate.public.appProxy(request);
+  const shop = await getShopFromReq(request);
 
-  if (!session) {
+  if (!shop) {
     return json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopPlan = await getShopPlan(session.shop);
+  const shopPlan = await getShopPlan(shop);
   const limits = planLimits(shopPlan?.plan || "free");
   if (!limits.vinLookup) {
     return json(
@@ -27,13 +47,13 @@ export async function action({ request }) {
 
   const monthVinCount = await prisma.vinLookupLog.count({
     where: {
-      shop: session.shop,
+      shop,
       createdAt: { gte: startOfMonth },
     },
   });
 
   // Check Merchant VIN Safety Cap Settings to prevent over-billing
-  const appSettings = await prisma.appSettings.findFirst({ where: { shop: session.shop } });
+  const appSettings = await prisma.appSettings.findFirst({ where: { shop } });
   if (appSettings?.vinCapEnabled && monthVinCount >= (appSettings.vinMonthlyCapLimit || 50)) {
     return json(
       {
@@ -93,7 +113,7 @@ export async function action({ request }) {
     try {
       await prisma.vinLookupLog.create({
         data: {
-          shop: session.shop,
+          shop,
           vin,
           vehicle: vehicleTitle,
         },

@@ -176,7 +176,7 @@ export default function FitmentExport() {
     return (
       <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
         <div style={{ maxWidth: "800px", margin: "40px auto", background: "#fffbe6", border: "1px solid #ffe58f", color: "#78350f", padding: "24px", borderRadius: "12px" }}>
-          <strong style={{ color: "#b45309", fontSize: "16px", display: "block", marginBottom: "6px" }}>Growth Professional Feature</strong>
+          <strong style={{ color: "#b45309", fontSize: "16px", display: "block", marginBottom: "6px" }}>Paid Plan Feature Required</strong>
           <p style={{ margin: "0 0 16px", fontSize: "14px" }}>{data?.message}</p>
           <Link to="/app/plans" style={{ color: "#2563eb", fontWeight: "700", textDecoration: "none" }}>Upgrade Plan →</Link>
         </div>

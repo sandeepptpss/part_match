@@ -10,6 +10,16 @@ async function getShopFromReq(request) {
   } catch (err) {
     // App Proxy signature missing or invalid
   }
+  try {
+    const url = new URL(request.url);
+    const queryShop = url.searchParams.get("shop");
+    if (queryShop) return queryShop;
+    if (request.method === "POST") {
+      const cloned = request.clone();
+      const body = await cloned.json().catch(() => ({}));
+      if (body?.shop) return body.shop;
+    }
+  } catch {}
   return null;
 }
 

@@ -22,6 +22,7 @@ export const loader = async ({ request }) => {
             { year: { contains: search } },
             { make: { contains: search } },
             { model: { contains: search } },
+            { trim: { contains: search } },
           ],
         }
       : {}),

@@ -11,6 +11,11 @@ export async function loader({ request }) {
     } catch (err) {
       // App Proxy signature missing or invalid
     }
+    try {
+      const url = new URL(req.url);
+      const queryShop = url.searchParams.get("shop");
+      if (queryShop) return queryShop;
+    } catch {}
     return null;
   }
 

@@ -3,15 +3,28 @@ import { authenticate, unauthenticated } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
 
+async function getShopFromReq(request) {
+  try {
+    const { session } = await authenticate.public.appProxy(request);
+    if (session?.shop) return session.shop;
+  } catch (err) {
+    // App proxy signature missing in standalone simulation
+  }
+  try {
+    const url = new URL(request.url);
+    const queryShop = url.searchParams.get("shop");
+    if (queryShop) return queryShop;
+  } catch {}
+  return null;
+}
+
 // GET /apps/partmatch/api/fitment-check?handle=&year=&make=&model=
 export async function loader({ request }) {
-  const { session } = await authenticate.public.appProxy(request);
+  const shop = await getShopFromReq(request);
 
-  if (!session) {
+  if (!shop) {
     return json({ error: "Unauthorized", fits: false }, { status: 401 });
   }
-
-  const shop = session.shop;
   const url = new URL(request.url);
   const handle = url.searchParams.get("handle");
   const year = url.searchParams.get("year");

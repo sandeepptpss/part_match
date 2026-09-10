@@ -10,7 +10,8 @@ export const loader = async ({ request }) => {
   const initialYear = url.searchParams.get("year") || "";
   const initialMake = url.searchParams.get("make") || "";
   const initialModel = url.searchParams.get("model") || "";
-  return json({ initialYear, initialMake, initialModel });
+  const initialTrim = url.searchParams.get("trim") || "";
+  return json({ initialYear, initialMake, initialModel, initialTrim });
 };
 
 export const action = async ({ request }) => {
@@ -21,6 +22,7 @@ export const action = async ({ request }) => {
   const year = formData.get("year")?.toString().trim();
   const make = formData.get("make")?.toString().trim();
   const model = formData.get("model")?.toString().trim();
+  const trim = formData.get("trim")?.toString().trim() || "";
 
   const errors = {};
   if (!year) errors.year = "Year is required";
@@ -28,11 +30,11 @@ export const action = async ({ request }) => {
   if (!model) errors.model = "Model is required";
 
   if (Object.keys(errors).length > 0) {
-    return json({ errors, values: { year, make, model } }, { status: 422 });
+    return json({ errors, values: { year, make, model, trim } }, { status: 422 });
   }
 
   const existing = await prisma.fitmentRecord.findUnique({
-    where: { shop_year_make_model_trim: { shop, year, make, model, trim: "" } },
+    where: { shop_year_make_model_trim: { shop, year, make, model, trim } },
   });
 
   if (!existing) {
@@ -46,7 +48,7 @@ export const action = async ({ request }) => {
             errors: {
               general: `You've reached the ${limits.fitmentLimit.toLocaleString()} fitment record limit for the ${limits.label} plan. Upgrade your plan to add more records.`,
             },
-            values: { year, make, model },
+            values: { year, make, model, trim },
           },
           { status: 422 },
         );
@@ -56,23 +58,23 @@ export const action = async ({ request }) => {
 
   try {
     const record = await prisma.fitmentRecord.upsert({
-      where: { shop_year_make_model_trim: { shop, year, make, model, trim: "" } },
-      create: { shop, year, make, model, trim: "" },
+      where: { shop_year_make_model_trim: { shop, year, make, model, trim } },
+      create: { shop, year, make, model, trim },
       update: {},
     });
     if (record && record.id) {
       return redirect(`/app/fitment/${record.id}/products`);
     } else {
-      return json({ errors: { general: "Failed to save record" }, values: { year, make, model } });
+      return json({ errors: { general: "Failed to save record" }, values: { year, make, model, trim } });
     }
   } catch (err) {
     console.error("[fitment/add]", err);
-    return json({ errors: { general: err.message || "Failed to save record" }, values: { year, make, model } });
+    return json({ errors: { general: err.message || "Failed to save record" }, values: { year, make, model, trim } });
   }
 };
 
 export default function FitmentAdd() {
-  const { initialYear, initialMake, initialModel } = useLoaderData();
+  const { initialYear, initialMake, initialModel, initialTrim } = useLoaderData();
   const fetcher = useFetcher();
   const actionData = fetcher.data;
   const saving = fetcher.state !== "idle";
@@ -82,6 +84,7 @@ export default function FitmentAdd() {
   const yearValue = values.year ?? initialYear ?? new Date().getFullYear();
   const makeValue = values.make ?? initialMake ?? "";
   const modelValue = values.model ?? initialModel ?? "";
+  const trimValue = values.trim ?? initialTrim ?? "";
 
   return (
     <div style={{ padding: "28px 24px 60px", width: "100%", maxWidth: "100%", boxSizing: "border-box", margin: "0 auto", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", color: "#0f172a" }}>
@@ -140,6 +143,16 @@ export default function FitmentAdd() {
               style={{ ...input, borderColor: errors.model ? "#dc2626" : "#cbd5e1" }}
             />
             {errors.model && <span style={errText}>{errors.model}</span>}
+          </div>
+
+          <div style={fieldGroup}>
+            <label style={label}>Trim / SubModel / Engine <span style={{ color: "#64748b", fontWeight: "normal", fontSize: "12px" }}>(Optional)</span></label>
+            <input
+              name="trim"
+              defaultValue={trimValue}
+              placeholder="e.g. Lariat, TRD, 3.5L EcoBoost, Base"
+              style={input}
+            />
           </div>
 
           <div style={{ display: "flex", gap: "12px", marginTop: "28px", paddingTop: "20px", borderTop: "1px solid #f1f5f9" }}>

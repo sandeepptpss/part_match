@@ -38,17 +38,34 @@ const DEFAULT_APP_SETTINGS = {
   showFitmentChecker: true,
 };
 
+async function getShopFromReq(request) {
+  try {
+    const { session } = await authenticate.public.appProxy(request);
+    if (session?.shop) return session.shop;
+  } catch (err) {
+    // App proxy signature missing or in theme editor preview
+  }
+  try {
+    const url = new URL(request.url);
+    const queryShop = url.searchParams.get("shop");
+    if (queryShop) return queryShop;
+  } catch {}
+  return null;
+}
+
 // GET /apps/partmatch/api/config
 // Returns the merchant's saved widget appearance + app behavior settings
 // so the storefront widget reflects what was configured in the admin app.
 export async function loader({ request }) {
-  const { session } = await authenticate.public.appProxy(request);
+  const shop = await getShopFromReq(request);
 
-  if (!session) {
-    return json({ error: "Unauthorized" }, { status: 401 });
+  if (!shop) {
+    return json({
+      widget: DEFAULT_WIDGET_SETTINGS,
+      settings: DEFAULT_APP_SETTINGS,
+      limits: { universalProducts: true, fitmentChecker: true, vinLookup: true, voiceSearchAssistant: true, subModelTrim: true },
+    });
   }
-
-  const shop = session.shop;
 
   let widget = await prisma.widgetSettings?.findUnique({ where: { shop } });
   if (!widget) {

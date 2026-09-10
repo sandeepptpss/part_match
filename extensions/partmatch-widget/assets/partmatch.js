@@ -30,11 +30,26 @@
     } catch (e) {}
   })();
 
+  function getShopQuery() {
+    try {
+      if (window.Shopify && window.Shopify.shop) {
+        return `shop=${encodeURIComponent(window.Shopify.shop)}`;
+      }
+    } catch {}
+    return '';
+  }
+
+  function withShop(url) {
+    const sq = getShopQuery();
+    if (!sq) return url;
+    return url.includes('?') ? `${url}&${sq}` : `${url}?${sq}`;
+  }
+
   // ─── Config ─────────────────────────────────────────────────────────────────
   async function loadConfig() {
     if (appConfig) return appConfig;
     try {
-      const res = await fetch(`${PROXY_BASE}/api/config`);
+      const res = await fetch(withShop(`${PROXY_BASE}/api/config`));
       appConfig = await res.json();
     } catch {
       appConfig = { widget: null, settings: null };
@@ -75,7 +90,7 @@
   async function resolveGarageMode() {
     if (garageMode) return;
     try {
-      const res = await fetch(`${PROXY_BASE}/api/garage`);
+      const res = await fetch(withShop(`${PROXY_BASE}/api/garage`));
       const data = await res.json();
       if (data.loggedIn) {
         garageMode = 'server';
@@ -103,10 +118,10 @@
 
     if (garageMode === 'server') {
       try {
-        const res = await fetch(`${PROXY_BASE}/api/garage`, {
+        const res = await fetch(withShop(`${PROXY_BASE}/api/garage`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ intent: 'add', ...v }),
+          body: JSON.stringify({ intent: 'add', shop: window.Shopify?.shop || undefined, ...v }),
         });
         const data = await res.json();
         if (data.vehicles) serverGarageCache = data.vehicles;
@@ -124,10 +139,10 @@
 
     if (garageMode === 'server') {
       try {
-        const res = await fetch(`${PROXY_BASE}/api/garage`, {
+        const res = await fetch(withShop(`${PROXY_BASE}/api/garage`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ intent: 'remove', year, make, model }),
+          body: JSON.stringify({ intent: 'remove', shop: window.Shopify?.shop || undefined, year, make, model }),
         });
         const data = await res.json();
         if (data.vehicles) serverGarageCache = data.vehicles;
@@ -141,41 +156,45 @@
 
   // ─── API Calls ───────────────────────────────────────────────────────────────
   async function fetchYears() {
-    const res = await fetch(`${PROXY_BASE}/api/years`);
+    const res = await fetch(withShop(`${PROXY_BASE}/api/years`));
     return (await res.json()).years || [];
   }
 
   async function fetchMakes(year) {
-    const res = await fetch(`${PROXY_BASE}/api/makes?year=${encodeURIComponent(year)}`);
+    const res = await fetch(withShop(`${PROXY_BASE}/api/makes?year=${encodeURIComponent(year)}`));
     return (await res.json()).makes || [];
   }
 
   async function fetchModels(year, make) {
-    const res = await fetch(`${PROXY_BASE}/api/models?year=${encodeURIComponent(year)}&make=${encodeURIComponent(make)}`);
+    const res = await fetch(withShop(`${PROXY_BASE}/api/models?year=${encodeURIComponent(year)}&make=${encodeURIComponent(make)}`));
     return (await res.json()).models || [];
   }
 
-  async function doSearch(year, make, model) {
+  async function doSearch(year, make, model, trim = '') {
     try {
-      const res = await fetch(`${PROXY_BASE}/api/search`, {
+      const payload = { year, make, model };
+      if (trim) payload.trim = trim;
+      if (window.Shopify && window.Shopify.shop) payload.shop = window.Shopify.shop;
+
+      const res = await fetch(withShop(`${PROXY_BASE}/api/search`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year, make, model }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const getRes = await fetch(`${PROXY_BASE}/api/search?year=${encodeURIComponent(year)}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}`);
-        if (!getRes.ok) return { hasResults: false, products: [], resultCount: 0, year, make, model };
+        const getRes = await fetch(withShop(`${PROXY_BASE}/api/search?year=${encodeURIComponent(year)}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}${trim ? `&trim=${encodeURIComponent(trim)}` : ''}`));
+        if (!getRes.ok) return { hasResults: false, products: [], resultCount: 0, year, make, model, trim };
         return await getRes.json();
       }
       return await res.json();
     } catch (err) {
       console.error('[PartMatch] doSearch fetch error:', err);
-      return { hasResults: false, products: [], resultCount: 0, year, make, model };
+      return { hasResults: false, products: [], resultCount: 0, year, make, model, trim };
     }
   }
 
-  async function checkFitment(handle, year, make, model) {
-    const res = await fetch(`${PROXY_BASE}/api/fitment-check?handle=${encodeURIComponent(handle)}&year=${encodeURIComponent(year)}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}`);
+  async function checkFitment(handle, year, make, model, trim = '') {
+    const res = await fetch(withShop(`${PROXY_BASE}/api/fitment-check?handle=${encodeURIComponent(handle)}&year=${encodeURIComponent(year)}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}${trim ? `&trim=${encodeURIComponent(trim)}` : ''}`));
     return res.json();
   }
 
@@ -683,6 +702,7 @@
     const urlYear  = urlParams.get('year');
     const urlMake  = urlParams.get('make');
     const urlModel = urlParams.get('model');
+    const urlTrim  = urlParams.get('trim') || '';
 
     if (urlYear && urlMake && urlModel) {
       const restoreVehicle = async () => {
@@ -733,7 +753,7 @@
             // Auto-trigger search if coming via URL query parameters
             if (resultsEl) {
               if (spinner) spinner.style.display = 'inline-block';
-              const result = await doSearch(urlYear, urlMake, urlModel);
+              const result = await doSearch(urlYear, urlMake, urlModel, urlTrim);
               if (spinner) spinner.style.display = 'none';
               await renderResults(resultsEl, result);
             }
@@ -848,6 +868,8 @@
       const year = yearSel.value;
       const make = makeSel.value;
       const model = modelSel.value;
+      const trimSel = widget.querySelector('[data-partmatch-trim]');
+      const trim = trimSel ? trimSel.value : '';
 
       // Validate Year, Make, Model selection
       if (!year) {
@@ -870,9 +892,9 @@
       if (spinner) spinner.style.display = 'inline-block';
 
       try {
-        // Save vehicle & garage
-        saveVehicle({ year, make, model });
-        await addToGarage({ year, make, model });
+        // Save vehicle & garage (including trim if selected)
+        saveVehicle({ year, make, model, trim });
+        await addToGarage({ year, make, model, trim });
 
         // Determine search display & redirection mode (Hierarchy: App Admin Settings -> Theme Block Overrides)
         const appRedirect = appConfig?.settings?.redirectOnSearch ?? true;
@@ -893,7 +915,9 @@
         const isResultsPage = currentPath === targetUrl;
 
         if (shouldRedirect && !isResultsPage) {
-          const q = new URLSearchParams({ year, make, model });
+          const qParams = { year, make, model };
+          if (trim) qParams.trim = trim;
+          const q = new URLSearchParams(qParams);
           searchBtn.disabled = false;
           if (spinner) spinner.style.display = 'none';
           window.location.href = `${targetUrl}?${q.toString()}`;
@@ -901,7 +925,7 @@
         }
 
         // Inline (Same Page) display (if on results page or showInline is true)
-        const result = await doSearch(year, make, model);
+        const result = await doSearch(year, make, model, trim);
 
         if (resultsEl) {
           await renderResults(resultsEl, result);
@@ -1032,6 +1056,7 @@
   }
 
   // ─── Product Page Fitment Checker ────────────────────────────────────────────
+  let fitmentListenerAttached = false;
   async function initFitmentChecker() {
     const checkers = document.querySelectorAll('[data-partmatch-checker]');
     if (!checkers.length) return;
@@ -1057,19 +1082,22 @@
       checker.innerHTML = renderFitmentState('loading', v);
 
       try {
-        const result = await checkFitment(handle, v.year, v.make, v.model);
+        const result = await checkFitment(handle, v.year, v.make, v.model, v.trim || '');
         checker.innerHTML = renderFitmentState(result.fits ? 'yes' : 'no', v);
       } catch {
         checker.innerHTML = renderFitmentState('error', v);
       }
     }));
 
-    // Re-check when vehicle changes
-    document.addEventListener('partmatch:vehicleChanged', () => initFitmentChecker());
+    // Re-check when vehicle changes (attach only once)
+    if (!fitmentListenerAttached) {
+      fitmentListenerAttached = true;
+      document.addEventListener('partmatch:vehicleChanged', () => initFitmentChecker());
+    }
   }
 
   function renderFitmentState(state, v) {
-    const vehicleStr = v ? `${v.year} ${v.make} ${v.model}` : '';
+    const vehicleStr = v ? [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ') : '';
     const states = {
       none: `<div class="pm-checker pm-checker--none">
                <span>Select your vehicle to check compatibility.</span>
@@ -1096,6 +1124,7 @@
   }
 
   // ─── My Garage Widget ────────────────────────────────────────────────────────
+  let garageListenerAttached = false;
   async function initGarage() {
     const garageEls = document.querySelectorAll('[data-partmatch-garage]');
     if (!garageEls.length) return;
@@ -1107,9 +1136,12 @@
     }
 
     garageEls.forEach(el => renderGarage(el));
-    document.addEventListener('partmatch:vehicleChanged', () => {
-      garageEls.forEach(el => renderGarage(el));
-    });
+    if (!garageListenerAttached) {
+      garageListenerAttached = true;
+      document.addEventListener('partmatch:vehicleChanged', () => {
+        garageEls.forEach(el => renderGarage(el));
+      });
+    }
   }
 
   async function renderGarage(el) {
@@ -1152,7 +1184,7 @@
   }
 
   // ─── Standalone Search Results Page Renderer ─────────────────────────────────
-  async function initStandaloneSearchResults(year, make, model) {
+  async function initStandaloneSearchResults(year, make, model, trim = '') {
     let target = document.querySelector('main') || 
                  document.querySelector('#MainContent') || 
                  document.querySelector('.main-content') || 
@@ -1168,6 +1200,8 @@
       return;
     }
 
+    const vehicleTitle = [year, make, model, trim].filter(Boolean).join(' ');
+
     // Check if auto-results container already exists
     let container = document.getElementById('pm-auto-results-container');
     if (!container) {
@@ -1180,7 +1214,7 @@
         <div style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e1e3e5; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
           <div>
             <h2 id="pm-standalone-title" style="font-size: 22px; font-weight: 700; color: #1a1a1a; margin: 0 0 4px;">
-              Search Results for <span style="color: #008060;">${year} ${make} ${model}</span>
+              Search Results for <span style="color: #008060;">${vehicleTitle}</span>
             </h2>
             <p style="color: #6d7175; margin: 0; font-size: 14px;">Showing all compatible products and universal items for your vehicle.</p>
           </div>
@@ -1208,7 +1242,7 @@
       }
     } else {
       const titleEl = container.querySelector('#pm-standalone-title');
-      if (titleEl) titleEl.innerHTML = `Search Results for <span style="color: #008060;">${year} ${make} ${model}</span>`;
+      if (titleEl) titleEl.innerHTML = `Search Results for <span style="color: #008060;">${vehicleTitle}</span>`;
     }
 
     const resultsEl = container.querySelector('[data-partmatch-auto-results]');
@@ -1219,20 +1253,20 @@
           <p style="margin-top: 12px; font-size: 14px;">Loading compatible products…</p>
         </div>
       `;
-      const result = await doSearch(year, make, model);
+      const result = await doSearch(year, make, model, trim);
       await renderResults(resultsEl, result);
     }
   }
 
   // ─── Native Collection Page Filter ───────────────────────────────────────────
-  async function filterNativeCollectionPage(year, make, model) {
+  async function filterNativeCollectionPage(year, make, model, trim = '') {
     let matchingHandles = null;
     let matchingTitles = null;
     let matchingIds = null;
     const isReset = !year || !make || !model;
 
     if (!isReset) {
-      const searchResult = await doSearch(year, make, model);
+      const searchResult = await doSearch(year, make, model, trim);
       if (!searchResult || !searchResult.products) return;
       matchingHandles = new Set(searchResult.products.map(p => (p.shopifyHandle || p.handle || '').toLowerCase()));
       matchingTitles = new Set(searchResult.products.map(p => (p.productTitle || p.title || '').toLowerCase()));
@@ -1348,14 +1382,15 @@
     const urlYear  = urlParams.get('year');
     const urlMake  = urlParams.get('make');
     const urlModel = urlParams.get('model');
+    const urlTrim  = urlParams.get('trim') || '';
 
     const saved = settingsAllow('persistSelection') ? savedVehicle() : null;
-    const v = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel } : saved;
+    const v = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel, trim: urlTrim } : saved;
 
     if (v && v.year && v.make && v.model) {
-      filterNativeCollectionPage(v.year, v.make, v.model);
+      filterNativeCollectionPage(v.year, v.make, v.model, v.trim || '');
     } else {
-      filterNativeCollectionPage(null, null, null);
+      filterNativeCollectionPage(null, null, null, null);
     }
   }
 
@@ -1433,13 +1468,14 @@
           const urlYear  = urlParams.get('year');
           const urlMake  = urlParams.get('make');
           const urlModel = urlParams.get('model');
+          const urlTrim  = urlParams.get('trim') || '';
           const saved = settingsAllow('persistSelection') ? savedVehicle() : null;
-          const v = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel } : saved;
+          const v = (urlYear && urlMake && urlModel) ? { year: urlYear, make: urlMake, model: urlModel, trim: urlTrim } : saved;
 
           if (v && v.year && v.make && v.model) {
-            initStandaloneSearchResults(v.year, v.make, v.model);
+            initStandaloneSearchResults(v.year, v.make, v.model, v.trim || '');
           } else {
-            initStandaloneSearchResults(null, null, null);
+            initStandaloneSearchResults(null, null, null, null);
           }
         };
 
