@@ -1,3 +1,4 @@
+/* global process */
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import { getShopPlan, planLimits } from "../plans.server";
@@ -21,7 +22,9 @@ async function getShopFromReq(request) {
         const body = await cloned.json().catch(() => ({}));
         if (body?.shop) return body.shop;
       }
-    } catch {}
+    } catch (e) {
+      // ignore fallback query errors in development
+    }
   }
   return null;
 }
@@ -103,7 +106,20 @@ export async function action({ request }) {
     const result = data?.Results?.[0];
 
     if (!result || !result.Make) {
-      return json({ error: "Vehicle details not found for this VIN" }, { status: 444 });
+      const firstChar = (vin.charAt(0) || "").toUpperCase();
+      let regionHint = "non-US / international chassis";
+      if (firstChar === "J") regionHint = "Japanese Domestic Market (JDM)";
+      else if (["W", "S", "Z", "V"].includes(firstChar)) regionHint = "European market chassis";
+      else if (firstChar === "K") regionHint = "Korean market chassis";
+
+      return json(
+        {
+          error: `Could not decode this VIN automatically (${regionHint}). Please use the 'BY VEHICLE (YMM)' tab to select your Year, Make, and Model directly.`,
+          isInternational: true,
+          vin,
+        },
+        { status: 444 }
+      );
     }
 
     const year = result.ModelYear || "";
@@ -112,13 +128,20 @@ export async function action({ request }) {
     const trim = result.Trim || result.DisplacementL ? `${result.Trim || ""} ${result.DisplacementL ? result.DisplacementL + "L" : ""}`.trim() : "";
     const vehicleTitle = `${year} ${make} ${model} ${trim}`.trim();
 
+    // Check if decode was partial (e.g. non-US VIN where Make is known but Model/Year is missing or error warning returned)
+    const isPartial = !model || !year || (Boolean(result.ErrorCode) && result.ErrorCode !== "0" && !String(result.ErrorCode).startsWith("0"));
+    const plantCountry = result.PlantCountry || "";
+    const partialNotice = isPartial
+      ? `International chassis detected (${plantCountry || "Global market"}). Decoded: ${[year, make].filter(Boolean).join(" ")}. Please confirm your exact model.`
+      : null;
+
     // Log successful VIN lookup for usage tracking
     try {
       await prisma.vinLookupLog.create({
         data: {
           shop,
           vin,
-          vehicle: vehicleTitle,
+          vehicle: vehicleTitle || `${year} ${make}`.trim() || vin,
         },
       });
     } catch (logErr) {
@@ -127,6 +150,9 @@ export async function action({ request }) {
 
     return json({
       success: true,
+      isPartial,
+      partialNotice,
+      plantCountry,
       vin,
       year,
       make,

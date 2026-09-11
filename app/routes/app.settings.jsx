@@ -1,3 +1,4 @@
+/* global process */
 const json = (data, init) => Response.json(data, init);
 import { useState, useEffect } from "react";
 import { useLoaderData, useFetcher, Link } from "react-router";
@@ -8,6 +9,7 @@ import { getShopPlan, planLimits } from "../plans.server";
 const DEFAULT_SETTINGS = {
   requireYear: true,
   requireAllFields: true,
+  enableTrim: true,
   logNoResults: true,
   includeUniversal: true,
   redirectOnSearch: true,
@@ -93,6 +95,7 @@ export const action = async ({ request }) => {
   const data = {
     requireYear: formData.get("require_year") === "true",
     requireAllFields: formData.get("require_all_fields") === "true",
+    enableTrim: formData.get("enable_trim") === "true",
     logNoResults: formData.get("log_no_results") === "true",
     includeUniversal: formData.get("include_universal") === "true",
     redirectOnSearch,
@@ -135,6 +138,7 @@ export default function Settings() {
   const [formState, setFormState] = useState(() => ({
     requireYear: initial.requireYear ?? true,
     requireAllFields: initial.requireAllFields ?? true,
+    enableTrim: initial.enableTrim ?? true,
     logNoResults: initial.logNoResults ?? true,
     includeUniversal: initial.includeUniversal ?? true,
     redirectOnSearch: initial.redirectOnSearch ?? true,
@@ -153,6 +157,7 @@ export default function Settings() {
       setFormState({
         requireYear: current.requireYear,
         requireAllFields: current.requireAllFields,
+        enableTrim: current.enableTrim ?? true,
         logNoResults: current.logNoResults,
         includeUniversal: current.includeUniversal,
         redirectOnSearch: current.redirectOnSearch,
@@ -273,6 +278,14 @@ export default function Settings() {
                 onChange={(val) => handleChange("requireAllFields", val)}
                 title="Require All Fields (Year + Make + Model)"
                 desc="Search action remains disabled until all 3 vehicle specifications are selected."
+              />
+
+              <ToggleRow
+                name="enable_trim"
+                checked={formState.enableTrim}
+                onChange={(val) => handleChange("enableTrim", val)}
+                title="Enable Sub-Model / Trim Dropdown"
+                desc="Enables the 4th cascading dropdown (Trim / Engine). Optional & non-blocking if no trims exist for a model."
               />
 
               <ToggleRow

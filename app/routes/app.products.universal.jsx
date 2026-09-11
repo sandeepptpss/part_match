@@ -39,7 +39,43 @@ export const loader = async ({ request }) => {
   }
 
   const assignedIds = new Set(universalProducts.map((p) => p.shopifyProductId));
-  const available = shopifyProducts.filter((p) => !assignedIds.has(p.id));
+
+  // Check if any available products already have vehicle-specific fitments mapped in DB
+  const availableProductIds = shopifyProducts.map((p) => p.id);
+  let fitmentCounts = {};
+  try {
+    const existingFitments = await prisma.fitmentProduct.groupBy({
+      by: ["shopifyProductId"],
+      where: {
+        fitment: { shop },
+        shopifyProductId: { in: availableProductIds },
+      },
+      _count: { id: true },
+    });
+    fitmentCounts = Object.fromEntries(
+      existingFitments.map((f) => [f.shopifyProductId, f._count.id])
+    );
+  } catch (err) {
+    console.warn("[universalProducts] fitment count error:", err);
+  }
+
+  const SPECIFIC_KEYWORD_REGEX = /\b(brake|rotor|pad|bumper|headlight|taillight|tail light|exhaust|strut|alternator|radiator|caliper|wiper|suspension|mirror|fender|coilover|spark plug|clutch|turbo)\b/i;
+
+  const available = shopifyProducts
+    .filter((p) => !assignedIds.has(p.id))
+    .map((p) => {
+      const match = (p.title || "").match(SPECIFIC_KEYWORD_REGEX);
+      const count = fitmentCounts[p.id] || 0;
+      const isVehicleSpecific = Boolean(match || count > 0);
+      let specificReason = "";
+      if (count > 0) specificReason = `${count} car fitments mapped`;
+      else if (match) specificReason = `keyword "${match[0]}"`;
+      return {
+        ...p,
+        isVehicleSpecific,
+        specificReason,
+      };
+    });
 
   return json({
     universalProducts,
@@ -312,8 +348,13 @@ export default function UniversalProducts() {
                       <BoxIcon size={18} color="#64748b" />
                     </div>
                     <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      <div style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {p.title}
+                      <div style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <span>{p.title}</span>
+                        {p.isVehicleSpecific && (
+                          <span style={{ background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", padding: "1px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: "700" }}>
+                            ⚠️ {p.specificReason}
+                          </span>
+                        )}
                       </div>
                       {p.handle && (
                         <div style={{ color: "#64748b", fontSize: "12px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", marginTop: "1px" }}>
@@ -322,7 +363,18 @@ export default function UniversalProducts() {
                       )}
                     </div>
                   </div>
-                  <Form method="post" style={{ flexShrink: 0 }}>
+                  <Form
+                    method="post"
+                    style={{ flexShrink: 0 }}
+                    onSubmit={(e) => {
+                      if (p.isVehicleSpecific) {
+                        const confirmMsg = `⚠️ Safeguard Alert:\n\n"${p.title}" appears to be vehicle-specific (${p.specificReason}).\n\nMarking it Universal will display it as "Guaranteed to Fit" for EVERY vehicle in your store.\n\nAre you sure you want to mark this item as Universal?`;
+                        if (!confirm(confirmMsg)) {
+                          e.preventDefault();
+                        }
+                      }
+                    }}
+                  >
                     <input type="hidden" name="intent" value="add" />
                     <input type="hidden" name="shopifyProductId" value={p.id} />
                     <input type="hidden" name="shopifyHandle" value={p.handle} />

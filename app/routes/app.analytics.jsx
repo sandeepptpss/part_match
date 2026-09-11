@@ -1,13 +1,35 @@
 const json = (data, init) => Response.json(data, init);
-import { useLoaderData, Link, useSearchParams } from "react-router";
+import { useLoaderData, Link, useSearchParams, useFetcher } from "react-router";
 import PropTypes from "prop-types";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
+import { maybeAutoPruneSearchLogs, pruneOldSearchLogs } from "../services/log-pruner.server.js";
+
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  if (intent === "pruneLogs") {
+    const result = await pruneOldSearchLogs(shop, 180);
+    return json({
+      pruned: true,
+      deletedCount: result.deletedCount,
+      message: `Cleaned up ${result.deletedCount} search logs older than 180 days. Database performance optimized!`,
+    });
+  }
+
+  return json({});
+};
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
+
+  // Run throttled auto-prune in background (once every 24h)
+  maybeAutoPruneSearchLogs(shop, 180);
 
   const url = new URL(request.url);
   const range = url.searchParams.get("range") || "30d"; // 7d | 30d | all
@@ -133,6 +155,8 @@ export const loader = async ({ request }) => {
 export default function Analytics() {
   const { stats, topVehicles, noResultVehicles, recentLogs, dailySearches, range } = useLoaderData();
   const [, setSearchParams] = useSearchParams();
+  const fetcher = useFetcher();
+  const isPruning = fetcher.state !== "idle";
 
   const handleRangeChange = (newRange) => {
     setSearchParams({ range: newRange });
@@ -455,6 +479,42 @@ export default function Analytics() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Database Retention & Cleanup Card */}
+      <div style={{ marginTop: "24px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "14px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+        <div>
+          <div style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a" }}>
+            Database Optimization & 180-Day Retention Policy
+          </div>
+          <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+            Search logs older than 6 months are automatically pruned to keep your database fast and queries lightweight.
+          </div>
+          {fetcher.data?.message && (
+            <div style={{ color: "#047857", fontSize: "12px", fontWeight: "700", marginTop: "4px" }}>
+              ✓ {fetcher.data.message}
+            </div>
+          )}
+        </div>
+        <fetcher.Form method="post">
+          <input type="hidden" name="intent" value="pruneLogs" />
+          <button
+            type="submit"
+            disabled={isPruning}
+            style={{
+              background: "#f8fafc",
+              border: "1px solid #cbd5e1",
+              color: "#334155",
+              padding: "8px 16px",
+              borderRadius: "8px",
+              fontSize: "12px",
+              fontWeight: "700",
+              cursor: isPruning ? "not-allowed" : "pointer",
+            }}
+          >
+            {isPruning ? "Optimizing..." : "🧹 Clean Logs > 180 Days"}
+          </button>
+        </fetcher.Form>
       </div>
     </div>
   );

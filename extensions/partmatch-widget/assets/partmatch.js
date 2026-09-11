@@ -97,10 +97,29 @@
   let garageMode = null;
   let serverGarageCache = [];
 
+  function detectClientCustomerId() {
+    try {
+      return (
+        window.__st?.cid ||
+        window.Shopify?.customer?.id ||
+        window.partmatchCustomerId ||
+        window.ShopifyAnalytics?.meta?.page?.customerId ||
+        null
+      );
+    } catch {
+      return null;
+    }
+  }
+
   async function resolveGarageMode() {
     if (garageMode) return;
     try {
-      const res = await fetch(withShop(`${PROXY_BASE}/api/garage`));
+      const cid = detectClientCustomerId();
+      const queryParam = cid ? `customerId=${encodeURIComponent(cid)}` : '';
+      const garageUrl = withShop(`${PROXY_BASE}/api/garage${queryParam ? (PROXY_BASE.includes('?') ? '&' : '?') + queryParam : ''}`);
+      const headers = cid ? { 'x-customer-id': String(cid) } : {};
+
+      const res = await fetch(garageUrl, { headers });
       const data = await res.json();
       if (data.loggedIn) {
         garageMode = 'server';
@@ -128,10 +147,14 @@
 
     if (garageMode === 'server') {
       try {
+        const cid = detectClientCustomerId();
+        const headers = { 'Content-Type': 'application/json' };
+        if (cid) headers['x-customer-id'] = String(cid);
+
         const res = await fetch(withShop(`${PROXY_BASE}/api/garage`), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ intent: 'add', shop: window.Shopify?.shop || undefined, ...v }),
+          headers,
+          body: JSON.stringify({ intent: 'add', customerId: cid || undefined, shop: window.Shopify?.shop || undefined, ...v }),
         });
         const data = await res.json();
         if (data.vehicles) serverGarageCache = data.vehicles;
@@ -149,10 +172,14 @@
 
     if (garageMode === 'server') {
       try {
+        const cid = detectClientCustomerId();
+        const headers = { 'Content-Type': 'application/json' };
+        if (cid) headers['x-customer-id'] = String(cid);
+
         const res = await fetch(withShop(`${PROXY_BASE}/api/garage`), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ intent: 'remove', shop: window.Shopify?.shop || undefined, year, make, model }),
+          headers,
+          body: JSON.stringify({ intent: 'remove', customerId: cid || undefined, shop: window.Shopify?.shop || undefined, year, make, model }),
         });
         const data = await res.json();
         if (data.vehicles) serverGarageCache = data.vehicles;
@@ -680,7 +707,11 @@
           }
 
           const { year, make, model } = data;
-          showBannerFeedback(vinFeedback, `Decoded: ${year} ${make} ${model}. Auto-selecting vehicle dropdowns…`, 'success');
+          if (data.isPartial) {
+            showBannerFeedback(vinFeedback, data.partialNotice || `Decoded: ${[year, make].filter(Boolean).join(' ')}. Please confirm your Model in the vehicle tab.`, 'info');
+          } else {
+            showBannerFeedback(vinFeedback, `Decoded: ${year} ${make} ${model}. Auto-selecting vehicle dropdowns…`, 'success');
+          }
 
           // Switch to YMM panel to show auto-selected dropdowns
           setTimeout(() => {
@@ -689,45 +720,58 @@
           }, 1200);
 
           // Auto-Select Year -> Make -> Model
-          setSelectValue(yearSel, year);
-          yearSel.dispatchEvent(new Event('change'));
+          if (year) {
+            setSelectValue(yearSel, year);
+            yearSel.dispatchEvent(new Event('change'));
+          }
 
-          // Wait for makes to populate then select Make
-          await new Promise(r => {
-            let attempts = 0;
-            const checkMakes = () => {
-              if (!makeSel.disabled && makeSel.options.length > 1) {
-                setSelectValue(makeSel, make);
-                makeSel.dispatchEvent(new Event('change'));
-                r();
-              } else if (attempts > 60) {
-                r();
-              } else {
-                attempts++;
-                setTimeout(checkMakes, 50);
-              }
-            };
-            checkMakes();
-          });
+          if (make) {
+            // Wait for makes to populate then select Make
+            await new Promise(r => {
+              let attempts = 0;
+              const checkMakes = () => {
+                if (!makeSel.disabled && makeSel.options.length > 1) {
+                  setSelectValue(makeSel, make);
+                  makeSel.dispatchEvent(new Event('change'));
+                  r();
+                } else if (attempts > 60) {
+                  r();
+                } else {
+                  attempts++;
+                  setTimeout(checkMakes, 50);
+                }
+              };
+              checkMakes();
+            });
+          }
 
-          // Wait for models to populate then select Model
-          await new Promise(r => {
-            let attempts = 0;
-            const checkModels = () => {
-              if (!modelSel.disabled && modelSel.options.length > 1) {
-                setSelectValue(modelSel, model);
-                modelSel.dispatchEvent(new Event('change'));
-                searchBtn.disabled = false;
-                r();
-              } else if (attempts > 60) {
-                r();
-              } else {
-                attempts++;
-                setTimeout(checkModels, 50);
+          if (model) {
+            // Wait for models to populate then select Model
+            await new Promise(r => {
+              let attempts = 0;
+              const checkModels = () => {
+                if (!modelSel.disabled && modelSel.options.length > 1) {
+                  setSelectValue(modelSel, model);
+                  modelSel.dispatchEvent(new Event('change'));
+                  searchBtn.disabled = false;
+                  r();
+                } else if (attempts > 60) {
+                  r();
+                } else {
+                  attempts++;
+                  setTimeout(checkModels, 50);
+                }
+              };
+              checkModels();
+            });
+          } else if (data.isPartial) {
+            // For partial international decode: focus attention on Model selector
+            setTimeout(() => {
+              if (modelSel) {
+                modelSel.focus();
               }
-            };
-            checkModels();
-          });
+            }, 1400);
+          }
 
         } catch (err) {
           if (vinFeedback) {

@@ -1,3 +1,4 @@
+/* global process */
 const json = (data, init) => Response.json(data, init);
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -6,10 +7,19 @@ import { getShopPlan, planLimits } from "../plans.server";
 const MAX_VEHICLES = 5;
 
 // Shopify's App Proxy signs and forwards `logged_in_customer_id` automatically
-// when the storefront request came from a page with a logged-in customer.
-// Guests have no customer id — My Garage falls back to localStorage for them.
-function getCustomerId(url) {
-  return url.searchParams.get("logged_in_customer_id") || null;
+// for Classic Accounts. For New Customer Accounts, we check headers, query params, and body.
+// Normalizes "gid://shopify/Customer/12345" to "12345" so both account types match the same records.
+function getCustomerId(url, request) {
+  const raw =
+    url.searchParams.get("logged_in_customer_id") ||
+    url.searchParams.get("customerId") ||
+    url.searchParams.get("customer_id") ||
+    request?.headers?.get("x-shopify-customer-id") ||
+    request?.headers?.get("x-customer-id") ||
+    null;
+
+  if (!raw) return null;
+  return String(raw).replace(/^gid:\/\/shopify\/Customer\//i, "").trim() || null;
 }
 
 async function getShopAndAuth(request) {
@@ -35,7 +45,9 @@ async function getShopAndAuth(request) {
         const body = await cloned.json().catch(() => ({}));
         if (body?.shop) shop = body.shop;
       }
-    } catch {}
+    } catch (fallbackErr) {
+      // ignore fallback query errors in development
+    }
   }
   return { shop, isVerifiedProxy };
 }
@@ -46,7 +58,7 @@ export async function loader({ request }) {
   if (!shop) return json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(request.url);
-  const customerId = getCustomerId(url);
+  const customerId = getCustomerId(url, request);
 
   if (!customerId) {
     return json({ loggedIn: false, vehicles: [] });
@@ -79,7 +91,18 @@ export async function action({ request }) {
   if (!shop) return json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(request.url);
-  const customerId = getCustomerId(url);
+  let body = {};
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  let customerId = getCustomerId(url, request);
+  if (!customerId && body?.customerId) {
+    customerId = String(body.customerId).replace(/^gid:\/\/shopify\/Customer\//i, "").trim() || null;
+  }
+
   if (!customerId) {
     return json({ error: "Not logged in" }, { status: 401 });
   }
@@ -92,13 +115,6 @@ export async function action({ request }) {
   const { plan } = await getShopPlan(shop);
   if (!planLimits(plan).garageSync) {
     return json({ error: "My Garage sync requires the Growth Professional plan or above." }, { status: 403 });
-  }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const { intent, year, make, model, trim = "" } = body;

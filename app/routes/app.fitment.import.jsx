@@ -949,6 +949,30 @@ export default function FitmentImport() {
           </div>
         )}
 
+        {/* Real-time Processing & Submission Progress Banner */}
+        {navigation.state !== "idle" && (
+          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "14px", padding: "20px 24px", marginBottom: "28px", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.08)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "18px", height: "18px", border: "3px solid #bfdbfe", borderTopColor: "#2563eb", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                <span style={{ fontSize: "15px", fontWeight: "800", color: "#1e40af" }}>
+                  Processing & Staging Fitment Catalog...
+                </span>
+              </div>
+              <span style={{ fontSize: "12px", fontWeight: "700", color: "#2563eb", background: "#ffffff", padding: "4px 12px", borderRadius: "20px", border: "1px solid #bfdbfe" }}>
+                Please keep this page open
+              </span>
+            </div>
+            {/* Animated Progress Bar */}
+            <div style={{ width: "100%", height: "8px", background: "#dbeafe", borderRadius: "4px", overflow: "hidden" }}>
+              <div style={{ width: "70%", height: "100%", background: "linear-gradient(90deg, #3b82f6, #2563eb)", borderRadius: "4px" }} />
+            </div>
+            <p style={{ margin: "10px 0 0", fontSize: "12px", color: "#64748b" }}>
+              Parsing vehicle records, normalizing makes/models, detecting conflicts, and staging records.
+            </p>
+          </div>
+        )}
+
         {/* Tab Navigation */}
         <div style={{ display: "flex", gap: "8px", borderBottom: "2px solid #e2e8f0", marginBottom: "28px", paddingBottom: "2px", flexWrap: "wrap" }}>
           {[
@@ -1716,9 +1740,19 @@ export default function FitmentImport() {
                             borderRadius: "6px",
                             fontSize: "11px",
                             fontWeight: "800",
+                            display: "inline-block",
                           }}>
                             {job.status}
                           </span>
+                          {job.status === "PROCESSING" && job.totalRows > 0 && (
+                            <div style={{ marginTop: "4px", width: "80px", height: "4px", background: "#e2e8f0", borderRadius: "2px", overflow: "hidden" }}>
+                              <div style={{
+                                width: `${Math.min(100, Math.round(((job.processedRows || job.stagedCount || 0) / job.totalRows) * 100))}%`,
+                                height: "100%",
+                                background: "#2563eb",
+                              }} />
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding: "12px", fontWeight: "700" }}>{job.approvedCount}</td>
                         <td style={{ padding: "12px", color: "#64748b" }}>
