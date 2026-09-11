@@ -90,9 +90,20 @@ export async function loader({ request }) {
 
   const settings = appSettings
     ? {
-        ...appSettings,
+        requireYear: appSettings.requireYear,
+        requireAllFields: appSettings.requireAllFields,
+        logNoResults: appSettings.logNoResults,
+        includeUniversal: appSettings.includeUniversal,
+        redirectOnSearch: appSettings.redirectOnSearch,
+        resultsUrl: appSettings.resultsUrl,
+        persistSelection: appSettings.persistSelection,
+        enableGarage: appSettings.enableGarage,
+        enablePdpBadges: appSettings.enablePdpBadges,
         showFitmentChecker: Boolean(appSettings.showFitmentChecker && limits.fitmentChecker),
         enableTrim: Boolean(appSettings.enableTrim !== false && limits.subModelTrim !== false),
+        enableVinSearch: Boolean(appSettings.enableVinSearch && limits.vinLookup),
+        vinCapEnabled: appSettings.vinCapEnabled,
+        vinMonthlyCapLimit: appSettings.vinMonthlyCapLimit,
       }
     : null;
 

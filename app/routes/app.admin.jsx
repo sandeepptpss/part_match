@@ -13,14 +13,14 @@ export const loader = async ({ request }) => {
   // eslint-disable-next-line no-undef
   const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
 
-  const sessionEmail = session.email || adminEmail;
+  const sessionEmail = session.email ? session.email.toLowerCase().trim() : "";
+  const allowedEmail = (adminEmail || "").toLowerCase().trim();
 
-  // Admin access check (strict equality to prevent arbitrary domain inclusion vulnerabilities)
+  // Admin access check: strict store domain match or verified admin session email
   const isAdmin =
     currentShop === adminStore ||
     currentShop === `${adminStore}.myshopify.com` ||
-    sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
-    (adminEmail && sessionEmail.toLowerCase() === adminEmail.toLowerCase());
+    (Boolean(sessionEmail) && Boolean(allowedEmail) && sessionEmail === allowedEmail);
 
   if (!isAdmin) {
     return redirect("/app");
@@ -105,7 +105,7 @@ export const loader = async ({ request }) => {
         }
 
         const sessionMatch = sessions.find((s) => s.shop === domain);
-        const contactEmail = sessionMatch?.email || adminEmail;
+        const contactEmail = sessionMatch?.email || "";
         const merchantDiscount =
           settings?.merchantDiscountPercent != null
             ? settings.merchantDiscountPercent
@@ -181,14 +181,13 @@ export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const currentShop = session.shop;
   const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
-  const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
-  const sessionEmail = session.email || adminEmail;
+  const sessionEmail = session.email ? session.email.toLowerCase().trim() : "";
+  const allowedEmail = (adminEmail || "").toLowerCase().trim();
 
   const isAdmin =
     currentShop === adminStore ||
     currentShop === `${adminStore}.myshopify.com` ||
-    sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
-    (adminEmail && sessionEmail.toLowerCase() === adminEmail.toLowerCase());
+    (Boolean(sessionEmail) && Boolean(allowedEmail) && sessionEmail === allowedEmail);
 
   if (!isAdmin) {
     return Response.json({ success: false, error: "Unauthorized" }, { status: 403 });

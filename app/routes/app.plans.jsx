@@ -13,15 +13,16 @@ export const loader = async ({ request }) => {
   const { session, billing } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const sessionEmail = session.email || "sandeepptpss@gmail.com";
+  const sessionEmail = session.email || "";
   const shopDomain = (shop || "").toLowerCase();
-  const userEmail = (sessionEmail || "").toLowerCase();
+  const adminStore = (process.env.ADMIN_STORE_NAME || "quickstart-749ac396").toLowerCase();
+  const adminEmail = (process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com").toLowerCase().trim();
+  const userEmail = (sessionEmail || "").toLowerCase().trim();
 
   const isAdmin =
-    shopDomain.includes("quickstart-749ac396") ||
-    shopDomain.includes("sandeepptpss") ||
-    userEmail.includes("sandeepptpss") ||
-    userEmail === "sandeepptpss@gmail.com";
+    shopDomain === adminStore ||
+    shopDomain === `${adminStore}.myshopify.com` ||
+    (Boolean(userEmail) && Boolean(adminEmail) && userEmail === adminEmail);
 
   let fitmentCount = 0;
   let productMappingCount = 0;
@@ -121,6 +122,31 @@ export const action = async ({ request }) => {
   const intent = formData.get("intent");
 
   if (intent === "claimVipFreeOffer") {
+    // Verify eligibility on server before granting free upgrade
+    const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+    const currentSettings = await prisma.appSettings.findFirst({ where: { shop } });
+
+    const autoGrantFirst10 = globalSettings?.autoGrantFirst10 ?? false;
+    const vipFreeOfferStoreLimit = currentSettings?.vipFreeOfferStoreLimit ?? globalSettings?.vipFreeOfferStoreLimit ?? 10;
+
+    let isEligibleStore = false;
+    try {
+      const allStores = (await prisma.appSettings.findMany({ select: { shop: true, id: true }, orderBy: { id: "asc" } })) ?? [];
+      const shopIndex = allStores.findIndex((s) => s.shop === shop);
+      if (shopIndex !== -1 && shopIndex < vipFreeOfferStoreLimit) {
+        isEligibleStore = true;
+      }
+    } catch (err) {
+      console.warn("[claimVipFreeOffer] Error checking store index:", err);
+    }
+
+    const isVipFreeOfferExplicit = currentSettings?.vipFreeOfferActive ?? false;
+    const isEligible = isVipFreeOfferExplicit || (autoGrantFirst10 && isEligibleStore);
+
+    if (!isEligible) {
+      return json({ success: false, message: "Your store is not currently eligible for the VIP Free Offer." }, { status: 403 });
+    }
+
     try {
       await prisma.shopPlan.upsert({
         where: { shop },
@@ -150,9 +176,7 @@ export const action = async ({ request }) => {
       console.warn("[claimVipFreeOffer] Error upserting appSettings:", err?.message);
     }
 
-    const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
-    const appSettings = await prisma.appSettings.findFirst({ where: { shop } });
-    const vipMonths = appSettings?.vipFreeOfferMonths ?? globalSettings?.vipFreeOfferMonths ?? 2;
+    const vipMonths = currentSettings?.vipFreeOfferMonths ?? globalSettings?.vipFreeOfferMonths ?? 2;
     const vipDays = vipMonths * 30;
 
     return json({

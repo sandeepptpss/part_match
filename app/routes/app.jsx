@@ -15,13 +15,13 @@ export const loader = async ({ request }) => {
   const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
   // eslint-disable-next-line no-undef
   const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
-  const sessionEmail = session.email || adminEmail;
+  const sessionEmail = session.email ? session.email.toLowerCase().trim() : "";
+  const allowedEmail = (adminEmail || "").toLowerCase().trim();
 
   const isAdmin =
-    shop.includes(adminStore) ||
-    shop.includes("quickstart-749ac396") ||
-    sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
-    sessionEmail === adminEmail;
+    shop === adminStore ||
+    shop === `${adminStore}.myshopify.com` ||
+    (Boolean(sessionEmail) && Boolean(allowedEmail) && sessionEmail === allowedEmail);
 
   // Show onboarding badge if no fitment data yet
   let fitmentCount = 0;

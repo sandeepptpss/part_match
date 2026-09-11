@@ -28,12 +28,12 @@ export const loader = async ({ request }) => {
   const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
   // eslint-disable-next-line no-undef
   const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
-  const sessionEmail = session.email || adminEmail;
+  const sessionEmail = session.email ? session.email.toLowerCase().trim() : "";
+  const allowedEmail = (adminEmail || "").toLowerCase().trim();
   const isAdmin =
     shop === adminStore ||
     shop === `${adminStore}.myshopify.com` ||
-    sessionEmail.toLowerCase() === "sandeepptpss@gmail.com" ||
-    (adminEmail && sessionEmail.toLowerCase() === adminEmail.toLowerCase());
+    (Boolean(sessionEmail) && Boolean(allowedEmail) && sessionEmail === allowedEmail);
 
   let settings = null;
   try {
@@ -42,7 +42,7 @@ export const loader = async ({ request }) => {
     });
     if (!settings) {
       settings = await prisma.appSettings.create({
-        data: { shop, ...DEFAULT_SETTINGS, vinAlertEmail: sessionEmail },
+        data: { shop, ...DEFAULT_SETTINGS, vinAlertEmail: sessionEmail || "" },
       });
     }
   } catch (err) {

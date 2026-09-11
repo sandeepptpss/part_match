@@ -9,6 +9,16 @@
 (function () {
   'use strict';
 
+  function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   const STORAGE_KEY = 'partmatch_vehicle';
   const GARAGE_KEY  = 'partmatch_garage';
   const PROXY_BASE  = '/apps/partmatch';
@@ -495,10 +505,10 @@
       el.style.fontWeight = '600';
       el.style.marginTop = '10px';
 
-      const cleanMsg = message.replace(/^[❌✓⏳🎙️]\s*/, '');
+      const cleanMsg = message.replace(/^[❌✓⏳🎙️]\s*/u, '');
 
       el.innerHTML = `
-        <span style="flex: 1;">${cleanMsg}</span>
+        <span style="flex: 1;">${escapeHtml(cleanMsg)}</span>
         <button type="button" aria-label="Dismiss" style="background: transparent; border: none; color: ${textColor}; font-size: 18px; font-weight: 700; cursor: pointer; padding: 0 4px; line-height: 1; opacity: 0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
           &times;
         </button>
@@ -852,7 +862,7 @@
       valEl.style.display = 'flex';
       valEl.innerHTML = `
         <span style="font-size: 15px; line-height: 1;">⚠️</span>
-        <span style="flex: 1; font-weight: 600; font-size: 13px;">${message}</span>
+        <span style="flex: 1; font-weight: 600; font-size: 13px;">${escapeHtml(message)}</span>
         <button type="button" aria-label="Close" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #991b1b; padding: 0 4px; line-height: 1;">✕</button>
       `;
 
@@ -994,11 +1004,15 @@
 
   // ─── Render Results ─────────────────────────────────────────────────────────
   async function renderResults(el, result) {
+    const safeYear = escapeHtml(result.year);
+    const safeMake = escapeHtml(result.make);
+    const safeModel = escapeHtml(result.model);
+
     if (!result.hasResults || !result.products.length) {
       el.innerHTML = `
         <div class="pm-no-results">
           <h3>No products found</h3>
-          <p>No compatible products for <strong>${result.year} ${result.make} ${result.model}</strong>.</p>
+          <p>No compatible products for <strong>${safeYear} ${safeMake} ${safeModel}</strong>.</p>
           <div class="pm-no-results__actions">
             <button class="pm-btn pm-btn--primary" onclick="document.querySelector('[data-partmatch-clear]')?.click()">Change Vehicle</button>
             <a href="/pages/contact" class="pm-btn pm-btn--secondary">Contact Us</a>
@@ -1011,7 +1025,7 @@
       <div class="pm-results">
         <div class="pm-results__header">
           <span class="pm-results__label">Matching products for:</span>
-          <strong class="pm-results__vehicle">${result.year} ${result.make} ${result.model}</strong>
+          <strong class="pm-results__vehicle">${safeYear} ${safeMake} ${safeModel}</strong>
           <span class="pm-results__count">(${result.resultCount} product${result.resultCount !== 1 ? 's' : ''})</span>
         </div>
         <div class="pm-results__grid" id="pm-results-grid">
@@ -1026,18 +1040,19 @@
     const cardPromises = result.products.map(async (p) => {
       const details = await fetchProductDetails(p.shopifyHandle);
       const title = details?.title || p.productTitle || p.shopifyHandle;
+      const safeTitle = escapeHtml(title);
       const priceStr = details?.price ? `$${(details.price / 100).toFixed(2)}` : '';
       const imageSrc = details?.featured_image || details?.images?.[0] || '';
 
       return `
-        <a href="/products/${p.shopifyHandle}" class="pm-product-card">
+        <a href="/products/${encodeURIComponent(p.shopifyHandle)}" class="pm-product-card">
           <div class="pm-product-card__img-wrap">
-            ${imageSrc ? `<img src="${imageSrc}" alt="${title}" loading="lazy" class="pm-product-card__img"/>` : `<div class="pm-product-card__placeholder">No Image</div>`}
+            ${imageSrc ? `<img src="${encodeURI(imageSrc)}" alt="${safeTitle}" loading="lazy" class="pm-product-card__img"/>` : `<div class="pm-product-card__placeholder">No Image</div>`}
           </div>
           <div class="pm-product-card__content">
-            <div class="pm-product-card__badge">✓ Fits ${result.year} ${result.make} ${result.model}</div>
-            <h4 class="pm-product-card__title">${title}</h4>
-            ${priceStr ? `<div class="pm-product-card__price">${priceStr}</div>` : ''}
+            <div class="pm-product-card__badge">✓ Fits ${safeYear} ${safeMake} ${safeModel}</div>
+            <h4 class="pm-product-card__title">${safeTitle}</h4>
+            ${priceStr ? `<div class="pm-product-card__price">${escapeHtml(priceStr)}</div>` : ''}
             <div class="pm-product-card__btn">View Details →</div>
           </div>
         </a>`;
@@ -1139,7 +1154,7 @@
   }
 
   function renderFitmentState(state, v) {
-    const vehicleStr = v ? [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ') : '';
+    const vehicleStr = v ? escapeHtml([v.year, v.make, v.model, v.trim].filter(Boolean).join(' ')) : '';
     const states = {
       none: `<div class="pm-checker pm-checker--none">
                <span>Select your vehicle to check compatibility.</span>
@@ -1197,12 +1212,15 @@
 
     const rows = garage.map(v => {
       const isActive = current && current.year === v.year && current.make === v.make && current.model === v.model;
+      const safeYear = escapeHtml(v.year);
+      const safeMake = escapeHtml(v.make);
+      const safeModel = escapeHtml(v.model);
       return `<div class="pm-garage__item${isActive ? ' pm-garage__item--active' : ''}">
-        <button class="pm-garage__select" data-year="${v.year}" data-make="${v.make}" data-model="${v.model}">
-          ${v.year} ${v.make} ${v.model}
+        <button class="pm-garage__select" data-year="${safeYear}" data-make="${safeMake}" data-model="${safeModel}">
+          ${safeYear} ${safeMake} ${safeModel}
           ${isActive ? '<span class="pm-garage__badge">Active</span>' : ''}
         </button>
-        <button class="pm-garage__remove" data-year="${v.year}" data-make="${v.make}" data-model="${v.model}">✕</button>
+        <button class="pm-garage__remove" data-year="${safeYear}" data-make="${safeMake}" data-model="${safeModel}">✕</button>
       </div>`;
     }).join('');
 
@@ -1243,6 +1261,7 @@
     }
 
     const vehicleTitle = [year, make, model, trim].filter(Boolean).join(' ');
+    const safeVehicleTitle = escapeHtml(vehicleTitle);
 
     // Check if auto-results container already exists
     let container = document.getElementById('pm-auto-results-container');
@@ -1256,7 +1275,7 @@
         <div style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e1e3e5; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
           <div>
             <h2 id="pm-standalone-title" style="font-size: 22px; font-weight: 700; color: #1a1a1a; margin: 0 0 4px;">
-              Search Results for <span style="color: #008060;">${vehicleTitle}</span>
+              Search Results for <span style="color: #008060;">${safeVehicleTitle}</span>
             </h2>
             <p style="color: #6d7175; margin: 0; font-size: 14px;">Showing all compatible products and universal items for your vehicle.</p>
           </div>
@@ -1284,7 +1303,7 @@
       }
     } else {
       const titleEl = container.querySelector('#pm-standalone-title');
-      if (titleEl) titleEl.innerHTML = `Search Results for <span style="color: #008060;">${vehicleTitle}</span>`;
+      if (titleEl) titleEl.innerHTML = `Search Results for <span style="color: #008060;">${safeVehicleTitle}</span>`;
     }
 
     const resultsEl = container.querySelector('[data-partmatch-auto-results]');

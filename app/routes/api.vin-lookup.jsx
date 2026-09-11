@@ -67,7 +67,7 @@ export async function action({ request }) {
   // Check if monthly limit reached for non-unlimited plans
   if (limits.vinMonthlyLimit && Number.isFinite(limits.vinMonthlyLimit) && monthVinCount >= limits.vinMonthlyLimit) {
     // Note: In live Shopify Billing usage charges, extra lookups can be billed at limits.vinOverageRate ($0.05)
-    console.log(`[VIN Lookup] Store ${session.shop} reached monthly limit of ${limits.vinMonthlyLimit} lookups. Overage rate: $${limits.vinOverageRate}/lookup.`);
+    console.log(`[VIN Lookup] Store ${shop} reached monthly limit of ${limits.vinMonthlyLimit} lookups. Overage rate: $${limits.vinOverageRate}/lookup.`);
   }
 
   let vin = "";
@@ -84,7 +84,7 @@ export async function action({ request }) {
   }
 
   vin = vin.trim().toUpperCase();
-  if (!vin || vin.length !== 17) {
+  if (!vin || vin.length !== 17 || !/^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) {
     return json({ error: "Invalid VIN. Please provide a valid 17-character VIN." }, { status: 400 });
   }
 
