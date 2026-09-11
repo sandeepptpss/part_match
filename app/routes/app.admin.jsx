@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useLoaderData, useFetcher, useRevalidator, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { normalizeShopDomain } from "../utils/shopDomain";
 
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -70,11 +71,21 @@ export const loader = async ({ request }) => {
       console.warn("[admin loader] Error fetching shop name:", err?.message);
     }
 
-    const shopSet = new Set([
+    // Get unique canonical shops
+    const rawCandidateShops = [
       currentShop,
-      ...settingsList.map((s) => s.shop).filter((s) => s !== "__GLOBAL__"),
-      ...sessions.map((s) => s.shop).filter((s) => s !== "__GLOBAL__"),
-    ]);
+      ...settingsList.map((s) => s.shop),
+      ...sessions.map((s) => s.shop),
+      ...shopPlansList.map((s) => s.shop),
+    ];
+
+    const shopSet = new Set();
+    for (const raw of rawCandidateShops) {
+      const normalized = normalizeShopDomain(raw);
+      if (normalized && normalized !== "__GLOBAL__") {
+        shopSet.add(normalized);
+      }
+    }
 
     const shopDomains = Array.from(shopSet);
 
@@ -100,7 +111,7 @@ export const loader = async ({ request }) => {
             .join(" ");
         }
 
-        const sessionMatch = sessions.find((s) => s.shop === domain);
+        const sessionMatch = sessions.find((s) => normalizeShopDomain(s.shop) === domain);
         const contactEmail = sessionMatch?.email || "";
         const merchantDiscount =
           settings?.merchantDiscountPercent != null
@@ -115,7 +126,7 @@ export const loader = async ({ request }) => {
         const vipFreeOfferActive = isVipExplicit || (autoGrantFirst10 && isFirst10);
         const vipFreeOfferClaimed = settings?.vipFreeOfferClaimed ?? false;
 
-        const planObj = shopPlansList.find((p) => p.shop === domain);
+        const planObj = shopPlansList.find((p) => normalizeShopDomain(p.shop) === domain);
         const basePrices = { free: 0, starter: 19, growth: 49, enterprise: 99 };
         const planTitles = {
           free: "Starter Free",
@@ -124,7 +135,11 @@ export const loader = async ({ request }) => {
           enterprise: "Enterprise Unlimited",
         };
         const userPlanKey = planObj?.plan || "free";
-        const basePrice = basePrices[userPlanKey] ?? 0;
+        const customMonthlyPrice =
+          planObj?.customMonthlyPrice != null && !isNaN(Number(planObj.customMonthlyPrice))
+            ? Number(planObj.customMonthlyPrice)
+            : null;
+        const basePrice = customMonthlyPrice !== null ? customMonthlyPrice : (basePrices[userPlanKey] ?? 0);
         const effectivePrice = basePrice > 0 ? (basePrice * (1 - merchantDiscount / 100)).toFixed(2) : "0";
         const activePlanLabel = `${planTitles[userPlanKey] || "Starter Free"} ($${effectivePrice}/mo)`;
 
@@ -139,6 +154,11 @@ export const loader = async ({ request }) => {
           merchantDiscountPercent: merchantDiscount,
           isCustomDiscount,
           activePlan: activePlanLabel,
+          planKey: userPlanKey,
+          customFitmentLimit: planObj?.customFitmentLimit ?? null,
+          customMonthlyPrice: planObj?.customMonthlyPrice ?? null,
+          isManualGrant: planObj?.isManualGrant ?? false,
+          adminNotes: planObj?.adminNotes ?? "",
           status: "Active",
           storeIndex: index,
           isFirst10,
@@ -157,11 +177,22 @@ export const loader = async ({ request }) => {
     console.error("[admin loader error]", err);
   }
 
+  let quoteRequests = [];
+  try {
+    quoteRequests = await prisma.quoteRequest.findMany({
+      orderBy: { id: "desc" },
+      take: 50,
+    });
+  } catch (err) {
+    console.warn("[admin loader] Error fetching quoteRequests:", err);
+  }
+
   return json({
     currentShop,
     sessionEmail,
     isAdmin,
     shopsList,
+    quoteRequests,
     totalRecords,
     totalProducts,
     totalSearches,
@@ -239,11 +270,12 @@ export const action = async ({ request }) => {
   }
 
   if (intent === "saveUserDiscount") {
-    const targetShop = formData.get("targetShop");
+    const rawTargetShop = formData.get("targetShop");
+    const targetShop = normalizeShopDomain(rawTargetShop);
     const userDiscount = parseInt(formData.get("userDiscountPercent"), 10);
 
-    if (!targetShop || isNaN(userDiscount)) {
-      return json({ success: false, message: "Invalid shop domain or discount rate." }, { status: 400 });
+    if (!targetShop || isNaN(userDiscount) || userDiscount < 0 || userDiscount > 95) {
+      return json({ success: false, message: "Invalid shop domain or discount rate (must be 0% - 95%)." }, { status: 400 });
     }
 
     const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
@@ -281,6 +313,48 @@ export const action = async ({ request }) => {
         userDiscount > 0
           ? `Merchant VIP discount of ${userDiscount}% applied successfully for: ${targetShop}!`
           : `Merchant discount for ${targetShop} set to 0% (Standard)!`,
+    });
+  }
+
+  if (intent === "resetUserDiscount") {
+    const rawTargetShop = formData.get("targetShop");
+    const targetShop = normalizeShopDomain(rawTargetShop);
+
+    if (!targetShop) {
+      return json({ success: false, message: "Invalid shop domain." }, { status: 400 });
+    }
+
+    const globalSettings = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+    const globalDiscount = globalSettings?.annualDiscountPercent ?? 20;
+
+    try {
+      const shopRec = await prisma.appSettings.findFirst({ where: { shop: targetShop } });
+      if (shopRec) {
+        await prisma.appSettings.update({
+          where: { id: shopRec.id },
+          data: {
+            merchantDiscountPercent: 0,
+            annualDiscountPercent: globalDiscount,
+          },
+        });
+      } else {
+        await prisma.appSettings.create({
+          data: {
+            shop: targetShop,
+            merchantDiscountPercent: 0,
+            annualDiscountPercent: globalDiscount,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn("[resetUserDiscount] Error resetting merchant discount:", err?.message);
+    }
+
+    return json({
+      success: true,
+      intent: "resetUserDiscount",
+      targetShop,
+      message: `Merchant discount for ${targetShop} reset to Global Default (${globalDiscount}%).`,
     });
   }
 
@@ -409,52 +483,55 @@ export const action = async ({ request }) => {
   }
 
   if (intent === "toggleMerchantVipOffer") {
-    const targetShop = formData.get("targetShop");
+    const rawTargetShop = formData.get("targetShop");
+    const targetShop = normalizeShopDomain(rawTargetShop);
     const currentOfferActive = formData.get("currentOfferActive") === "true";
     const nextOfferState = !currentOfferActive;
 
-    if (targetShop) {
-      const globalSet = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
-      const currentMonths = globalSet?.vipFreeOfferMonths ?? 2;
-      const currentLimit = globalSet?.vipFreeOfferStoreLimit ?? 10;
-
-      try {
-        const shopRec = await prisma.appSettings.findFirst({ where: { shop: targetShop } });
-        if (shopRec) {
-          await prisma.appSettings.update({
-            where: { id: shopRec.id },
-            data: {
-              vipFreeOfferActive: nextOfferState,
-              vipFreeOfferMonths: currentMonths,
-              vipFreeOfferStoreLimit: currentLimit,
-              vipFreeOfferGrantedAt: nextOfferState ? new Date() : null,
-            },
-          });
-        } else {
-          await prisma.appSettings.create({
-            data: {
-              shop: targetShop,
-              vipFreeOfferActive: nextOfferState,
-              vipFreeOfferMonths: currentMonths,
-              vipFreeOfferStoreLimit: currentLimit,
-              vipFreeOfferGrantedAt: nextOfferState ? new Date() : null,
-            },
-          });
-        }
-      } catch (err) {
-        console.warn("[toggleMerchantVipOffer] Error updating appSettings:", err?.message);
-      }
-
-      return json({
-        success: true,
-        intent: "toggleMerchantVipOffer",
-        targetShop,
-        vipFreeOfferActive: nextOfferState,
-        message: nextOfferState
-          ? `Growth Pro ${currentMonths}-Months FREE Offer granted to: ${targetShop}! Merchant notified in app.`
-          : `Growth Pro ${currentMonths}-Months FREE Offer revoked for: ${targetShop}.`,
-      });
+    if (!targetShop) {
+      return json({ success: false, message: "Invalid target shop." }, { status: 400 });
     }
+
+    const globalSet = await prisma.appSettings.findFirst({ where: { shop: "__GLOBAL__" } });
+    const currentMonths = globalSet?.vipFreeOfferMonths ?? 2;
+    const currentLimit = globalSet?.vipFreeOfferStoreLimit ?? 10;
+
+    try {
+      const shopRec = await prisma.appSettings.findFirst({ where: { shop: targetShop } });
+      if (shopRec) {
+        await prisma.appSettings.update({
+          where: { id: shopRec.id },
+          data: {
+            vipFreeOfferActive: nextOfferState,
+            vipFreeOfferMonths: currentMonths,
+            vipFreeOfferStoreLimit: currentLimit,
+            vipFreeOfferGrantedAt: nextOfferState ? new Date() : null,
+          },
+        });
+      } else {
+        await prisma.appSettings.create({
+          data: {
+            shop: targetShop,
+            vipFreeOfferActive: nextOfferState,
+            vipFreeOfferMonths: currentMonths,
+            vipFreeOfferStoreLimit: currentLimit,
+            vipFreeOfferGrantedAt: nextOfferState ? new Date() : null,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn("[toggleMerchantVipOffer] Error updating appSettings:", err?.message);
+    }
+
+    return json({
+      success: true,
+      intent: "toggleMerchantVipOffer",
+      targetShop,
+      vipFreeOfferActive: nextOfferState,
+      message: nextOfferState
+        ? `Growth Pro ${currentMonths}-Months FREE Offer granted to: ${targetShop}! Merchant notified in app.`
+        : `Growth Pro ${currentMonths}-Months FREE Offer revoked for: ${targetShop}.`,
+    });
   }
 
   if (intent === "saveVolumeDiscountConfig") {
@@ -505,6 +582,102 @@ export const action = async ({ request }) => {
     });
   }
 
+  if (intent === "updateMerchantPlanQuote") {
+    const rawTargetShop = formData.get("targetShop")?.toString();
+    const targetShop = normalizeShopDomain(rawTargetShop);
+    const rawPlan = formData.get("plan")?.toString()?.toLowerCase()?.trim() || "starter";
+    const allowedPlans = ["free", "starter", "growth", "enterprise"];
+    const plan = allowedPlans.includes(rawPlan) ? rawPlan : "starter";
+
+    const customLimitStr = formData.get("customFitmentLimit")?.toString();
+    const parsedLimit = customLimitStr && customLimitStr.trim() !== "" ? parseInt(customLimitStr, 10) : null;
+    const customFitmentLimit = parsedLimit != null && !isNaN(parsedLimit) && parsedLimit >= 0 ? parsedLimit : null;
+
+    const customPriceStr = formData.get("customMonthlyPrice")?.toString();
+    const parsedPrice = customPriceStr && customPriceStr.trim() !== "" ? parseFloat(customPriceStr) : null;
+    const customMonthlyPrice = parsedPrice != null && !isNaN(parsedPrice) && parsedPrice >= 0 ? parsedPrice : null;
+
+    const isManualGrant = formData.get("isManualGrant") === "true" || formData.get("isManualGrant") === "on";
+    const adminNotes = formData.get("adminNotes")?.toString() || "";
+    const quoteRequestId = parseInt(formData.get("quoteRequestId")?.toString() || "0", 10);
+
+    if (!targetShop) {
+      return json({ success: false, message: "Invalid target shop domain." }, { status: 400 });
+    }
+
+    try {
+      await prisma.shopPlan.upsert({
+        where: { shop: targetShop },
+        update: {
+          plan,
+          customFitmentLimit,
+          customMonthlyPrice,
+          isManualGrant,
+          adminNotes,
+        },
+        create: {
+          shop: targetShop,
+          plan,
+          billingCycle: "monthly",
+          customFitmentLimit,
+          customMonthlyPrice,
+          isManualGrant,
+          adminNotes,
+        },
+      });
+
+      if (quoteRequestId) {
+        try {
+          await prisma.quoteRequest.update({
+            where: { id: quoteRequestId },
+            data: {
+              status: "APPROVED",
+              quotedPrice: customMonthlyPrice,
+            },
+          });
+        } catch (qrErr) {
+          console.warn("[updateMerchantPlanQuote] QuoteRequest update error:", qrErr?.message);
+        }
+      }
+
+      return json({
+        success: true,
+        intent: "updateMerchantPlanQuote",
+        message: `Plan & Quote updated successfully for ${targetShop}! Active Plan: ${plan.toUpperCase()}, Quota: ${
+          customFitmentLimit ? customFitmentLimit.toLocaleString() : "Default"
+        } fitments.`,
+      });
+    } catch (err) {
+      console.error("[updateMerchantPlanQuote] Error updating shop plan:", err);
+      return json({ success: false, message: "Failed to update plan & quote." }, { status: 500 });
+    }
+  }
+
+  if (intent === "updateQuoteRequestStatus") {
+    const quoteRequestId = parseInt(formData.get("quoteRequestId")?.toString() || "0", 10);
+    const rawStatus = formData.get("status")?.toString()?.toUpperCase() || "PENDING";
+    const allowedStatuses = ["PENDING", "CONTACTED", "APPROVED", "REJECTED"];
+    const status = allowedStatuses.includes(rawStatus) ? rawStatus : "PENDING";
+
+    if (quoteRequestId) {
+      try {
+        await prisma.quoteRequest.update({
+          where: { id: quoteRequestId },
+          data: { status },
+        });
+        return json({
+          success: true,
+          intent: "updateQuoteRequestStatus",
+          message: `Quote request #${quoteRequestId} status updated to ${status}.`,
+        });
+      } catch (err) {
+        console.warn("[updateQuoteRequestStatus] Error:", err?.message);
+        return json({ success: false, message: "Failed to update quote request status." }, { status: 500 });
+      }
+    }
+    return json({ success: false, message: "Invalid quote request ID." }, { status: 400 });
+  }
+
   return json({ success: false });
 };
 
@@ -513,6 +686,7 @@ export default function AdminPage() {
     currentShop,
     sessionEmail,
     shopsList,
+    quoteRequests = [],
     totalRecords,
     totalProducts,
     totalSearches,
@@ -529,6 +703,7 @@ export default function AdminPage() {
   const userDiscountFetcher = useFetcher();
   const autoGrantFetcher = useFetcher();
   const vipOfferFetcher = useFetcher();
+  const planQuoteFetcher = useFetcher();
   const revalidator = useRevalidator();
   const isSupportOnline = supportFetcher.data?.isSupportOnline ?? initialIsSupportOnline;
   const autoGrantFirst10 = autoGrantFetcher.data?.autoGrantFirst10 ?? initialAutoGrantFirst10;
@@ -539,9 +714,12 @@ export default function AdminPage() {
   const isUserDiscountSubmitting = userDiscountFetcher.state !== "idle";
   const isAutoGrantSubmitting = autoGrantFetcher.state !== "idle";
   const isVipOfferSubmitting = vipOfferFetcher.state !== "idle";
+  const isPlanQuoteSubmitting = planQuoteFetcher.state !== "idle";
 
   const activeNotification =
-    supportFetcher.data?.message
+    planQuoteFetcher.data?.message
+      ? planQuoteFetcher.data
+      : supportFetcher.data?.message
       ? supportFetcher.data
       : discountFetcher.data?.message
       ? discountFetcher.data
@@ -562,6 +740,27 @@ export default function AdminPage() {
   const [autoGrantToggle, setAutoGrantToggle] = useState(initialAutoGrantFirst10);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPurgeConfirmModal, setShowPurgeConfirmModal] = useState(false);
+
+  // Quote & Plan Override Modal State
+  const [quoteModalShop, setQuoteModalShop] = useState(null);
+  const [quoteModalShopName, setQuoteModalShopName] = useState("");
+  const [quoteModalPlan, setQuoteModalPlan] = useState("starter");
+  const [quoteModalLimit, setQuoteModalLimit] = useState("");
+  const [quoteModalPrice, setQuoteModalPrice] = useState("");
+  const [quoteModalManualGrant, setQuoteModalManualGrant] = useState(true);
+  const [quoteModalNotes, setQuoteModalNotes] = useState("");
+  const [quoteModalRequestId, setQuoteModalRequestId] = useState(null);
+
+  const openPlanQuoteModal = (merchant, quoteReq = null) => {
+    setQuoteModalShop(merchant.shop);
+    setQuoteModalShopName(merchant.name || merchant.shop);
+    setQuoteModalPlan(quoteReq?.requestedPlan || merchant.planKey || "starter");
+    setQuoteModalLimit(quoteReq?.requestedFitments || merchant.customFitmentLimit || "");
+    setQuoteModalPrice(quoteReq?.monthlyBudget || merchant.customMonthlyPrice || "");
+    setQuoteModalManualGrant(merchant.isManualGrant ?? true);
+    setQuoteModalNotes(quoteReq?.notes || merchant.adminNotes || "");
+    setQuoteModalRequestId(quoteReq?.id || null);
+  };
   const [userDiscountInputs, setUserDiscountInputs] = useState(() => {
     const initial = {};
     shopsList.forEach((s) => {
@@ -608,6 +807,23 @@ export default function AdminPage() {
       revalidator.revalidate();
     }
   }, [vipOfferFetcher.data, vipOfferFetcher.state, revalidator]);
+
+  useEffect(() => {
+    if (
+      (planQuoteFetcher.data?.intent === "updateMerchantPlanQuote" ||
+        planQuoteFetcher.data?.intent === "updateQuoteRequestStatus") &&
+      planQuoteFetcher.state === "idle"
+    ) {
+      if (planQuoteFetcher.data?.success !== false) {
+        setQuoteModalShop(null);
+      }
+      revalidator.revalidate();
+    }
+  }, [planQuoteFetcher.data, planQuoteFetcher.state, revalidator]);
+
+  const pendingQuotesCount = useMemo(() => {
+    return (quoteRequests || []).filter((q) => q.status === "PENDING").length;
+  }, [quoteRequests]);
 
   const handleUserDiscountChange = (shop, value) => {
     setUserDiscountInputs((prev) => ({
@@ -951,6 +1167,60 @@ export default function AdminPage() {
             }}
           >
             {shopsList.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("quotes")}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "8px 16px",
+            borderRadius: "8px",
+            fontSize: "13px",
+            fontWeight: "700",
+            border: "none",
+            cursor: "pointer",
+            background: activeTab === "quotes" ? "#047857" : "transparent",
+            color: activeTab === "quotes" ? "#ffffff" : "#64748b",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          Quotes &amp; Custom Quotas
+          <span
+            style={{
+              background:
+                pendingQuotesCount > 0
+                  ? activeTab === "quotes"
+                    ? "#f59e0b"
+                    : "#fef3c7"
+                  : activeTab === "quotes"
+                  ? "rgba(255,255,255,0.25)"
+                  : "#e2e8f0",
+              color:
+                pendingQuotesCount > 0
+                  ? activeTab === "quotes"
+                    ? "#ffffff"
+                    : "#b45309"
+                  : activeTab === "quotes"
+                  ? "#ffffff"
+                  : "#475569",
+              padding: "2px 7px",
+              borderRadius: "10px",
+              fontSize: "11px",
+              fontWeight: "800",
+            }}
+          >
+            {pendingQuotesCount > 0 ? `${pendingQuotesCount} Pending` : quoteRequests.length}
           </span>
         </button>
 
@@ -1540,6 +1810,593 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* Adjust Plan & Custom Fitment Limit Modal */}
+      {quoteModalShop && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(4px)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setQuoteModalShop(null);
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              maxWidth: "520px",
+              width: "100%",
+              padding: "26px",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              border: "1px solid #e2e8f0",
+              position: "relative",
+              maxHeight: "90vh",
+              overflowY: "auto",
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div
+                  style={{
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "10px",
+                    background: "#ecfdf5",
+                    border: "1px solid #a7f3d0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#047857",
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="4" y1="21" x2="4" y2="14"></line>
+                    <line x1="4" y1="10" x2="4" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12" y2="3"></line>
+                    <line x1="20" y1="21" x2="20" y2="16"></line>
+                    <line x1="20" y1="12" x2="20" y2="3"></line>
+                    <line x1="1" y1="14" x2="7" y2="14"></line>
+                    <line x1="9" y1="8" x2="15" y2="8"></line>
+                    <line x1="17" y1="16" x2="23" y2="16"></line>
+                  </svg>
+                </div>
+                <div>
+                  <h3 style={{ margin: "0 0 2px", fontSize: "18px", fontWeight: "800", color: "#0f172a" }}>
+                    Adjust Plan &amp; Limit Quota
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
+                    Store: <strong style={{ color: "#0f172a" }}>{quoteModalShopName || quoteModalShop}</strong> ({quoteModalShop})
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setQuoteModalShop(null)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#64748b",
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <planQuoteFetcher.Form method="post">
+              <input type="hidden" name="intent" value="updateMerchantPlanQuote" />
+              <input type="hidden" name="targetShop" value={quoteModalShop} />
+              {quoteModalRequestId && <input type="hidden" name="quoteRequestId" value={quoteModalRequestId} />}
+
+              {/* Target Plan Selection */}
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                  Assigned App Plan
+                </label>
+                <select
+                  name="plan"
+                  value={quoteModalPlan}
+                  onChange={(e) => setQuoteModalPlan(e.target.value)}
+                  style={{
+                    width: "100%",
+                    height: "38px",
+                    padding: "0 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    color: "#0f172a",
+                    background: "#ffffff",
+                    outline: "none",
+                  }}
+                >
+                  <option value="free">Starter Free ($0/mo - 100 fitments)</option>
+                  <option value="starter">Starter Pro ($19/mo - 5,000 fitments)</option>
+                  <option value="growth">Growth Pro ($49/mo - 20,000 fitments)</option>
+                  <option value="enterprise">Enterprise Unlimited ($99/mo - Unlimited fitments)</option>
+                </select>
+              </div>
+
+              {/* Custom Fitment Limit Quota */}
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: "700", color: "#334155" }}>
+                    Custom Fitment Limit Override (Records)
+                  </label>
+                  <span style={{ fontSize: "11px", color: "#64748b" }}>
+                    Leave blank to use default plan limit
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  name="customFitmentLimit"
+                  placeholder="e.g. 50000 or 100000"
+                  value={quoteModalLimit}
+                  onChange={(e) => setQuoteModalLimit(e.target.value)}
+                  style={{
+                    width: "100%",
+                    height: "38px",
+                    padding: "0 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    color: "#0f172a",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+
+                {/* Quick Volume Preset Pills */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                  {[10000, 25000, 50000, 100000, 250000, 500000, 1000000].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setQuoteModalLimit(preset.toString())}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: "6px",
+                        fontSize: "11px",
+                        fontWeight: "700",
+                        border: quoteModalLimit === preset.toString() ? "1px solid #047857" : "1px solid #cbd5e1",
+                        background: quoteModalLimit === preset.toString() ? "#ecfdf5" : "#f8fafc",
+                        color: quoteModalLimit === preset.toString() ? "#047857" : "#475569",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {preset >= 1000000 ? `${preset / 1000000}M` : `${preset / 1000}k`}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setQuoteModalLimit("")}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: "6px",
+                      fontSize: "11px",
+                      fontWeight: "600",
+                      border: "1px dashed #cbd5e1",
+                      background: "transparent",
+                      color: "#64748b",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Clear Override
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Monthly Price */}
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                  Agreed Custom Monthly Price ($ USD / month)
+                </label>
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b", fontWeight: "700", fontSize: "13px" }}>$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="customMonthlyPrice"
+                    placeholder="e.g. 149.00 or leave blank"
+                    value={quoteModalPrice}
+                    onChange={(e) => setQuoteModalPrice(e.target.value)}
+                    style={{
+                      width: "100%",
+                      height: "38px",
+                      paddingLeft: "26px",
+                      paddingRight: "12px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "13px",
+                      fontWeight: "700",
+                      color: "#0f172a",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Manual Admin Grant Protection */}
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "10px",
+                  padding: "12px 14px",
+                  marginBottom: "16px",
+                }}
+              >
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    name="isManualGrant"
+                    value="true"
+                    checked={quoteModalManualGrant}
+                    onChange={(e) => setQuoteModalManualGrant(e.target.checked)}
+                    style={{ marginTop: "3px", width: "16px", height: "16px", cursor: "pointer", accentColor: "#047857" }}
+                  />
+                  <div>
+                    <strong style={{ fontSize: "12px", color: "#0f172a", display: "block" }}>
+                      Protect with Manual Admin Grant
+                    </strong>
+                    <span style={{ fontSize: "11px", color: "#64748b", lineHeight: "1.4", display: "block", marginTop: "2px" }}>
+                      Prevents this store from being downgraded to Free if they are invoiced separately, pay via external contract, or received a complimentary upgrade.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Admin Notes */}
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                  Admin Notes / Deal Reference
+                </label>
+                <textarea
+                  name="adminNotes"
+                  rows={2}
+                  placeholder="e.g. Approved 50,000 fitments for Q3 enterprise contract."
+                  value={quoteModalNotes}
+                  onChange={(e) => setQuoteModalNotes(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "12px",
+                    color: "#0f172a",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+
+              {/* Modal Buttons */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setQuoteModalShop(null)}
+                  style={{
+                    padding: "9px 16px",
+                    background: "#f1f5f9",
+                    color: "#475569",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "8px",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPlanQuoteSubmitting}
+                  style={{
+                    padding: "9px 18px",
+                    background: "#047857",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "8px",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    cursor: isPlanQuoteSubmitting ? "not-allowed" : "pointer",
+                    boxShadow: "0 2px 6px rgba(4, 120, 87, 0.25)",
+                  }}
+                >
+                  {isPlanQuoteSubmitting ? "Saving Changes..." : "Save Plan & Limit"}
+                </button>
+              </div>
+            </planQuoteFetcher.Form>
+          </div>
+        </div>
+      )}
+
+      {/* Quotes & Custom Quota Requests Table Card */}
+      <div
+        style={{
+          display: activeTab === "quotes" ? "block" : "none",
+          background: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: "14px",
+          padding: "20px 22px",
+          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
+          marginBottom: "24px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "16px",
+            marginBottom: "18px",
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <h2 style={{ margin: "0 0 2px", fontSize: "18px", fontWeight: "800", color: "#0f172a" }}>
+                Merchant Quote &amp; Custom Quota Requests ({quoteRequests.length})
+              </h2>
+              {pendingQuotesCount > 0 && (
+                <span
+                  style={{
+                    background: "#fef3c7",
+                    color: "#b45309",
+                    border: "1px solid #fde68a",
+                    padding: "2px 8px",
+                    borderRadius: "12px",
+                    fontSize: "11px",
+                    fontWeight: "700",
+                  }}
+                >
+                  {pendingQuotesCount} Action Required
+                </span>
+              )}
+            </div>
+            <p style={{ margin: 0, color: "#64748b", fontSize: "12px" }}>
+              Review custom volume and Enterprise quote requests from merchants. Approve quotes and assign custom fitment limits and pricing directly.
+            </p>
+          </div>
+        </div>
+
+        {quoteRequests.length === 0 ? (
+          <div
+            style={{
+              padding: "48px 24px",
+              textAlign: "center",
+              background: "#f8fafc",
+              borderRadius: "12px",
+              border: "1px dashed #cbd5e1",
+            }}
+          >
+            <div
+              style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "12px",
+                background: "#ecfdf5",
+                color: "#047857",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: "12px",
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+            </div>
+            <h3 style={{ margin: "0 0 6px", fontSize: "15px", fontWeight: "700", color: "#0f172a" }}>
+              No Quote Requests Yet
+            </h3>
+            <p style={{ margin: 0, color: "#64748b", fontSize: "13px", maxWidth: "440px", display: "inline-block" }}>
+              When merchants request custom fitment quotas or Enterprise packages from their Pricing page, requests will appear here for instant review and approval.
+            </p>
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #e2e8f0", background: "#f8fafc" }}>
+                  <th style={{ padding: "10px 14px", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    Merchant &amp; Store
+                  </th>
+                  <th style={{ padding: "10px 14px", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    Requested Plan &amp; Volume
+                  </th>
+                  <th style={{ padding: "10px 14px", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    Budget &amp; Data Requirements
+                  </th>
+                  <th style={{ padding: "10px 14px", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    Notes
+                  </th>
+                  <th style={{ padding: "10px 14px", textAlign: "center", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    Status
+                  </th>
+                  <th style={{ padding: "10px 14px", textAlign: "right", color: "#64748b", fontWeight: "700", fontSize: "11px", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {quoteRequests.map((quote) => {
+                  const matchingMerchant = shopsList.find((s) => s.shop === normalizeShopDomain(quote.shop)) || {
+                    shop: quote.shop,
+                    name: quote.shop,
+                    email: quote.contactEmail,
+                    planKey: quote.requestedPlan,
+                  };
+
+                  const isPending = quote.status === "PENDING";
+                  const isApproved = quote.status === "APPROVED";
+                  const isContacted = quote.status === "CONTACTED";
+
+                  return (
+                    <tr key={quote.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                      {/* Store & Contact */}
+                      <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                        <div style={{ fontWeight: "700", color: "#0f172a", fontSize: "13px" }}>
+                          {matchingMerchant.name || quote.shop}
+                        </div>
+                        <div style={{ color: "#64748b", fontSize: "11px", marginTop: "2px" }}>
+                          {quote.shop}
+                        </div>
+                        <div style={{ color: "#2563eb", fontSize: "11px", marginTop: "2px" }}>
+                          {quote.contactEmail}
+                        </div>
+                        <div style={{ color: "#94a3b8", fontSize: "10px", marginTop: "4px" }}>
+                          {new Date(quote.createdAt).toLocaleDateString()} at {new Date(quote.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </td>
+
+                      {/* Requested Plan & Volume */}
+                      <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                        <span
+                          style={{
+                            background: "#eff6ff",
+                            color: "#1e40af",
+                            border: "1px solid #bfdbfe",
+                            padding: "2px 8px",
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            display: "inline-block",
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {quote.requestedPlan} Plan
+                        </span>
+                        <div style={{ marginTop: "6px", fontSize: "13px", fontWeight: "800", color: "#047857" }}>
+                          {quote.requestedFitments ? `${quote.requestedFitments.toLocaleString()} Fitments` : "Custom Fitment Limit"}
+                        </div>
+                      </td>
+
+                      {/* Budget & Data Requirements */}
+                      <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                        <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: "700" }}>
+                          {quote.monthlyBudget ? `$${quote.monthlyBudget}/mo` : "Not specified"}
+                        </div>
+                        {quote.dataRequirements && (
+                          <div style={{ fontSize: "11px", color: "#475569", marginTop: "4px", background: "#f8fafc", padding: "4px 8px", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
+                            {quote.dataRequirements}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Notes */}
+                      <td style={{ padding: "12px 14px", verticalAlign: "top", maxWidth: "220px" }}>
+                        <div style={{ fontSize: "12px", color: "#334155", lineHeight: "1.4", wordBreak: "break-word" }}>
+                          {quote.notes || <span style={{ color: "#94a3b8", fontStyle: "italic" }}>No notes provided</span>}
+                        </div>
+                        {quote.quotedPrice && (
+                          <div style={{ fontSize: "11px", color: "#047857", fontWeight: "700", marginTop: "4px" }}>
+                            Agreed: ${quote.quotedPrice}/mo
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td style={{ padding: "12px 14px", textAlign: "center", verticalAlign: "top" }}>
+                        <span
+                          style={{
+                            background: isApproved ? "#ecfdf5" : isPending ? "#fffbeb" : isContacted ? "#eff6ff" : "#fef2f2",
+                            color: isApproved ? "#047857" : isPending ? "#b45309" : isContacted ? "#1e40af" : "#991b1b",
+                            border: `1px solid ${isApproved ? "#a7f3d0" : isPending ? "#fde68a" : isContacted ? "#bfdbfe" : "#fecaca"}`,
+                            padding: "3px 8px",
+                            borderRadius: "20px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            display: "inline-block",
+                          }}
+                        >
+                          {quote.status}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td style={{ padding: "12px 14px", textAlign: "right", verticalAlign: "top" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-end" }}>
+                          <button
+                            type="button"
+                            onClick={() => openPlanQuoteModal(matchingMerchant, quote)}
+                            style={{
+                              background: isApproved ? "#f8fafc" : "#047857",
+                              color: isApproved ? "#0f172a" : "#ffffff",
+                              border: isApproved ? "1px solid #cbd5e1" : "none",
+                              padding: "6px 12px",
+                              borderRadius: "6px",
+                              fontSize: "11px",
+                              fontWeight: "700",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 20h9"></path>
+                              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                            </svg>
+                            {isApproved ? "Adjust Limit & Plan" : "Approve & Set Quota"}
+                          </button>
+
+                          {isPending && (
+                            <planQuoteFetcher.Form method="post" style={{ display: "inline" }}>
+                              <input type="hidden" name="intent" value="updateQuoteRequestStatus" />
+                              <input type="hidden" name="quoteRequestId" value={quote.id} />
+                              <input type="hidden" name="status" value="CONTACTED" />
+                              <button
+                                type="submit"
+                                style={{
+                                  background: "transparent",
+                                  border: "none",
+                                  color: "#2563eb",
+                                  fontSize: "11px",
+                                  fontWeight: "600",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                  textDecoration: "underline",
+                                }}
+                              >
+                                Mark as Contacted
+                              </button>
+                            </planQuoteFetcher.Form>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Installed Merchant Accounts Table Card */}
       <div
         style={{
@@ -1634,7 +2491,7 @@ export default function AdminPage() {
                 </tr>
               ) : (
                 filteredShops.map((merchant) => {
-                  const isCurrent = merchant.shop === currentShop;
+                  const isCurrent = normalizeShopDomain(merchant.shop) === normalizeShopDomain(currentShop);
                   const currentInputValue =
                     userDiscountInputs[merchant.shop] ?? merchant.merchantDiscountPercent;
                   const currentLimit = parseInt(vipStoreLimitInput, 10) || 10;
@@ -1730,6 +2587,68 @@ export default function AdminPage() {
                         >
                           {merchant.activePlan}
                         </span>
+                        {merchant.customFitmentLimit && (
+                          <div style={{ marginTop: "4px" }}>
+                            <span
+                              style={{
+                                background: "#ecfdf5",
+                                color: "#047857",
+                                border: "1px solid #a7f3d0",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontSize: "10px",
+                                fontWeight: "700",
+                                display: "inline-block",
+                              }}
+                            >
+                              Limit: {merchant.customFitmentLimit.toLocaleString()} Fitments
+                            </span>
+                          </div>
+                        )}
+                        {merchant.isManualGrant && (
+                          <div style={{ marginTop: "3px" }}>
+                            <span
+                              style={{
+                                background: "#f8fafc",
+                                color: "#475569",
+                                border: "1px solid #cbd5e1",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontSize: "10px",
+                                fontWeight: "600",
+                                display: "inline-block",
+                              }}
+                            >
+                              Manual Admin Grant
+                            </span>
+                          </div>
+                        )}
+                        <div style={{ marginTop: "6px" }}>
+                          <button
+                            type="button"
+                            onClick={() => openPlanQuoteModal(merchant)}
+                            style={{
+                              background: "#ffffff",
+                              color: "#047857",
+                              border: "1px solid #047857",
+                              padding: "3px 8px",
+                              borderRadius: "5px",
+                              fontSize: "11px",
+                              fontWeight: "700",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 20h9"></path>
+                              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                            </svg>
+                            Adjust Plan / Limit
+                          </button>
+                        </div>
                       </td>
 
                       {/* VIP Free Offer Control */}

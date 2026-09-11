@@ -332,7 +332,7 @@ export default function FitmentIndex() {
                       }}
                     >
                       {(r._count.products + r._count.collections + r._count.tags + r._count.skus) > 0
-                        ? `✓ ${r._count.products} Product${r._count.products === 1 ? "" : "s"}`
+                        ? `${r._count.products} Product${r._count.products === 1 ? "" : "s"}`
                         : "0 Products (Hidden on Storefront)"}
                     </span>
                     {r._count.collections > 0 && (

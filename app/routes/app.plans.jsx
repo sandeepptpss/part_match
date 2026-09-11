@@ -2,14 +2,32 @@
 /* eslint-disable react/prop-types */
 const json = (data, init) => Response.json(data, init);
 import { useState } from "react";
-import { useLoaderData, useFetcher, useActionData, Link } from "react-router";
+import { useLoaderData, useFetcher, useActionData } from "react-router";
 import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import prismaDefault from "../db.server";
+import { PrismaClient } from "@prisma/client";
 import { BillingInterval } from "@shopify/shopify-app-react-router/server";
 import { BILLING_PLAN_KEYS, getIsTestCharge, planLimits } from "../plans.config";
 import { syncShopPlanFromBilling } from "../plans.server";
+import { normalizeShopDomain } from "../utils/shopDomain";
+
+function getPrisma() {
+  if (prismaDefault?.quoteRequest) return prismaDefault;
+  if (!global.prismaGlobal?.quoteRequest) {
+    if (global.prismaGlobal) {
+      try {
+        global.prismaGlobal.$disconnect();
+      } catch (e) {
+        // ignore
+      }
+    }
+    global.prismaGlobal = new PrismaClient();
+  }
+  return global.prismaGlobal;
+}
 
 export const loader = async ({ request }) => {
+  const prisma = getPrisma();
   const { session, billing } = await authenticate.admin(request);
   const shop = session.shop;
 
@@ -73,8 +91,22 @@ export const loader = async ({ request }) => {
   const vipFreeOfferStoreLimit = appSettings?.vipFreeOfferStoreLimit ?? globalSettings?.vipFreeOfferStoreLimit ?? 10;
   let isEligibleStore = false;
   try {
-    const allStores = (await prisma.appSettings.findMany({ select: { shop: true, id: true }, orderBy: { id: "asc" } })) ?? [];
-    const shopIndex = allStores.findIndex((s) => s.shop === shop);
+    const rawStores = (await prisma.appSettings.findMany({
+      where: { shop: { not: "__GLOBAL__" } },
+      select: { shop: true, id: true },
+      orderBy: { id: "asc" },
+    })) ?? [];
+    const uniqueStoreSet = new Set();
+    const allStores = [];
+    for (const s of rawStores) {
+      const norm = normalizeShopDomain(s.shop);
+      if (norm && norm !== "__GLOBAL__" && !uniqueStoreSet.has(norm)) {
+        uniqueStoreSet.add(norm);
+        allStores.push(norm);
+      }
+    }
+    const normShop = normalizeShopDomain(shop);
+    const shopIndex = allStores.indexOf(normShop);
     if (shopIndex !== -1 && shopIndex < vipFreeOfferStoreLimit) {
       isEligibleStore = true;
     }
@@ -87,7 +119,17 @@ export const loader = async ({ request }) => {
   const isVipFreeOfferActive = isVipFreeOfferExplicit || (autoGrantFirst10 && isEligibleStore);
 
   const shopPlan = await syncShopPlanFromBilling(billing, shop);
-  const limits = planLimits(shopPlan.plan);
+  const limits = planLimits(shopPlan.plan, shopPlan.customFitmentLimit);
+
+  let pendingQuote = null;
+  try {
+    pendingQuote = await prisma.quoteRequest.findFirst({
+      where: { shop },
+      orderBy: { id: "desc" },
+    });
+  } catch (err) {
+    console.warn("[plans loader] Error loading quoteRequest:", err);
+  }
 
   return json({
     shop,
@@ -108,17 +150,73 @@ export const loader = async ({ request }) => {
     vipFreeOfferStoreLimit,
     activePlan: shopPlan.plan,
     activeBillingCycle: shopPlan.billingCycle || "monthly",
+    customFitmentLimit: shopPlan.customFitmentLimit,
+    customMonthlyPrice: shopPlan.customMonthlyPrice,
+    isManualGrant: shopPlan.isManualGrant,
     recordsLimit: Number.isFinite(limits.fitmentLimit) ? limits.fitmentLimit : null,
+    isCustomQuota: Boolean(limits.isCustomQuota),
+    pendingQuote,
     vinLimit: limits.vinMonthlyLimit,
     vinOverageRate: limits.vinOverageRate,
   });
 };
 
 export const action = async ({ request }) => {
+  const prisma = getPrisma();
   const { session, billing } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  if (intent === "submitQuoteRequest") {
+    const quoteIdRaw = formData.get("quoteId")?.toString()?.trim();
+    const quoteId = quoteIdRaw && !isNaN(parseInt(quoteIdRaw, 10)) ? parseInt(quoteIdRaw, 10) : null;
+    const requestedPlan = formData.get("requestedPlan")?.toString() || "enterprise";
+    const requestedFitments = parseInt(formData.get("requestedFitments")?.toString() || "50000", 10) || 50000;
+    const rawBudget = formData.get("monthlyBudget")?.toString()?.trim();
+    const monthlyBudget = rawBudget && !isNaN(parseFloat(rawBudget)) ? parseFloat(rawBudget) : null;
+    const contactEmail = formData.get("contactEmail")?.toString() || session?.email || "";
+    const dataRequirements = formData.get("dataRequirements")?.toString() || "";
+    const notes = formData.get("notes")?.toString() || "";
+
+    try {
+      if (quoteId != null) {
+        await prisma.quoteRequest.updateMany({
+          where: { id: quoteId, shop },
+          data: {
+            contactEmail,
+            requestedPlan,
+            requestedFitments,
+            monthlyBudget,
+            dataRequirements,
+            notes,
+            status: "PENDING",
+          },
+        });
+      } else {
+        await prisma.quoteRequest.create({
+          data: {
+            shop,
+            contactEmail,
+            requestedPlan,
+            requestedFitments,
+            monthlyBudget,
+            dataRequirements,
+            notes,
+            status: "PENDING",
+          },
+        });
+      }
+
+      return json({
+        quoteSuccess: true,
+        quoteMessage: `Your custom enterprise quote request for ${requestedFitments.toLocaleString("en-US")} vehicle fitments has been ${quoteId != null ? "updated" : "submitted"}! Your current active plan remains unaffected while our automotive catalog engineering team reviews your specifications.`,
+      });
+    } catch (err) {
+      console.error("[submitQuoteRequest] Error saving quote:", err);
+      return json({ quoteError: `Unable to submit quote request: ${err?.message || "Internal database error"}. Please try again.` });
+    }
+  }
 
   if (intent === "claimVipFreeOffer") {
     // Verify eligibility on server before granting free upgrade
@@ -130,8 +228,22 @@ export const action = async ({ request }) => {
 
     let isEligibleStore = false;
     try {
-      const allStores = (await prisma.appSettings.findMany({ select: { shop: true, id: true }, orderBy: { id: "asc" } })) ?? [];
-      const shopIndex = allStores.findIndex((s) => s.shop === shop);
+      const rawStores = (await prisma.appSettings.findMany({
+        where: { shop: { not: "__GLOBAL__" } },
+        select: { shop: true, id: true },
+        orderBy: { id: "asc" },
+      })) ?? [];
+      const uniqueStoreSet = new Set();
+      const allStores = [];
+      for (const s of rawStores) {
+        const norm = normalizeShopDomain(s.shop);
+        if (norm && norm !== "__GLOBAL__" && !uniqueStoreSet.has(norm)) {
+          uniqueStoreSet.add(norm);
+          allStores.push(norm);
+        }
+      }
+      const normShop = normalizeShopDomain(shop);
+      const shopIndex = allStores.indexOf(normShop);
       if (shopIndex !== -1 && shopIndex < vipFreeOfferStoreLimit) {
         isEligibleStore = true;
       }
@@ -309,21 +421,88 @@ export const action = async ({ request }) => {
 export default function PlansPage() {
   const {
     shop,
+    sessionEmail,
     fitmentCount,
     merchantDiscount,
     totalAnnualDiscount,
-    isCustomMerchantDiscount,
     isVipFreeOfferActive,
     isVipFreeOfferClaimed,
     vipFreeOfferMonths = 2,
     activePlan,
     activeBillingCycle,
+    customFitmentLimit,
+    customMonthlyPrice,
     recordsLimit,
+    isCustomQuota,
+    pendingQuote,
   } = useLoaderData();
 
   const actionData = useActionData();
   const vipClaimFetcher = useFetcher();
   const isVipClaiming = vipClaimFetcher.state !== "idle";
+
+  const quoteFetcher = useFetcher();
+  const isSubmittingQuote = quoteFetcher.state !== "idle";
+  const [quoteModalOpen, setQuoteModalOpen] = useState(false);
+  const [quoteId, setQuoteId] = useState(null);
+  const [quoteTargetPlan, setQuoteTargetPlan] = useState("enterprise");
+  const [quoteFitments, setQuoteFitments] = useState(100000);
+  const [quoteBudget, setQuoteBudget] = useState("");
+  const [quoteEmail, setQuoteEmail] = useState(sessionEmail || "");
+  const [quoteNotes, setQuoteNotes] = useState("");
+  const [selectedRequirements, setSelectedRequirements] = useState([
+    "ACES 3.2 / 4.0 XML Standard",
+    "Automated Daily SFTP Sync",
+  ]);
+  const [customIntegration, setCustomIntegration] = useState("");
+
+  const availableRequirements = [
+    { label: "ACES 3.2 / 4.0 XML Standard", hint: "Auto Care vehicle fitment standard" },
+    { label: "Automated Daily SFTP Sync", hint: "Nightly automated catalog ingestion" },
+    { label: "SEMA Data Co-op (SDC) Feed", hint: "Direct SEMA distributor network sync" },
+    { label: "PIES 7.2 Product Data", hint: "Extended part attributes & specifications" },
+    { label: "WHI Nexpart / Epicor Integration", hint: "Major aftermarket parts networks" },
+    { label: "High-Volume Quota Expansion", hint: "100k+ to 1,000,000+ vehicle records" },
+    { label: "Competitor Catalog Migration", hint: "Seamless import from RevParts or SureFit" },
+    { label: "Custom Invoicing & Annual PO", hint: "B2B terms & corporate invoicing" },
+  ];
+
+  const openQuoteModal = (targetPlan = "enterprise", fitments = 100000) => {
+    if (pendingQuote && pendingQuote.status === "PENDING") {
+      setQuoteId(pendingQuote.id);
+      setQuoteTargetPlan(pendingQuote.requestedPlan || targetPlan);
+      setQuoteFitments(pendingQuote.requestedFitments || fitments);
+      setQuoteBudget(pendingQuote.monthlyBudget ? String(pendingQuote.monthlyBudget) : "");
+      setQuoteEmail(pendingQuote.contactEmail || sessionEmail || "");
+      setQuoteNotes(pendingQuote.notes || "");
+      const rawReqs = (pendingQuote.dataRequirements || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      setSelectedRequirements(rawReqs.length > 0 ? rawReqs : ["ACES 3.2 / 4.0 XML Standard", "Automated Daily SFTP Sync"]);
+      setCustomIntegration("");
+    } else {
+      setQuoteId(null);
+      setQuoteTargetPlan(targetPlan);
+      setQuoteFitments(fitments);
+      setQuoteBudget("");
+      setQuoteEmail(sessionEmail || "");
+      setQuoteNotes("");
+      setSelectedRequirements(
+        targetPlan === "enterprise"
+          ? ["ACES 3.2 / 4.0 XML Standard", "Automated Daily SFTP Sync"]
+          : ["High-Volume Quota Expansion"]
+      );
+      setCustomIntegration("");
+    }
+    setQuoteModalOpen(true);
+  };
+
+  const toggleRequirement = (label) => {
+    setSelectedRequirements((prev) =>
+      prev.includes(label) ? prev.filter((item) => item !== label) : [...prev, label]
+    );
+  };
 
   const [billingCycle, setBillingCycle] = useState("monthly");
 
@@ -438,6 +617,7 @@ export default function PlansPage() {
         "250 Free VIN Lookups/mo ($0.05 after)",
         "ACES / PIES XML & CSV Import/Export",
         "1-Click Competitor Data Importer (Easy YMM/ACES)",
+        "Staging Conflict Guard & 1-Click Rollback",
         "AI Voice & Conversational Search Assistant",
         "Sub-Model & Trim Level Filtering",
         "Unlimited Universal Products",
@@ -447,7 +627,7 @@ export default function PlansPage() {
         "Search Analytics & Failed Query Logging",
         "Priority Email & Live Support",
       ],
-      disabledFeatures: ["AI Catalog Auto-Fitter (Beta)"],
+      disabledFeatures: ["AI Catalog Auto-Fitter (Beta)", "AI PDF/Catalog Import"],
     },
     {
       id: "enterprise",
@@ -467,10 +647,12 @@ export default function PlansPage() {
         "14-Day Risk-Free Trial",
         "Unlimited Fitment Records",
         "1,000 Free VIN Lookups/mo ($0.03 after)",
+        "AI Vehicle Fitment Import (PDF & Catalogs)",
+        "1-Click AI Catalog Auto-Fitter (Beta)",
         "1-Click Competitor Data Importer (Unlimited)",
         "Advanced AI Voice & Conversational Engine",
         "Enterprise ACES / PIES Standard Engine",
-        "1-Click AI Catalog Auto-Fitter (Beta)",
+        "Import Conflict Guard & Instant Rollback",
         "Cross-Device Garage Persistence",
         "High-Speed Proxy SLA & Edge Caching",
         "VIP Dedicated 1-on-1 Account Manager",
@@ -516,6 +698,27 @@ export default function PlansPage() {
           starter: "✕",
           growth: "✓ Import & Export",
           enterprise: "✓ Full Enterprise Engine",
+        },
+        {
+          name: "AI Vehicle Fitment Import (PDF & Catalogs)",
+          free: "✕",
+          starter: "✕",
+          growth: "✕",
+          enterprise: "✓ Gemini AI Document & Spec Extraction",
+        },
+        {
+          name: "Staging Queue & Conflict Detection Guard",
+          free: "✕",
+          starter: "✓ Basic Staging",
+          growth: "✓ Full Staging & Conflict Alerts",
+          enterprise: "✓ Full Conflict Guard & Automated Normalization",
+        },
+        {
+          name: "Import History & 1-Click Rollback",
+          free: "✕",
+          starter: "✕",
+          growth: "✓ Full Audit History & Rollback",
+          enterprise: "✓ Unlimited Audit Logs & Instant Rollback",
         },
         {
           name: "CSV Bulk Import & Export",
@@ -643,7 +846,72 @@ export default function PlansPage() {
             fontSize: "14px",
           }}
         >
-          ✓ {actionData.message}
+          <span style={{ fontWeight: "800" }}>{actionData?.success !== false ? "Success:" : "Error:"}</span> {actionData.message}
+        </div>
+      )}
+
+      {/* Quote Submission Banner */}
+      {quoteFetcher.data?.quoteMessage && (
+        <div style={{ background: "#f0fdf4", border: "1px solid #86efac", color: "#166534", padding: "16px 20px", borderRadius: "12px", marginBottom: "24px", fontSize: "14px", fontWeight: "600", display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "18px" }}>✅</span>
+          <div>
+            <span style={{ fontWeight: "800" }}>Quote Status Updated:</span> {quoteFetcher.data.quoteMessage}
+          </div>
+        </div>
+      )}
+
+      {quoteFetcher.data?.quoteError && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "16px 20px", borderRadius: "12px", marginBottom: "24px", fontSize: "14px", fontWeight: "700" }}>
+          <span>Error:</span> {quoteFetcher.data.quoteError}
+        </div>
+      )}
+
+      {/* Custom Quota Active Banner */}
+      {isCustomQuota && customFitmentLimit != null && (
+        <div style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)", border: "1px solid #86efac", borderRadius: "14px", padding: "18px 24px", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", boxShadow: "0 2px 8px rgba(22, 101, 52, 0.08)" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+              <span style={{ background: "#166534", color: "#ffffff", padding: "2px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                CUSTOM PLAN QUOTA ACTIVE
+              </span>
+              <span style={{ fontSize: "15px", fontWeight: "800", color: "#14532d" }}>
+                Active Quota: {customFitmentLimit.toLocaleString()} Vehicle Fitments
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: "13px", color: "#15803d" }}>
+              Your store has been assigned a custom negotiated plan with expanded fitment database capacity
+              {customMonthlyPrice != null ? ` at $${customMonthlyPrice.toFixed(2)}/mo` : ""}.
+            </p>
+          </div>
+          <span style={{ background: "#ffffff", color: "#166534", border: "1px solid #bbf7d0", padding: "4px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "700" }}>
+            Admin Managed Quote
+          </span>
+        </div>
+      )}
+
+      {/* Pending Quote Request Notice */}
+      {pendingQuote && pendingQuote.status === "PENDING" && !isCustomQuota && (
+        <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "14px", padding: "18px 22px", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", boxShadow: "0 2px 8px rgba(37, 99, 235, 0.08)" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+              <span style={{ background: "#2563eb", color: "#ffffff", padding: "3px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                ENTERPRISE QUOTE IN REVIEW
+              </span>
+              <span style={{ fontSize: "15px", fontWeight: "800", color: "#1e40af" }}>
+                Request #{pendingQuote.id} · {pendingQuote.requestedFitments.toLocaleString()} Vehicle Records ({pendingQuote.requestedPlan.toUpperCase()})
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: "13px", color: "#3b82f6", lineHeight: "1.5" }}>
+              Our automotive engineering team is reviewing your specifications. <strong>Your active plan ({activePlan.toUpperCase()}) remains unaffected</strong> with continuous storefront fitment searches.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openQuoteModal(pendingQuote.requestedPlan, pendingQuote.requestedFitments)}
+            style={{ background: "#ffffff", border: "1px solid #93c5fd", color: "#1d4ed8", padding: "8px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
+          >
+            Review & Edit Quote Details →
+          </button>
         </div>
       )}
 
@@ -908,7 +1176,7 @@ export default function PlansPage() {
                   buttonLabel={buttonLabel}
                 />
 
-                <div style={{ height: "1px", background: "#f1f5f9", margin: "18px 0" }} />
+                <div style={{ height: "1px", background: "#f1f5f9", margin: "18px 0 16px" }} />
 
                 {/* Features list */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "9px" }}>
@@ -917,13 +1185,13 @@ export default function PlansPage() {
                   </span>
                   {plan.features.map((feat, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#1e293b" }}>
-                      <span style={{ color: "#008060", fontWeight: "800", fontSize: "14px" }}>✓</span>
+                      <span style={{ color: "#008060", fontWeight: "800", fontSize: "14px" }}>•</span>
                       <span>{feat}</span>
                     </div>
                   ))}
                   {plan.disabledFeatures.map((feat, i) => (
                     <div key={`d-${i}`} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#94a3b8" }}>
-                      <span style={{ color: "#cbd5e1", fontSize: "14px" }}>✕</span>
+                      <span style={{ color: "#cbd5e1", fontSize: "14px" }}>•</span>
                       <span style={{ textDecoration: "line-through" }}>{feat}</span>
                     </div>
                   ))}
@@ -934,59 +1202,94 @@ export default function PlansPage() {
         })}
       </div>
 
-      {/* Enterprise Custom Solutions Callout ($200+/mo Custom Tiers) */}
+      {/* Enterprise Custom Solutions - Clean & Simple Light Card */}
       <div style={{
-        background: "linear-gradient(135deg, #090d16 0%, #1e1b4b 50%, #0f172a 100%)",
-        border: "1px solid #4338ca",
-        borderRadius: "16px",
-        padding: "28px 32px",
-        color: "#ffffff",
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "14px",
+        padding: "24px 28px",
         marginBottom: "36px",
-        boxShadow: "0 10px 25px -5px rgba(30, 27, 75, 0.3)",
+        boxShadow: "0 1px 4px rgba(0, 0, 0, 0.04)",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
         flexWrap: "wrap",
-        gap: "20px"
+        gap: "20px",
       }}>
-        <div style={{ maxWidth: "680px" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(99, 102, 241, 0.25)", border: "1px solid rgba(129, 140, 248, 0.5)", padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.8px", color: "#a5b4fc", marginBottom: "12px" }}>
-            <span>⚡ HIGH-VOLUME AUTO ENTERPRISE & DISTRIBUTORS ($200+ / mo)</span>
+        <div style={{ maxWidth: "740px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+            <span style={{
+              background: "#eff6ff",
+              color: "#2563eb",
+              border: "1px solid #bfdbfe",
+              padding: "3px 9px",
+              borderRadius: "6px",
+              fontSize: "11px",
+              fontWeight: "700",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}>
+              High-Volume Auto Enterprise & Distributors ($200+ / mo)
+            </span>
+            <span style={{
+              background: "#f0fdf4",
+              color: "#166534",
+              border: "1px solid #bbf7d0",
+              padding: "3px 8px",
+              borderRadius: "6px",
+              fontSize: "11px",
+              fontWeight: "600",
+            }}>
+              ✓ Available on Any Active Plan
+            </span>
           </div>
-          <h2 style={{ fontSize: "20px", fontWeight: "800", margin: "0 0 8px", color: "#ffffff", letterSpacing: "-0.3px" }}>
+
+          <h2 style={{ fontSize: "18px", fontWeight: "700", margin: "0 0 6px", color: "#0f172a" }}>
             Need ACES 3.2 / 4.0 XML, SEMA Data Co-op (SDC), or Automated SFTP Sync?
           </h2>
-          <p style={{ margin: 0, fontSize: "14px", color: "#cbd5e1", lineHeight: "1.6" }}>
-            Large automotive manufacturers, distributors, and multi-brand parts stores require custom database scale. Our Enterprise Custom tier provides <strong>Automated Daily ACES/PIES XML SFTP ingestion</strong>, <strong>SEMA Data Co-op & WHI Nexpart feeds</strong>, <strong>1,000,000+ SKU support</strong>, and a <strong>Dedicated Automotive Catalog Engineer</strong>.
+
+          <p style={{ margin: "0 0 10px", fontSize: "13px", color: "#475569", lineHeight: "1.5" }}>
+            Custom fitment database scale for 100,000 to 1,000,000+ SKUs. Includes automated daily SFTP catalog ingestion, distributor feeds (SEMA Data Co-op & WHI Nexpart), and a dedicated automotive catalog engineer.
           </p>
-          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginTop: "14px", fontSize: "12px", color: "#a5b4fc", fontWeight: "600" }}>
-            <span>✓ ACES 3.2 & 4.0 Standard XML</span>
-            <span>✓ PIES 7.2 Product Data Feeds</span>
-            <span>✓ Automated SFTP / FTP Ingestion</span>
-            <span>✓ 99.99% Edge Cache SLA</span>
+
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "12px", color: "#64748b", fontWeight: "500" }}>
+            <span>• ACES 3.2 & 4.0 Standard XML</span>
+            <span>• PIES 7.2 Product Data Feeds</span>
+            <span>• Automated SFTP / FTP Ingestion</span>
+            <span>• Dedicated Catalog Engineer</span>
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: "220px" }}>
-          <Link
-            to="/app/support?topic=enterprise_custom"
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: "220px", flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => openQuoteModal("enterprise", 100000)}
             style={{
-              background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+              background: "#4f46e5",
               color: "#ffffff",
-              padding: "12px 22px",
-              borderRadius: "10px",
-              fontWeight: "700",
-              fontSize: "14px",
+              padding: "11px 20px",
+              borderRadius: "8px",
+              fontWeight: "600",
+              fontSize: "13px",
               textAlign: "center",
-              textDecoration: "none",
-              boxShadow: "0 4px 14px rgba(99, 102, 241, 0.4)",
-              transition: "transform 0.15s ease"
+              border: "none",
+              cursor: "pointer",
+              boxShadow: "0 1px 3px rgba(79, 70, 229, 0.25)",
+              transition: "background 0.15s ease",
             }}
           >
-            Request Enterprise Quote →
-          </Link>
-          <div style={{ textAlign: "center", fontSize: "12px", color: "#94a3b8" }}>
-            Custom billing & annual invoicing available
+            {pendingQuote && pendingQuote.status === "PENDING"
+              ? "Review / Edit Quote Request →"
+              : "Request Enterprise Quote →"}
+          </button>
+          <div style={{ textAlign: "center", fontSize: "12px", color: "#64748b" }}>
+            {pendingQuote && pendingQuote.status === "PENDING" ? (
+              <span style={{ color: "#2563eb", fontWeight: "600" }}>
+                ✓ Request #{pendingQuote.id} under review
+              </span>
+            ) : (
+              <span>Zero disruption to active plan • Free quote</span>
+            )}
           </div>
         </div>
       </div>
@@ -1180,6 +1483,287 @@ export default function PlansPage() {
           </table>
         </div>
       </div>
+
+      {/* Quote Request Modal */}
+      {quoteModalOpen && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(15, 23, 42, 0.75)",
+          backdropFilter: "blur(6px)",
+          zIndex: 9999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px",
+        }}>
+          <div style={{
+            background: "#ffffff",
+            borderRadius: "20px",
+            maxWidth: "640px",
+            width: "100%",
+            padding: "32px",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.1)",
+            position: "relative",
+            maxHeight: "92vh",
+            overflowY: "auto",
+            border: "1px solid #e2e8f0",
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
+              <div>
+                <span style={{ background: "linear-gradient(135deg, #ede9fe 0%, #e0e7ff 100%)", color: "#4f46e5", padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.6px" }}>
+                  CUSTOM CATALOG SCALE & ENTERPRISE
+                </span>
+                <h3 style={{ margin: "8px 0 4px", fontSize: "20px", fontWeight: "800", color: "#0f172a", letterSpacing: "-0.3px" }}>
+                  {quoteId ? "Review & Update Quote Request" : "Request Enterprise Custom Quote"}
+                </h3>
+                <p style={{ margin: 0, fontSize: "13px", color: "#64748b", lineHeight: "1.5" }}>
+                  Scale your fitment database beyond standard limits with custom XML/SFTP feeds and dedicated automotive catalog engineering.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuoteModalOpen(false)}
+                style={{ background: "#f1f5f9", border: "none", borderRadius: "50%", width: "32px", height: "32px", cursor: "pointer", fontSize: "18px", fontWeight: "bold", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Merchant Reassurance Guarantee */}
+            <div style={{
+              background: "linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)",
+              border: "1px solid #a7f3d0",
+              borderRadius: "12px",
+              padding: "13px 16px",
+              marginBottom: "20px",
+              display: "flex",
+              gap: "12px",
+              alignItems: "flex-start",
+            }}>
+              <span style={{ fontSize: "20px", lineHeight: "1" }}>🛡️</span>
+              <div style={{ fontSize: "12px", color: "#065f46", lineHeight: "1.5" }}>
+                <strong>Risk-Free Merchant Guarantee:</strong> Submitting this quote will <strong>never cancel, downgrade, or disrupt</strong> your live active plan (<strong>{activePlan ? activePlan.toUpperCase() : "ACTIVE"}</strong>). Your store continues operating smoothly while our team prepares a personalized proposal.
+                <div style={{ marginTop: "6px", color: "#047857", display: "flex", gap: "14px", flexWrap: "wrap", fontSize: "11px", fontWeight: "700" }}>
+                  <span>🏪 Store: {shop}</span>
+                  <span>🚗 Catalog Size: {fitmentCount.toLocaleString()} records</span>
+                </div>
+              </div>
+            </div>
+
+            <quoteFetcher.Form method="post" onSubmit={() => setQuoteModalOpen(false)}>
+              <input type="hidden" name="intent" value="submitQuoteRequest" />
+              {quoteId && <input type="hidden" name="quoteId" value={quoteId} />}
+              <input
+                type="hidden"
+                name="dataRequirements"
+                value={[...selectedRequirements, ...(customIntegration.trim() ? [customIntegration.trim()] : [])].join(", ")}
+              />
+
+              {/* Target Plan Tier */}
+              <div style={{ marginBottom: "18px" }}>
+                <label htmlFor="quote-target-plan" style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#1e293b", marginBottom: "6px" }}>
+                  Target Plan Tier
+                </label>
+                <select
+                  id="quote-target-plan"
+                  name="requestedPlan"
+                  value={quoteTargetPlan}
+                  onChange={(e) => setQuoteTargetPlan(e.target.value)}
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", background: "#ffffff", fontWeight: "600", color: "#0f172a" }}
+                >
+                  <option value="enterprise">Enterprise Custom (ACES/PIES 3.2 XML, Daily SFTP, SEMA Data Co-op, 100k+ to 1M+ SKUs)</option>
+                  <option value="growth">Growth Pro Custom (Garage Sync, 250+ VIN lookups, Sub-model Filtering, 20k-75k SKUs)</option>
+                  <option value="starter">Starter Pro Custom (Storefront Fitment, Standard CSV, 5k-20k SKUs)</option>
+                </select>
+              </div>
+
+              {/* Requested Fitments */}
+              <div style={{ marginBottom: "18px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <label htmlFor="quote-fitments-input" style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b" }}>
+                    Required Fitment Record Quota
+                  </label>
+                  <span style={{ fontSize: "12px", color: "#6366f1", fontWeight: "700" }}>
+                    {quoteFitments.toLocaleString()} Records Selected
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
+                  {[25000, 50000, 100000, 250000, 500000, 1000000].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setQuoteFitments(num)}
+                      style={{
+                        background: quoteFitments === num ? "#1e1b4b" : "#f1f5f9",
+                        color: quoteFitments === num ? "#ffffff" : "#475569",
+                        border: `1px solid ${quoteFitments === num ? "#4338ca" : "#e2e8f0"}`,
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      {num >= 1000000 ? "1M+ Records" : `${(num / 1000).toFixed(0)}k Records`}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  id="quote-fitments-input"
+                  type="number"
+                  name="requestedFitments"
+                  value={quoteFitments}
+                  onChange={(e) => setQuoteFitments(parseInt(e.target.value, 10) || 0)}
+                  placeholder="e.g. 100000"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", boxSizing: "border-box" }}
+                />
+              </div>
+
+              {/* Automotive Data Standards & Integrations */}
+              <div style={{ marginBottom: "18px" }}>
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b", marginBottom: "4px" }}>
+                  Automotive Data Feeds & Integrations (Click to select)
+                </div>
+                <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#64748b" }}>
+                  Select the automotive standards and distributor connections your catalog requires:
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+                  {availableRequirements.map((item) => {
+                    const isSelected = selectedRequirements.includes(item.label);
+                    return (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => toggleRequirement(item.label)}
+                        title={item.hint}
+                        style={{
+                          background: isSelected ? "#e0e7ff" : "#f8fafc",
+                          border: `1px solid ${isSelected ? "#6366f1" : "#cbd5e1"}`,
+                          color: isSelected ? "#3730a3" : "#334155",
+                          padding: "6px 12px",
+                          borderRadius: "8px",
+                          fontSize: "12px",
+                          fontWeight: isSelected ? "700" : "500",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <span style={{ fontSize: "13px", fontWeight: "800", color: isSelected ? "#4f46e5" : "#94a3b8" }}>
+                          {isSelected ? "✓" : "+"}
+                        </span>
+                        <span>{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <input
+                  type="text"
+                  value={customIntegration}
+                  onChange={(e) => setCustomIntegration(e.target.value)}
+                  placeholder="Other supplier / warehouse feed (e.g. Turn14, Meyer, Keystone, Quadratec, SAP)..."
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "12px", boxSizing: "border-box" }}
+                />
+              </div>
+
+              {/* Budget & Contact */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "18px" }}>
+                <div>
+                  <label htmlFor="quote-monthly-budget" style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#1e293b", marginBottom: "6px" }}>
+                    Monthly Budget ($ USD, Optional)
+                  </label>
+                  <input
+                    id="quote-monthly-budget"
+                    type="number"
+                    name="monthlyBudget"
+                    value={quoteBudget}
+                    onChange={(e) => setQuoteBudget(e.target.value)}
+                    placeholder="e.g. 199"
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="quote-contact-email" style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#1e293b", marginBottom: "6px" }}>
+                    Contact Email
+                  </label>
+                  <input
+                    id="quote-contact-email"
+                    type="email"
+                    name="contactEmail"
+                    value={quoteEmail}
+                    onChange={(e) => setQuoteEmail(e.target.value)}
+                    placeholder="billing@yourstore.com"
+                    required
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              {/* Additional Notes */}
+              <div style={{ marginBottom: "24px" }}>
+                <label htmlFor="quote-catalog-notes" style={{ display: "block", fontSize: "13px", fontWeight: "700", color: "#1e293b", marginBottom: "6px" }}>
+                  Catalog Notes & Brand Fitments (Optional)
+                </label>
+                <textarea
+                  id="quote-catalog-notes"
+                  name="notes"
+                  rows={3}
+                  value={quoteNotes}
+                  onChange={(e) => setQuoteNotes(e.target.value)}
+                  placeholder="Share details about your vehicle part types, suppliers, CSV structure, or catalog update frequency..."
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", boxSizing: "border-box" }}
+                />
+              </div>
+
+              {/* Footer Actions */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", borderTop: "1px solid #f1f5f9", paddingTop: "18px" }}>
+                <div style={{ fontSize: "12px", color: "#64748b" }}>
+                  ⚡ Engineering response within 24 business hours
+                </div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setQuoteModalOpen(false)}
+                    style={{ background: "#ffffff", border: "1px solid #cbd5e1", padding: "10px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: "pointer", color: "#475569" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingQuote}
+                    style={{
+                      background: "linear-gradient(135deg, #4338ca 0%, #312e81 100%)",
+                      color: "#ffffff",
+                      border: "none",
+                      padding: "10px 24px",
+                      borderRadius: "8px",
+                      fontSize: "13px",
+                      fontWeight: "700",
+                      cursor: isSubmittingQuote ? "not-allowed" : "pointer",
+                      opacity: isSubmittingQuote ? 0.7 : 1,
+                      boxShadow: "0 4px 12px rgba(67, 56, 202, 0.35)",
+                    }}
+                  >
+                    {isSubmittingQuote
+                      ? "Submitting Quote..."
+                      : quoteId
+                        ? "Update Quote Request →"
+                        : "Submit Enterprise Request (Free & No Obligation) →"}
+                  </button>
+                </div>
+              </div>
+            </quoteFetcher.Form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -515,7 +515,7 @@ export default function FitmentProducts() {
                   title={!canUseAi ? "AI Suggestions are available on the Enterprise plan" : ""}
                   style={{ ...aiBtn, opacity: !canUseAi ? 0.5 : 1, cursor: !canUseAi ? "not-allowed" : "pointer" }}
                 >
-                  {aiLoading ? "Analyzing…" : "✨ AI Suggest Products"}
+                  {aiLoading ? "Analyzing…" : "AI Suggest Products"}
                 </button>
               </Form>
             </div>

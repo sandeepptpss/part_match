@@ -162,7 +162,7 @@ export default function GlobalSupportWidget({ shop = "", sessionEmail = "" }) {
               }}
               title="Close Support Window"
             >
-              ✕
+              ×
             </button>
           </div>
 
@@ -186,7 +186,7 @@ export default function GlobalSupportWidget({ shop = "", sessionEmail = "" }) {
                   gap: "8px",
                 }}
               >
-                <span>{status.success ? "✓" : "✕"}</span>
+                <span style={{ fontWeight: "700" }}>{status.success ? "Success:" : "Error:"}</span>
                 <span>{status.message}</span>
               </div>
             )}

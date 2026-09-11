@@ -34,14 +34,16 @@ model Session {
 // ─── Fitment Records ─────────────────────────────────────────────────────────
 // A FitmentRecord represents one unique Year+Make+Model+Trim combination per shop.
 model FitmentRecord {
-  id        Int      @id @default(autoincrement())
-  shop      String   @db.VarChar(100)
-  year      String   @db.VarChar(50)
-  make      String   @db.VarChar(100)
-  model     String   @db.VarChar(100)
-  trim      String   @default("") @db.VarChar(100)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  shop        String   @db.VarChar(100)
+  year        String   @db.VarChar(50)
+  make        String   @db.VarChar(100)
+  model       String   @db.VarChar(100)
+  trim        String   @default("") @db.VarChar(100)
+  source      String   @default("MANUAL") @db.VarChar(50)
+  importJobId Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   products    FitmentProduct[]
   collections FitmentCollection[]
@@ -53,22 +55,29 @@ model FitmentRecord {
   @@index([shop, year])
   @@index([shop, year, make])
   @@index([shop, year, make, model])
+  @@index([importJobId])
 }
 
 // ─── Fitment ↔ Product Junction ──────────────────────────────────────────────
 // Links a FitmentRecord to one or more Shopify product GIDs.
 model FitmentProduct {
-  id               Int    @id @default(autoincrement())
+  id               Int     @id @default(autoincrement())
   fitmentId        Int
-  shopifyProductId String // Shopify GID e.g. "gid://shopify/Product/123"
-  shopifyHandle    String @default("")
-  productTitle     String @default("")
+  shopifyProductId String  // Shopify GID e.g. "gid://shopify/Product/123"
+  shopifyVariantId String? @default("") @db.VarChar(255)
+  variantTitle     String? @default("") @db.VarChar(255)
+  shopifyHandle    String  @default("")
+  productTitle     String  @default("")
+  confidence       Int     @default(100)
+  source           String  @default("MANUAL") @db.VarChar(50)
+  importJobId      Int?
 
   fitment FitmentRecord @relation(fields: [fitmentId], references: [id], onDelete: Cascade)
 
   @@unique([fitmentId, shopifyProductId])
   @@index([fitmentId])
   @@index([shopifyProductId])
+  @@index([importJobId])
 }
 
 // ─── Fitment ↔ Collection Junction ───────────────────────────────────────────
@@ -248,11 +257,34 @@ model AppSettings {
 // Cached copy of the shop's active Shopify billing subscription, kept in sync
 // by the Plans page loader (live billing.check) and the app_subscriptions/update webhook.
 model ShopPlan {
-  shop           String   @id
-  plan           String   @default("free") // "free" | "growth" | "enterprise"
-  billingCycle   String   @default("monthly") // "monthly" | "annual"
-  subscriptionId String?
-  updatedAt      DateTime @updatedAt
+  shop               String   @id
+  plan               String   @default("free") // "free" | "starter" | "growth" | "enterprise"
+  billingCycle       String   @default("monthly") // "monthly" | "annual"
+  subscriptionId     String?
+  customFitmentLimit Int?     // Admin override for custom quotes (e.g. 50,000 or null for standard)
+  customMonthlyPrice Float?   // Negotiated price for custom quotes
+  isManualGrant      Boolean  @default(false) // Protects custom quotes from being reset to free by billing sync
+  adminNotes         String?  @db.Text
+  updatedAt          DateTime @updatedAt
+}
+
+// ─── Custom Enterprise / Plan Quote Requests ──────────────────────────────
+model QuoteRequest {
+  id                 Int      @id @default(autoincrement())
+  shop               String   @db.VarChar(100)
+  contactEmail       String   @default("")
+  requestedPlan      String   @default("enterprise") // "starter" | "growth" | "enterprise"
+  requestedFitments  Int      @default(50000)
+  monthlyBudget      Float?
+  dataRequirements   String?  @db.Text
+  notes              String?  @db.Text
+  status             String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "ACTIVE"
+  quotedPrice        Float?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([shop])
+  @@index([status])
 }
 
 // ─── VIN Lookup Usage Logs ──────────────────────────────────────────────────
@@ -266,5 +298,66 @@ model VinLookupLog {
 
   @@index([shop])
   @@index([shop, createdAt])
+}
+
+// ─── Bulk & AI Import Jobs ───────────────────────────────────────────────────
+// Tracks import operations, status, metrics, and audit history.
+model ImportJob {
+  id             Int             @id @default(autoincrement())
+  shop           String          @db.VarChar(100)
+  fileName       String          @db.VarChar(255)
+  fileType       String          @default("CSV") @db.VarChar(50) // "CSV" | "ACES_XML" | "PDF_CATALOG" | "AI_CATALOG" | "UNSTRUCTURED_TEXT"
+  status         String          @default("PENDING") @db.VarChar(50) // "PENDING" | "PROCESSING" | "STAGED" | "COMPLETED" | "FAILED" | "ROLLED_BACK"
+  totalRows      Int             @default(0)
+  processedRows  Int             @default(0)
+  stagedCount    Int             @default(0)
+  approvedCount  Int             @default(0)
+  rejectedCount  Int             @default(0)
+  conflictCount  Int             @default(0)
+  errorCount     Int             @default(0)
+  errorMessage   String?         @db.Text
+  summaryJson    String?         @db.Text
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  stagedItems    StagedFitment[]
+
+  @@index([shop])
+  @@index([shop, status])
+  @@index([shop, createdAt])
+}
+
+// ─── Staged Fitment Records ──────────────────────────────────────────────────
+// Holding area for imported fitments awaiting merchant review or conflict resolution.
+model StagedFitment {
+  id                 Int       @id @default(autoincrement())
+  importJobId        Int
+  shop               String    @db.VarChar(100)
+  year               String    @db.VarChar(50)
+  make               String    @db.VarChar(100)
+  model              String    @db.VarChar(100)
+  trim               String    @default("") @db.VarChar(100)
+  canonicalVehicleId String?   @db.VarChar(100)
+  normalizedMake     String?   @db.VarChar(100)
+  normalizedModel    String?   @db.VarChar(100)
+  partNumber         String?   @db.VarChar(100)
+  shopifyProductId   String?   @db.VarChar(255)
+  shopifyVariantId   String?   @default("") @db.VarChar(255)
+  shopifyHandle      String?   @default("") @db.VarChar(255)
+  productTitle       String?   @default("") @db.VarChar(255)
+  confidence         Int       @default(100)
+  source             String    @default("CSV") @db.VarChar(50) // "CSV" | "ACES" | "PDF_AI" | "AI_CATALOG"
+  status             String    @default("PENDING") @db.VarChar(50) // "PENDING" | "APPROVED" | "REJECTED" | "CONFLICT" | "COMMITTED"
+  hasConflict        Boolean   @default(false)
+  conflictReason     String?   @db.Text
+  extractionReason   String?   @db.Text
+  rawRecord          String?   @db.Text
+  createdAt          DateTime  @default(now())
+
+  job                ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId])
+  @@index([shop, status])
+  @@index([shop, year, make, model])
 }
 

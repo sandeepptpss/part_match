@@ -186,7 +186,7 @@ export default function SupportPage() {
               flexShrink: 0,
             }}
           >
-            ✓
+            OK
           </div>
           <div>
             <strong style={{ fontSize: "16px", display: "block", marginBottom: "2px" }}>Query Received!</strong>
@@ -228,7 +228,7 @@ export default function SupportPage() {
               flexShrink: 0,
             }}
           >
-            ✕
+            !
           </div>
           <div>
             <strong style={{ fontSize: "15px", display: "block" }}>Submission Failed</strong>

@@ -442,11 +442,11 @@ export default function Analytics() {
                   <td style={{ ...tdStyle, textAlign: "right" }}>
                     {log.hasResults ? (
                       <span style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "2px 8px", borderRadius: "10px", fontSize: "12px", fontWeight: "700" }}>
-                        ✓ Matched
+                        Matched
                       </span>
                     ) : (
                       <span style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "2px 8px", borderRadius: "10px", fontSize: "12px", fontWeight: "700" }}>
-                        ✕ 0 Results
+                        0 Results
                       </span>
                     )}
                   </td>

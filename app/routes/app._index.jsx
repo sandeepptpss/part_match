@@ -2,6 +2,7 @@ const json = (data, init) => Response.json(data, init);
 import { useLoaderData, Link } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { normalizeShopDomain } from "../utils/shopDomain";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -44,7 +45,11 @@ export const loader = async ({ request }) => {
       }) ?? [],
       prisma.appSettings?.findFirst({ where: { shop } }),
       prisma.appSettings?.findFirst({ where: { shop: "__GLOBAL__" } }),
-      prisma.appSettings?.findMany({ select: { shop: true, id: true }, orderBy: { id: "asc" } }),
+      prisma.appSettings?.findMany({
+        where: { shop: { not: "__GLOBAL__" } },
+        select: { shop: true, id: true },
+        orderBy: { id: "asc" },
+      }),
     ]);
 
     [
@@ -59,12 +64,23 @@ export const loader = async ({ request }) => {
 
     const appSettings = res[7];
     const globalSettings = res[8];
-    const allStores = res[9] ?? [];
+    const rawStores = res[9] ?? [];
+
+    const uniqueStoreSet = new Set();
+    const allStores = [];
+    for (const s of rawStores) {
+      const norm = normalizeShopDomain(s.shop);
+      if (norm && norm !== "__GLOBAL__" && !uniqueStoreSet.has(norm)) {
+        uniqueStoreSet.add(norm);
+        allStores.push(norm);
+      }
+    }
 
     const autoGrantFirst10 = globalSettings?.autoGrantFirst10 ?? false;
     vipFreeOfferMonths = globalSettings?.vipFreeOfferMonths ?? 2;
     const vipFreeOfferStoreLimit = globalSettings?.vipFreeOfferStoreLimit ?? 10;
-    const shopIndex = allStores.findIndex((s) => s.shop === shop);
+    const normShop = normalizeShopDomain(shop);
+    const shopIndex = allStores.indexOf(normShop);
     const isFirstNStore = shopIndex !== -1 && shopIndex < vipFreeOfferStoreLimit;
 
     const isVipFreeOfferExplicit = appSettings?.vipFreeOfferActive ?? false;

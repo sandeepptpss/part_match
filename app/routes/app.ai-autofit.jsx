@@ -207,20 +207,20 @@ export default function AiAutoFitCatalog() {
     if (confidence >= 90) {
       return (
         <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "5px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-          <span>✓</span> {confidence}% High Match
+          {confidence}% High Match
         </div>
       );
     }
     if (confidence >= 75) {
       return (
         <div style={{ background: "#fffbeb", border: "1px solid #fde68a", color: "#b45309", padding: "5px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-          <span>⚠️</span> {confidence}% Review Specs
+          {confidence}% Review Specs
         </div>
       );
     }
     return (
       <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "5px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-        <span>❓</span> {confidence}% Low Match
+        {confidence}% Low Match
       </div>
     );
   };
@@ -334,7 +334,7 @@ export default function AiAutoFitCatalog() {
               onClick={selectHighOnly}
               style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
             >
-              ✓ Select High Confidence Only
+              Select High Confidence Only
             </button>
             <button
               type="button"
@@ -356,7 +356,7 @@ export default function AiAutoFitCatalog() {
         {/* Success Alert */}
         {fetcher.data?.success && (
           <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857", padding: "16px", borderRadius: "12px", marginBottom: "20px", fontWeight: "700", fontSize: "14px", display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "18px" }}>✓</span>
+            <span style={{ fontWeight: "800" }}>Success:</span>
             <div>Successfully saved {fetcher.data.count} AI-reviewed fitment records to your catalog!</div>
           </div>
         )}

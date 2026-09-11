@@ -36,6 +36,10 @@ export const PLAN_TIERS = {
     garageSync: false,
     analyticsDetail: "basic",
     aiFitmentSuggestions: false,
+    aiDocumentImport: false,
+    backgroundBulkImport: false,
+    conflictDetectionReview: false,
+    importAuditHistory: false,
     vinLookup: false,
     vinMonthlyLimit: 0,
     vinOverageRate: 0,
@@ -53,6 +57,10 @@ export const PLAN_TIERS = {
     garageSync: false,
     analyticsDetail: "standard",
     aiFitmentSuggestions: false,
+    aiDocumentImport: false,
+    backgroundBulkImport: true,
+    conflictDetectionReview: true,
+    importAuditHistory: false,
     vinLookup: true,
     vinMonthlyLimit: 25,
     vinOverageRate: 0.08,
@@ -70,6 +78,10 @@ export const PLAN_TIERS = {
     garageSync: true,
     analyticsDetail: "detailed",
     aiFitmentSuggestions: false,
+    aiDocumentImport: false,
+    backgroundBulkImport: true,
+    conflictDetectionReview: true,
+    importAuditHistory: true,
     vinLookup: true,
     vinMonthlyLimit: 250,
     vinOverageRate: 0.05,
@@ -87,6 +99,10 @@ export const PLAN_TIERS = {
     garageSync: true,
     analyticsDetail: "detailed",
     aiFitmentSuggestions: true,
+    aiDocumentImport: true,
+    backgroundBulkImport: true,
+    conflictDetectionReview: true,
+    importAuditHistory: true,
     vinLookup: true,
     vinMonthlyLimit: 1000,
     vinOverageRate: 0.03,
@@ -107,8 +123,13 @@ export const ALL_BILLING_PLAN_KEYS = Object.values(BILLING_PLAN_KEYS).flatMap((c
   Object.values(cycles),
 );
 
-export function planLimits(planId) {
-  return PLAN_TIERS[planId] || PLAN_TIERS.free;
+export function planLimits(planId, customFitmentLimit = null) {
+  const base = { ...(PLAN_TIERS[planId] || PLAN_TIERS.free) };
+  if (customFitmentLimit != null && Number.isFinite(customFitmentLimit) && customFitmentLimit > 0) {
+    base.fitmentLimit = customFitmentLimit;
+    base.isCustomQuota = true;
+  }
+  return base;
 }
 
 export function resolveTierFromBillingName(name) {

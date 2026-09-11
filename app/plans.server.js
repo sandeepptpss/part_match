@@ -21,7 +21,15 @@ export {
 
 export async function getShopPlan(shop) {
   try {
+    const adminStore = (process.env.ADMIN_STORE_NAME || "").toLowerCase().trim();
+    const shopDomain = (shop || "").toLowerCase().trim();
     const record = await prisma.shopPlan?.findUnique({ where: { shop } });
+
+    if (adminStore && (shopDomain === adminStore || shopDomain === `${adminStore}.myshopify.com`)) {
+      if (record?.plan) return record;
+      return { shop, plan: "enterprise", billingCycle: "monthly", subscriptionId: "admin-dev-plan" };
+    }
+
     if (!record) return { shop, plan: "free", billingCycle: "monthly", subscriptionId: null };
     return record;
   } catch (err) {
@@ -35,6 +43,10 @@ export async function getShopPlan(shop) {
 // else should read the cached row via getShopPlan().
 export async function syncShopPlanFromBilling(billing, shop) {
   try {
+    const adminStore = (process.env.ADMIN_STORE_NAME || "").toLowerCase().trim();
+    const shopDomain = (shop || "").toLowerCase().trim();
+    const isAdminStore = adminStore && (shopDomain === adminStore || shopDomain === `${adminStore}.myshopify.com`);
+
     const { appSubscriptions } = await billing.check({ plans: ALL_BILLING_PLAN_KEYS });
 
     const active = appSubscriptions?.[0];
@@ -48,10 +60,15 @@ export async function syncShopPlanFromBilling(billing, shop) {
         create: { shop, ...data },
       });
     } else {
-      // Shopify has no active subscription. If not on an active VIP grant, sync status to free
+      // If admin development store, maintain enterprise or configured plan
+      if (isAdminStore) {
+        return await getShopPlan(shop);
+      }
+
+      // Shopify has no active subscription. If not on an active VIP grant or manual admin quote, sync status to free
       const appSettings = await prisma.appSettings?.findFirst({ where: { shop } });
-      if (!appSettings?.vipFreeOfferActive) {
-        const current = await getShopPlan(shop);
+      const current = await getShopPlan(shop);
+      if (!appSettings?.vipFreeOfferActive && !current?.isManualGrant) {
         if (current?.plan && current.plan !== "free") {
           return await prisma.shopPlan?.upsert({
             where: { shop },
