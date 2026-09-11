@@ -282,7 +282,20 @@ export const action = async ({ request }) => {
 
       console.error("[plans action] Error requesting billing:", error);
 
-      // Fallback for custom dev stores
+      // Only auto-grant the plan without a completed Shopify charge on
+      // recognized dev/test stores. A billing.request() failure on a real
+      // store must never silently unlock a paid plan for free — surface it
+      // as an error instead so the merchant can retry.
+      if (!isTest) {
+        return json(
+          {
+            success: false,
+            message: "We couldn't start your subscription with Shopify Billing. Please try again in a moment.",
+          },
+          { status: 502 },
+        );
+      }
+
       await prisma.shopPlan.upsert({
         where: { shop },
         update: { plan: selectedPlan, billingCycle, subscriptionId: null },
