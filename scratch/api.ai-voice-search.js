@@ -48,10 +48,66 @@ export async function action({ request }) {
     "Polaris", "Can-Am", "Yamaha", "Kawasaki", "Harley-Davidson"
   ];
 
+  const SPOKEN_YEAR_MAP = {
+    "twenty twenty six": "2026",
+    "twenty twenty five": "2025",
+    "twenty twenty four": "2024",
+    "twenty twenty three": "2023",
+    "twenty twenty two": "2022",
+    "twenty twenty one": "2021",
+    "twenty twenty": "2020",
+    "twenty nineteen": "2019",
+    "twenty eighteen": "2018",
+    "twenty seventeen": "2017",
+    "twenty sixteen": "2016",
+    "twenty fifteen": "2015",
+    "twenty fourteen": "2014",
+    "twenty thirteen": "2013",
+    "twenty twelve": "2012",
+    "twenty eleven": "2011",
+    "twenty ten": "2010",
+  };
+
+  const MODEL_ALIASES = [
+    { pattern: /\bf\s*[- ]?150\b/i, replacement: "F-150" },
+    { pattern: /\bf\s*one\s*fifty\b/i, replacement: "F-150" },
+    { pattern: /\bf\s*[- ]?250\b/i, replacement: "F-250" },
+    { pattern: /\bf\s*[- ]?350\b/i, replacement: "F-350" },
+    { pattern: /\bsilverado\s*1500\b/i, replacement: "Silverado" },
+    { pattern: /\bc\s*[- ]?class\b/i, replacement: "C-Class" },
+    { pattern: /\be\s*[- ]?class\b/i, replacement: "E-Class" },
+    { pattern: /\bs\s*[- ]?class\b/i, replacement: "S-Class" },
+  ];
+
   function parseNaturalLanguageQuery(text, availableMakes = BASE_MAKES) {
     if (!text) return { year: "", make: "", model: "", trim: "", keyword: "" };
 
-    const raw = text.trim();
+    let raw = text.trim();
+    let lowerRaw = raw.toLowerCase();
+
+    // 1. Spoken year phrases normalization (e.g. "twenty twenty six" -> "2026")
+    for (const [spoken, digitYear] of Object.entries(SPOKEN_YEAR_MAP)) {
+      if (lowerRaw.includes(spoken)) {
+        lowerRaw = lowerRaw.replace(spoken, digitYear);
+        raw = raw.replace(new RegExp(spoken, "i"), digitYear);
+        break;
+      }
+    }
+
+    // 2. Slang / Brand Aliases
+    if (/\b(bimmer|beamer)\b/i.test(raw)) {
+      raw = raw.replace(/\b(bimmer|beamer)\b/ig, "BMW");
+      lowerRaw = raw.toLowerCase();
+    }
+
+    // 3. Model Aliases (e.g. "f one fifty" or "f150" -> "F-150")
+    for (const ma of MODEL_ALIASES) {
+      if (ma.pattern.test(raw)) {
+        raw = raw.replace(ma.pattern, ma.replacement);
+        lowerRaw = raw.toLowerCase();
+      }
+    }
+
     let year = "";
     let make = "";
     let model = "";
@@ -61,7 +117,6 @@ export async function action({ request }) {
     const yearMatch = raw.match(/\b(19[5-9]\d|20[0-3]\d)\b/);
     if (yearMatch) year = yearMatch[1];
 
-    const lowerRaw = raw.toLowerCase();
     const sortedMakes = [...availableMakes].sort((a, b) => b.length - a.length);
     for (const m of sortedMakes) {
       if (lowerRaw.includes(m.toLowerCase())) {
@@ -100,18 +155,46 @@ export async function action({ request }) {
       }
     }
 
-    const keywordsList = [
-      "brake pads", "brakes", "brake rotors", "rotors", "oil filter", "air filter",
-      "cabin filter", "fuel filter", "wipers", "wiper blades", "spark plugs", "headlights",
-      "tail lights", "fog lights", "battery", "shocks", "struts", "alternator", "starter",
-      "radiator", "exhaust", "muffler", "tires", "wheels", "floor mats", "seat covers",
-      "motor oil", "engine oil", "clutch", "suspension", "timing belt", "serpentine belt",
-      "coolant", "transmission fluid", "brake fluid"
+    // Keyword detection with specificity ordering (multi-word phrases first, then single-word tokens)
+    const KEYWORD_SYNONYMS = [
+      { synonym: /\b(brake\s*rotors?)\b/i, canonical: "brake rotors" },
+      { synonym: /\b(brake\s*pads?)\b/i, canonical: "brake pads" },
+      { synonym: /\b(brake\s*fluids?)\b/i, canonical: "brake fluid" },
+      { synonym: /\b(oil\s*filters?)\b/i, canonical: "oil filter" },
+      { synonym: /\b(air\s*filters?)\b/i, canonical: "air filter" },
+      { synonym: /\b(cabin\s*filters?)\b/i, canonical: "cabin filter" },
+      { synonym: /\b(fuel\s*filters?)\b/i, canonical: "fuel filter" },
+      { synonym: /\b(wiper\s*blades?|windshield\s*wipers?)\b/i, canonical: "wiper blades" },
+      { synonym: /\b(spark\s*plugs?)\b/i, canonical: "spark plugs" },
+      { synonym: /\b(head\s*lights?|headlights?)\b/i, canonical: "headlights" },
+      { synonym: /\b(tail\s*lights?|taillights?)\b/i, canonical: "tail lights" },
+      { synonym: /\b(fog\s*lights?|foglights?)\b/i, canonical: "fog lights" },
+      { synonym: /\b(floor\s*mats?)\b/i, canonical: "floor mats" },
+      { synonym: /\b(seat\s*covers?)\b/i, canonical: "seat covers" },
+      { synonym: /\b(timing\s*belts?)\b/i, canonical: "timing belt" },
+      { synonym: /\b(serpentine\s*belts?)\b/i, canonical: "serpentine belt" },
+      { synonym: /\b(engine\s*oil|motor\s*oil)\b/i, canonical: "engine oil" },
+      { synonym: /\b(transmission\s*fluids?)\b/i, canonical: "transmission fluid" },
+      // Single-word tokens and homophones
+      { synonym: /\b(rotors?|discs?)\b/i, canonical: "rotors" },
+      { synonym: /\b(brakes?|breaks)\b/i, canonical: "brakes" },
+      { synonym: /\b(pads?)\b/i, canonical: "brake pads" },
+      { synonym: /\b(wipers?)\b/i, canonical: "wipers" },
+      { synonym: /\b(batter(y|ies))\b/i, canonical: "battery" },
+      { synonym: /\b(shocks?|struts?)\b/i, canonical: "shocks" },
+      { synonym: /\b(alternators?)\b/i, canonical: "alternator" },
+      { synonym: /\b(starters?)\b/i, canonical: "starter" },
+      { synonym: /\b(radiators?)\b/i, canonical: "radiator" },
+      { synonym: /\b(exhausts?|mufflers?)\b/i, canonical: "exhaust" },
+      { synonym: /\b(tires?|wheels?)\b/i, canonical: "tires" },
+      { synonym: /\b(clutches?|clutch)\b/i, canonical: "clutch" },
+      { synonym: /\b(suspensions?)\b/i, canonical: "suspension" },
+      { synonym: /\b(coolants?|antifreeze)\b/i, canonical: "coolant" },
     ];
 
-    for (const k of keywordsList) {
-      if (lowerRaw.includes(k)) {
-        keyword = k;
+    for (const ks of KEYWORD_SYNONYMS) {
+      if (ks.synonym.test(lowerRaw)) {
+        keyword = ks.canonical;
         break;
       }
     }
@@ -256,10 +339,31 @@ export async function action({ request }) {
   });
 
   const vehicleQueried = Boolean(year || make || model);
+
+  // If neither a vehicle nor a recognized automotive keyword is present, treat as unrecognized query
+  if (!vehicleQueried && !keyword) {
+    return Response.json({
+      success: true,
+      query: queryText,
+      parsedVehicle: {
+        year: null,
+        make: null,
+        model: null,
+        trim: null,
+        vehicleTitle: null,
+      },
+      keyword: null,
+      speechResponse: "We couldn't detect an automotive vehicle or part in your request. Please speak your vehicle Year, Make, Model, or part name (e.g. 2024 Chevy Silverado brake pads).",
+      products: [],
+      resultCount: 0,
+      hasResults: false,
+    });
+  }
+
   const fitmentProductCount = productMap.size;
 
-  // Include Universal Products if query matches or is general
-  if (includeUniversal) {
+  // Include Universal Products only when matching vehicle fitments exist or specific auto part keyword is queried
+  if (includeUniversal && (fitmentProductCount > 0 || (keyword && !vehicleQueried))) {
     const universal = await prisma.universalProduct?.findMany({
       where: { shop },
       take: 10,
@@ -301,7 +405,11 @@ export async function action({ request }) {
 
   let speechResponse = "";
   if (resultCount > 0) {
-    speechResponse = `Found ${resultCount} matching ${keyword || "parts"} for your ${vehicleTitle || "vehicle"}.`;
+    if (vehicleTitle) {
+      speechResponse = `Found ${resultCount} matching ${keyword || "parts"} for your ${vehicleTitle}.`;
+    } else {
+      speechResponse = `Found ${resultCount} matching ${keyword || "parts"}. Please specify your vehicle for guaranteed fitment.`;
+    }
   } else if (vehicleTitle) {
     speechResponse = `No exact matches found for ${vehicleTitle}. Try searching by Year, Make and Model.`;
   } else {
