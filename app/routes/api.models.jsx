@@ -11,11 +11,14 @@ export async function loader({ request }) {
     } catch (err) {
       // App Proxy signature missing or invalid
     }
-    try {
-      const url = new URL(req.url);
-      const queryShop = url.searchParams.get("shop");
-      if (queryShop) return queryShop;
-    } catch {}
+    // Only allow ?shop= fallback in development (never in production)
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        const url = new URL(req.url);
+        const queryShop = url.searchParams.get("shop");
+        if (queryShop) return queryShop;
+      } catch {}
+    }
     return null;
   }
 

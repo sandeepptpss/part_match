@@ -24,7 +24,8 @@ async function getShopAndAuth(request) {
   } catch (err) {
     // App proxy signature missing in standalone simulation or dev preview
   }
-  if (!shop) {
+  // Only allow ?shop= / body.shop fallback in development (never in production)
+  if (!shop && process.env.NODE_ENV !== "production") {
     try {
       const url = new URL(request.url);
       const queryShop = url.searchParams.get("shop");

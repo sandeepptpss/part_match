@@ -10,16 +10,19 @@ async function getShopFromReq(request) {
   } catch (err) {
     // App Proxy signature missing or invalid
   }
-  try {
-    const url = new URL(request.url);
-    const queryShop = url.searchParams.get("shop");
-    if (queryShop) return queryShop;
-    if (request.method === "POST") {
-      const cloned = request.clone();
-      const body = await cloned.json().catch(() => ({}));
-      if (body?.shop) return body.shop;
-    }
-  } catch {}
+  // Only allow ?shop= fallback in development (never in production)
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const url = new URL(request.url);
+      const queryShop = url.searchParams.get("shop");
+      if (queryShop) return queryShop;
+      if (request.method === "POST") {
+        const cloned = request.clone();
+        const body = await cloned.json().catch(() => ({}));
+        if (body?.shop) return body.shop;
+      }
+    } catch {}
+  }
   return null;
 }
 
@@ -27,6 +30,13 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
   if (!shop) {
     return { error: "Could not resolve shop for search request", status: 400 };
   }
+
+  // Sanitize inputs: trim whitespace and limit length to prevent DB abuse
+  year = String(year || "").trim().slice(0, 50);
+  make = String(make || "").trim().slice(0, 100);
+  model = String(model || "").trim().slice(0, 100);
+  trim = String(trim || "").trim().slice(0, 100);
+  sessionId = sessionId ? String(sessionId).trim().slice(0, 200) : null;
 
   try {
     const [appSettings, shopPlan] = await Promise.all([

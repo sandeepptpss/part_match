@@ -11,17 +11,20 @@ export async function action({ request }) {
     } catch (err) {
       // App Proxy signature missing or invalid
     }
-    try {
-      const url = new URL(req.url);
-      const queryShop = url.searchParams.get("shop");
-      if (queryShop) return queryShop;
-      if (req.method === "POST") {
-        const cloned = req.clone();
-        const b = await cloned.json().catch(() => ({}));
-        if (b?.shop) return b.shop;
+    // Only allow ?shop= fallback in development (never in production)
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        const url = new URL(req.url);
+        const queryShop = url.searchParams.get("shop");
+        if (queryShop) return queryShop;
+        if (req.method === "POST") {
+          const cloned = req.clone();
+          const b = await cloned.json().catch(() => ({}));
+          if (b?.shop) return b.shop;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
     return null;
   }
@@ -132,6 +135,10 @@ export async function action({ request }) {
   if (!queryText.trim()) {
     return Response.json({ error: "Query parameter is required", success: false }, { status: 400 });
   }
+
+  // Sanitize inputs: limit length to prevent abuse
+  queryText = queryText.trim().slice(0, 500);
+  sessionId = sessionId ? String(sessionId).trim().slice(0, 200) : null;
 
   // Dynamically include merchant's store makes & models
   let distinctDbMakes = [];

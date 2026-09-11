@@ -10,7 +10,6 @@ export const loader = async () => {
       { isOnline, status: isOnline ? "online" : "offline" },
       {
         headers: {
-          "Access-Control-Allow-Origin": "*",
           "Cache-Control": "no-cache, no-store, must-revalidate",
         },
       }

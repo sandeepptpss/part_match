@@ -86,7 +86,11 @@ export const action = async ({ request }) => {
   const limits = planLimits(plan);
 
   const redirectOnSearch = formData.get("redirect_on_search") === "true";
-  const resultsUrl = formData.get("results_url")?.toString()?.trim() || "/collections/all";
+  let resultsUrl = formData.get("results_url")?.toString()?.trim() || "/collections/all";
+  // Security: Validate resultsUrl to prevent open redirects and stored XSS
+  if (!resultsUrl.startsWith("/") || resultsUrl.startsWith("//") || /^javascript:/i.test(resultsUrl) || /^data:/i.test(resultsUrl)) {
+    resultsUrl = "/collections/all";
+  }
 
   const data = {
     requireYear: formData.get("require_year") === "true",
@@ -112,7 +116,7 @@ export const action = async ({ request }) => {
     });
   } catch (err) {
     console.error("[settings action error]", err);
-    return json({ saved: false, error: err?.message || "Failed to update settings" }, { status: 500 });
+    return json({ saved: false, error: "Failed to update settings. Please try again." }, { status: 500 });
   }
 
   if (!savedSettings) {

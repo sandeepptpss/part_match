@@ -181,6 +181,7 @@ export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const currentShop = session.shop;
   const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
+  const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
   const sessionEmail = session.email ? session.email.toLowerCase().trim() : "";
   const allowedEmail = (adminEmail || "").toLowerCase().trim();
 
@@ -334,7 +335,7 @@ export const action = async ({ request }) => {
       });
     } catch (err) {
       console.warn("[saveVipFreeOfferConfig] Error updating appSettings:", err?.message);
-      return json({ success: false, message: "Error saving VIP offer config to database: " + (err?.message || "Unknown error") }, { status: 500 });
+      return json({ success: false, message: "Error saving VIP offer config. Please try again." }, { status: 500 });
     }
 
     return json({
@@ -397,7 +398,7 @@ export const action = async ({ request }) => {
       });
     } catch (err) {
       console.warn("[toggleAutoGrantFirst10] Error updating appSettings:", err?.message);
-      return json({ success: false, message: "Error toggling Auto-Grant status: " + (err?.message || "Unknown error") }, { status: 500 });
+      return json({ success: false, message: "Error toggling Auto-Grant status. Please try again." }, { status: 500 });
     }
 
     return json({

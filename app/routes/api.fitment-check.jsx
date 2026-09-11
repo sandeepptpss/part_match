@@ -10,11 +10,14 @@ async function getShopFromReq(request) {
   } catch (err) {
     // App proxy signature missing in standalone simulation
   }
-  try {
-    const url = new URL(request.url);
-    const queryShop = url.searchParams.get("shop");
-    if (queryShop) return queryShop;
-  } catch {}
+  // Only allow ?shop= fallback in development (never in production)
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const url = new URL(request.url);
+      const queryShop = url.searchParams.get("shop");
+      if (queryShop) return queryShop;
+    } catch {}
+  }
   return null;
 }
 

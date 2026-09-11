@@ -15,7 +15,8 @@ export async function loader({ request }) {
   try {
     const url = new URL(request.url);
     const queryShop = url.searchParams.get("shop");
-    if (!shop && queryShop) shop = queryShop;
+    // Only allow ?shop= fallback in development (never in production)
+    if (!shop && queryShop && process.env.NODE_ENV !== "production") shop = queryShop;
   } catch {}
 
   if (!shop) {
