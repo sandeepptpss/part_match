@@ -15,14 +15,13 @@ export const loader = async ({ request }) => {
 
   const sessionEmail = session.email || "";
   const shopDomain = (shop || "").toLowerCase();
-  const adminStore = (process.env.ADMIN_STORE_NAME || "quickstart-749ac396").toLowerCase();
-  const adminEmail = (process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com").toLowerCase().trim();
+  const adminStore = (process.env.ADMIN_STORE_NAME || "").toLowerCase().trim();
+  const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
   const userEmail = (sessionEmail || "").toLowerCase().trim();
 
   const isAdmin =
-    shopDomain === adminStore ||
-    shopDomain === `${adminStore}.myshopify.com` ||
-    (Boolean(userEmail) && Boolean(adminEmail) && userEmail === adminEmail);
+    Boolean(adminStore && (shopDomain === adminStore || shopDomain === `${adminStore}.myshopify.com`)) ||
+    Boolean(userEmail && adminEmail && userEmail === adminEmail);
 
   let fitmentCount = 0;
   let productMappingCount = 0;
@@ -210,6 +209,13 @@ export const action = async ({ request }) => {
 
     const billingPlanKey = BILLING_PLAN_KEYS[selectedPlan]?.[billingCycle];
 
+    if (!billingPlanKey) {
+      return json(
+        { success: false, message: "Invalid plan or billing cycle selected." },
+        { status: 400 },
+      );
+    }
+
     const url = new URL(request.url);
     const origin = process.env.SHOPIFY_APP_URL
       ? new URL(process.env.SHOPIFY_APP_URL).origin
@@ -252,26 +258,13 @@ export const action = async ({ request }) => {
     }
 
     try {
-      if (billingPlanKey) {
-        await billing.request({
-          plan: billingPlanKey,
-          isTest,
-          returnUrl,
-          trialDays: 14,
-          lineItems: [dynamicLineItem],
-        });
-      } else {
-        await prisma.shopPlan.upsert({
-          where: { shop },
-          update: { plan: selectedPlan, billingCycle, subscriptionId: null },
-          create: { shop, plan: selectedPlan, billingCycle, subscriptionId: null },
-        });
-        const planTitle = selectedPlan === "starter" ? "Starter Pro" : selectedPlan === "growth" ? "Growth Pro" : "Enterprise Unlimited";
-        return json({
-          success: true,
-          message: `14-Day Free Trial activated for ${planTitle}!`,
-        });
-      }
+      await billing.request({
+        plan: billingPlanKey,
+        isTest,
+        returnUrl,
+        trialDays: 14,
+        lineItems: [dynamicLineItem],
+      });
     } catch (error) {
       if (
         error instanceof Response ||

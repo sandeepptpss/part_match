@@ -14,10 +14,7 @@ export const action = async ({ request }) => {
     if (session?.shop) shop = session.shop;
     if (session?.email) defaultSessionEmail = session.email;
   } catch (err) {
-    try {
-      const { session } = await authenticate.public.appProxy(request);
-      if (session?.shop) shop = session.shop;
-    } catch (proxyErr) {}
+    // Requires merchant admin authentication
   }
 
   if (!shop) {

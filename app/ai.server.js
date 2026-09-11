@@ -14,7 +14,7 @@ export function isAiConfigured() {
   return Boolean(process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY);
 }
 
-function httpsPostJson(urlStr, bodyObj) {
+function httpsPostJson(urlStr, bodyObj, customHeaders = {}) {
   return new Promise((resolve, reject) => {
     try {
       const u = new URL(urlStr);
@@ -27,6 +27,7 @@ function httpsPostJson(urlStr, bodyObj) {
           headers: {
             "Content-Type": "application/json",
             "Content-Length": Buffer.byteLength(data),
+            ...customHeaders,
           },
         },
         (res) => {
@@ -60,11 +61,17 @@ async function callGeminiApi(prompt) {
 
   const models = ["gemini-2.5-flash", "gemini-flash-latest"];
   for (const model of models) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     try {
-      const response = await httpsPostJson(url, {
-        contents: [{ parts: [{ text: prompt }] }],
-      });
+      const response = await httpsPostJson(
+        url,
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+        },
+        {
+          "x-goog-api-key": apiKey,
+        },
+      );
 
       if (response.ok && response.json) {
         const text = response.json?.candidates?.[0]?.content?.parts?.[0]?.text || null;

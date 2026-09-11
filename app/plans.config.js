@@ -11,17 +11,17 @@ export function getIsTestCharge(shop = "") {
   if (process.env.NODE_ENV !== "production") {
     return true;
   }
-  const shopDomain = (shop || "").toLowerCase();
-  if (
-    shopDomain.includes("quickstart") ||
-    shopDomain.includes("myshopify.dev") ||
-    shopDomain.includes("spin") ||
-    shopDomain.includes("dev-store") ||
-    shopDomain.includes("test")
-  ) {
-    return true;
-  }
-  return false;
+  const shopDomain = (shop || "").toLowerCase().trim();
+  const devPatterns = [
+    /^quickstart-[a-z0-9]+\.myshopify\.com$/,
+    /\.myshopify\.dev$/,
+    /\.spin$/,
+    /(?:^|[-_.])dev-store(?:[-_.]|$)/,
+    /(?:^|[-_.])test-store(?:[-_.]|$)/,
+    /^test-[a-z0-9-]+\.myshopify\.com$/,
+    /^[a-z0-9-]+-test\.myshopify\.com$/,
+  ];
+  return devPatterns.some((pattern) => pattern.test(shopDomain));
 }
 
 export const isTestCharge = process.env.NODE_ENV !== "production";

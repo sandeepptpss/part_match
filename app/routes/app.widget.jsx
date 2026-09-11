@@ -42,21 +42,8 @@ const PRESET_PALETTES = [
 ];
 
 export const loader = async ({ request }) => {
-  let shop = "";
-  try {
-    const { session } = await authenticate.admin(request);
-    shop = session?.shop || "";
-  } catch (err) {
-    if (process.env.NODE_ENV === "production") {
-      throw err;
-    }
-    console.warn("[app.widget loader auth dev fallback]", err?.message);
-  }
-
-  if (!shop) {
-    const firstRec = await prisma.fitmentRecord.findFirst({ select: { shop: true } });
-    shop = firstRec?.shop || "quickstart-749ac396.myshopify.com";
-  }
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
 
   let settings = null;
   try {
@@ -81,24 +68,8 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  let shop = "";
-  try {
-    const { session } = await authenticate.admin(request);
-    shop = session?.shop || "";
-  } catch (err) {
-    if (process.env.NODE_ENV === "production") {
-      throw err;
-    }
-    console.warn("[app.widget action auth dev fallback]", err?.message);
-  }
-
-  if (!shop) {
-    if (process.env.NODE_ENV === "production") {
-      return json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const firstRec = await prisma.fitmentRecord.findFirst({ select: { shop: true } });
-    shop = firstRec?.shop || "quickstart-749ac396.myshopify.com";
-  }
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
 
   const formData = await request.formData();
 

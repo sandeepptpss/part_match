@@ -3,6 +3,30 @@ import { authenticate, unauthenticated } from "../shopify.server";
 import prisma from "../db.server";
 import { getShopPlan, planLimits } from "../plans.server";
 
+// In-memory cache for collection/tag/sku GraphQL lookups (TTL: 5 minutes)
+// Mitigates Shopify Admin API rate limit (429) exhaustion during frequent searches
+const graphQlCache = new Map();
+const GRAPHQL_CACHE_TTL_MS = 5 * 60 * 1000;
+const GRAPHQL_CACHE_MAX_ENTRIES = 2000;
+
+function getCachedGraphQlProducts(cacheKey) {
+  const entry = graphQlCache.get(cacheKey);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > GRAPHQL_CACHE_TTL_MS) {
+    graphQlCache.delete(cacheKey);
+    return null;
+  }
+  return entry.nodes;
+}
+
+function setCachedGraphQlProducts(cacheKey, nodes) {
+  if (graphQlCache.size >= GRAPHQL_CACHE_MAX_ENTRIES) {
+    const firstKey = graphQlCache.keys().next().value;
+    if (firstKey) graphQlCache.delete(firstKey);
+  }
+  graphQlCache.set(cacheKey, { nodes, timestamp: Date.now() });
+}
+
 async function getShopFromReq(request) {
   try {
     const { session } = await authenticate.public.appProxy(request);
@@ -129,105 +153,123 @@ async function handleSearch({ shop, year, make, model, trim = "", sessionId = nu
           // Fetch collection products
           for (const col of fitmentCollections) {
             if (!col.shopifyHandle) continue;
-            try {
-              const colRes = await admin.graphql(
-                `query getColProds($handle: String!) {
-                  collectionByHandle(handle: $handle) {
-                    products(first: 50) {
+            const cacheKey = `${shop}:col:${col.shopifyHandle.toLowerCase()}`;
+            let nodes = getCachedGraphQlProducts(cacheKey);
+            if (!nodes) {
+              try {
+                const colRes = await admin.graphql(
+                  `query getColProds($handle: String!) {
+                    collectionByHandle(handle: $handle) {
+                      products(first: 50) {
+                        nodes {
+                          id
+                          handle
+                          title
+                        }
+                      }
+                    }
+                  }`,
+                  { variables: { handle: col.shopifyHandle } },
+                );
+                const colData = await colRes.json();
+                nodes = colData.data?.collectionByHandle?.products?.nodes ?? [];
+                setCachedGraphQlProducts(cacheKey, nodes);
+              } catch (colErr) {
+                console.error("[api/search] Collection GraphQL error:", colErr);
+                nodes = [];
+              }
+            }
+            nodes.forEach((n) => {
+              const key = n.id || n.handle;
+              if (key && !productMap.has(key) && !productMap.has(n.handle)) {
+                productMap.set(key, {
+                  shopifyProductId: n.id,
+                  shopifyHandle: n.handle,
+                  productTitle: n.title,
+                  source: "collection",
+                });
+              }
+            });
+          }
+
+          // Fetch tag products
+          for (const t of fitmentTags) {
+            if (!t.tag) continue;
+            const cacheKey = `${shop}:tag:${t.tag.toLowerCase()}`;
+            let nodes = getCachedGraphQlProducts(cacheKey);
+            if (!nodes) {
+              try {
+                const tagRes = await admin.graphql(
+                  `query getTagProds($query: String!) {
+                    products(first: 50, query: $query) {
                       nodes {
                         id
                         handle
                         title
                       }
                     }
-                  }
-                }`,
-                { variables: { handle: col.shopifyHandle } },
-              );
-              const colData = await colRes.json();
-              const nodes = colData.data?.collectionByHandle?.products?.nodes ?? [];
-              nodes.forEach((n) => {
-                const key = n.id || n.handle;
-                if (key && !productMap.has(key) && !productMap.has(n.handle)) {
-                  productMap.set(key, {
-                    shopifyProductId: n.id,
-                    shopifyHandle: n.handle,
-                    productTitle: n.title,
-                    source: "collection",
-                  });
-                }
-              });
-            } catch (colErr) {
-              console.error("[api/search] Collection GraphQL error:", colErr);
+                  }`,
+                  { variables: { query: `tag:"${t.tag.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` } },
+                );
+                const tagData = await tagRes.json();
+                nodes = tagData.data?.products?.nodes ?? [];
+                setCachedGraphQlProducts(cacheKey, nodes);
+              } catch (tagErr) {
+                console.error("[api/search] Tag GraphQL error:", tagErr);
+                nodes = [];
+              }
             }
-          }
-
-          // Fetch tag products
-          for (const t of fitmentTags) {
-            if (!t.tag) continue;
-            try {
-              const tagRes = await admin.graphql(
-                `query getTagProds($query: String!) {
-                  products(first: 50, query: $query) {
-                    nodes {
-                      id
-                      handle
-                      title
-                    }
-                  }
-                }`,
-                { variables: { query: `tag:"${t.tag.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` } },
-              );
-              const tagData = await tagRes.json();
-              const nodes = tagData.data?.products?.nodes ?? [];
-              nodes.forEach((n) => {
-                const key = n.id || n.handle;
-                if (key && !productMap.has(key) && !productMap.has(n.handle)) {
-                  productMap.set(key, {
-                    shopifyProductId: n.id,
-                    shopifyHandle: n.handle,
-                    productTitle: n.title,
-                    source: "tag",
-                  });
-                }
-              });
-            } catch (tagErr) {
-              console.error("[api/search] Tag GraphQL error:", tagErr);
-            }
+            nodes.forEach((n) => {
+              const key = n.id || n.handle;
+              if (key && !productMap.has(key) && !productMap.has(n.handle)) {
+                productMap.set(key, {
+                  shopifyProductId: n.id,
+                  shopifyHandle: n.handle,
+                  productTitle: n.title,
+                  source: "tag",
+                });
+              }
+            });
           }
 
           // Fetch SKU products
           for (const s of fitmentSkus) {
             if (!s.sku) continue;
-            try {
-              const skuRes = await admin.graphql(
-                `query getSkuProds($query: String!) {
-                  products(first: 50, query: $query) {
-                    nodes {
-                      id
-                      handle
-                      title
+            const cacheKey = `${shop}:sku:${s.sku.toLowerCase()}`;
+            let nodes = getCachedGraphQlProducts(cacheKey);
+            if (!nodes) {
+              try {
+                const skuRes = await admin.graphql(
+                  `query getSkuProds($query: String!) {
+                    products(first: 50, query: $query) {
+                      nodes {
+                        id
+                        handle
+                        title
+                      }
                     }
-                  }
-                }`,
-                { variables: { query: `sku:"${s.sku.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` } },
-              );
-              const skuData = await skuRes.json();
-              const nodes = skuData.data?.products?.nodes ?? [];
-              nodes.forEach((n) => {
-                const key = n.id || n.handle;
-                if (key && !productMap.has(key) && !productMap.has(n.handle)) {
-                  productMap.set(key, {
-                    shopifyProductId: n.id,
-                    shopifyHandle: n.handle,
-                    productTitle: n.title,
-                    source: "sku",
-                  });
-                }
-              });
-            } catch (skuErr) {
-              console.error("[api/search] SKU GraphQL error:", skuErr);
+                  }`,
+                  { variables: { query: `sku:"${s.sku.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` } },
+                );
+                const skuData = await skuRes.json();
+                nodes = skuData.data?.products?.nodes ?? [];
+                setCachedGraphQlProducts(cacheKey, nodes);
+              } catch (skuErr) {
+                console.error("[api/search] SKU GraphQL error:", skuErr);
+                nodes = [];
+              }
             }
+            nodes.forEach((n) => {
+              const key = n.id || n.handle;
+              if (key && !productMap.has(key) && !productMap.has(n.handle)) {
+                productMap.set(key, {
+                  shopifyProductId: n.id,
+                  shopifyHandle: n.handle,
+                  productTitle: n.title,
+                  source: "sku",
+                });
+              }
+            });
           }
         }
       } catch (err) {

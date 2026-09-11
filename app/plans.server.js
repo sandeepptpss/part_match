@@ -47,6 +47,19 @@ export async function syncShopPlanFromBilling(billing, shop) {
         update: data,
         create: { shop, ...data },
       });
+    } else {
+      // Shopify has no active subscription. If not on an active VIP grant, sync status to free
+      const appSettings = await prisma.appSettings?.findFirst({ where: { shop } });
+      if (!appSettings?.vipFreeOfferActive) {
+        const current = await getShopPlan(shop);
+        if (current?.plan && current.plan !== "free") {
+          return await prisma.shopPlan?.upsert({
+            where: { shop },
+            update: { plan: "free", billingCycle: "monthly", subscriptionId: null },
+            create: { shop, plan: "free", billingCycle: "monthly", subscriptionId: null },
+          });
+        }
+      }
     }
   } catch (err) {
     console.error("syncShopPlanFromBilling fallback:", err);

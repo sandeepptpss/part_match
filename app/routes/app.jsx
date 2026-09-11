@@ -11,17 +11,14 @@ export const loader = async ({ request }) => {
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const shop = session.shop;
 
-  // eslint-disable-next-line no-undef
-  const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
-  // eslint-disable-next-line no-undef
-  const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
+  const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
+  const adminStore = (process.env.ADMIN_STORE_NAME || "").toLowerCase().trim();
   const sessionEmail = session.email ? session.email.toLowerCase().trim() : "";
-  const allowedEmail = (adminEmail || "").toLowerCase().trim();
+  const shopDomain = (shop || "").toLowerCase().trim();
 
   const isAdmin =
-    shop === adminStore ||
-    shop === `${adminStore}.myshopify.com` ||
-    (Boolean(sessionEmail) && Boolean(allowedEmail) && sessionEmail === allowedEmail);
+    Boolean(adminStore && (shopDomain === adminStore || shopDomain === `${adminStore}.myshopify.com`)) ||
+    Boolean(sessionEmail && adminEmail && sessionEmail === adminEmail);
 
   // Show onboarding badge if no fitment data yet
   let fitmentCount = 0;

@@ -8,19 +8,15 @@ export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   const currentShop = session.shop;
 
-  // eslint-disable-next-line no-undef
-  const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
-  // eslint-disable-next-line no-undef
-  const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
-
+  const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
+  const adminStore = (process.env.ADMIN_STORE_NAME || "").toLowerCase().trim();
   const sessionEmail = session.email ? session.email.toLowerCase().trim() : "";
-  const allowedEmail = (adminEmail || "").toLowerCase().trim();
+  const shopDomain = (currentShop || "").toLowerCase().trim();
 
   // Admin access check: strict store domain match or verified admin session email
   const isAdmin =
-    currentShop === adminStore ||
-    currentShop === `${adminStore}.myshopify.com` ||
-    (Boolean(sessionEmail) && Boolean(allowedEmail) && sessionEmail === allowedEmail);
+    Boolean(adminStore && (shopDomain === adminStore || shopDomain === `${adminStore}.myshopify.com`)) ||
+    Boolean(sessionEmail && adminEmail && sessionEmail === adminEmail);
 
   if (!isAdmin) {
     return redirect("/app");
@@ -180,15 +176,14 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const currentShop = session.shop;
-  const adminEmail = process.env.ADMIN_EMAIL || "sandeepptpss@gmail.com";
-  const adminStore = process.env.ADMIN_STORE_NAME || "quickstart-749ac396";
+  const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
+  const adminStore = (process.env.ADMIN_STORE_NAME || "").toLowerCase().trim();
   const sessionEmail = session.email ? session.email.toLowerCase().trim() : "";
-  const allowedEmail = (adminEmail || "").toLowerCase().trim();
+  const shopDomain = (currentShop || "").toLowerCase().trim();
 
   const isAdmin =
-    currentShop === adminStore ||
-    currentShop === `${adminStore}.myshopify.com` ||
-    (Boolean(sessionEmail) && Boolean(allowedEmail) && sessionEmail === allowedEmail);
+    Boolean(adminStore && (shopDomain === adminStore || shopDomain === `${adminStore}.myshopify.com`)) ||
+    Boolean(sessionEmail && adminEmail && sessionEmail === adminEmail);
 
   if (!isAdmin) {
     return Response.json({ success: false, error: "Unauthorized" }, { status: 403 });
